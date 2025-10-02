@@ -1,0 +1,38 @@
+{
+  "common": {
+    "welcome": "Bienvenido",
+    "loading": "Cargando...",
+    "error": "Error",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "search": "Buscar",
+    "filter": "Filtrar",
+    "apply": "Aplicar",
+    "clear": "Limpiar",
+    "yes": "Sí",
+    "no": "No",
+    "ok": "OK",
+    "next": "Siguiente",
+    "back": "Atrás",
+    "skip": "Omitir",
+    "getStarted": "Comenzar",
+    "signIn": "Iniciar Sesión",
+    "signOut": "Cerrar Sesión",
+    "signUp": "Registrarse"
+  },
+  "navigation": {
+    "home": "Inicio",
+    "search": "Buscar",
+    "messages": "Mensajes",
+    "saved": "Guardado",
+    "profile": "Perfil"
+  },
+  "onboarding": {
+    "splash": {
+      "tagline": "Vivienda para Acabar con la Disparidad"
+    }
+  },
+  "_note": "Spanish translations placeholder - to be completed"
+}

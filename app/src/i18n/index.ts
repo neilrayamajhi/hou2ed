@@ -1,0 +1,126 @@
+import React, { createContext, useContext, useState, useEffect, useMemo } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as en from "./en.json";
+import * as es from "./es.json";
+
+// Types
+export type Language = "en" | "es";
+
+type TranslationKeys = typeof en;
+
+interface I18nContextType {
+  language: Language;
+  setLanguage: (lang: Language) => void;
+  t: (key: string, params?: Record<string, any>) => string;
+}
+
+// Translation dictionaries
+const translations: Record<Language, any> = {
+  en,
+  es,
+};
+
+// Create context
+const I18nContext = createContext<I18nContextType | undefined>(undefined);
+
+// Helper function to get nested translation value
+function getNestedValue(obj: any, path: string): string | undefined {
+  return path.split(".").reduce((current, key) => current?.[key], obj);
+}
+
+// Helper to replace template variables
+function interpolate(text: string, params?: Record<string, any>): string {
+  if (!params) return text;
+
+  return text.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+    return params[key]?.toString() || match;
+  });
+}
+
+// Translation function
+export function t(key: string, params?: Record<string, any>): string {
+  const context = useI18n();
+  return context.t(key, params);
+}
+
+// Provider component
+export function I18nProvider({ children }: { children: React.ReactNode }) {
+  const [language, setLanguageState] = useState<Language>("en");
+  const [isLoading, setIsLoading] = useState(true);
+  const translationCache = useMemo(() => new Map<string, string>(), []);
+
+  // Load saved language preference
+  useEffect(() => {
+    AsyncStorage.getItem("@app_language")
+      .then((savedLang) => {
+        if (savedLang === "es") {
+          setLanguageState("es");
+        }
+      })
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  // Save language preference and clear cache
+  const setLanguage = async (lang: Language) => {
+    translationCache.clear(); // Clear cache when language changes
+    setLanguageState(lang);
+    await AsyncStorage.setItem("@app_language", lang);
+  };
+
+  // Translation function with caching
+  const translate = (key: string, params?: Record<string, any>): string => {
+    // Check cache first
+    const cacheKey = `${language}:${key}`;
+    let translation = translationCache.get(cacheKey);
+
+    if (!translation) {
+      translation = getNestedValue(translations[language], key);
+
+      if (!translation) {
+        // Fallback to English if translation not found
+        const fallback = getNestedValue(translations.en, key);
+        if (!fallback) {
+          console.warn(`Translation missing for key: ${key}`);
+          return key;
+        }
+        translation = fallback;
+      }
+
+      // Cache the translation
+      translationCache.set(cacheKey, translation);
+    }
+
+    return interpolate(translation, params);
+  };
+
+  // Memoize the context value to prevent unnecessary re-renders
+  const value: I18nContextType = useMemo(
+    () => ({
+      language,
+      setLanguage,
+      t: translate,
+    }),
+    [language]
+  );
+
+  if (isLoading) {
+    return null; // Or a loading component
+  }
+
+  return React.createElement(I18nContext.Provider, { value }, children);
+}
+
+// Hook to use i18n
+export function useI18n(): I18nContextType {
+  const context = useContext(I18nContext);
+  if (!context) {
+    throw new Error("useI18n must be used within I18nProvider");
+  }
+  return context;
+}
+
+// Export languages list for settings
+export const LANGUAGES = [
+  { code: "en" as Language, name: "English", nativeName: "English" },
+  { code: "es" as Language, name: "Spanish", nativeName: "Español" },
+];
