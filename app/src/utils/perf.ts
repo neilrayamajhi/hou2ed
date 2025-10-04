@@ -3,6 +3,8 @@
  * Tracks search and map performance with P95 metrics
  */
 
+import React from 'react';
+
 interface PerformanceMetric {
   name: string;
   startTime: number;

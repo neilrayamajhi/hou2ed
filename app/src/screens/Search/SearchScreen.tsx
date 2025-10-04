@@ -114,7 +114,7 @@ export default function SearchScreen() {
     setListings(sorted);
 
     searchPerf.end();
-  }, [quickFilters, searchQuery, sortBy, searchPerf]);
+  }, [quickFilters, searchQuery, sortBy]); // Removed searchPerf from dependencies
 
   // Handle search
   const handleSearch = useCallback(() => {
