@@ -14,6 +14,10 @@ import { Linking } from "react-native";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
 import InlineCounter from "../../components/patterns/InlineCounter";
 import { RootStackNavigationProp } from "../../navigation/types";
+import { useProviderListings } from "../../hooks/useProviderListings";
+import { updateListing } from "../../services/listing.service";
+import { useToast } from "../../components/ui/Toast";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface Property {
   id: string;
@@ -23,49 +27,6 @@ interface Property {
   availableBeds: number;
   lastUpdated: Date;
 }
-
-const mockProperties: Property[] = [
-  {
-    id: "1",
-    title: "Haven House",
-    address: "123 Main St, San Francisco, CA",
-    totalBeds: 12,
-    availableBeds: 3,
-    lastUpdated: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
-  },
-  {
-    id: "2",
-    title: "Bridge Shelter",
-    address: "456 Oak Ave, Oakland, CA",
-    totalBeds: 20,
-    availableBeds: 5,
-    lastUpdated: new Date(Date.now() - 72 * 60 * 60 * 1000), // 3 days ago - stale
-  },
-  {
-    id: "3",
-    title: "Recovery Residence",
-    address: "789 Pine St, Berkeley, CA",
-    totalBeds: 8,
-    availableBeds: 1,
-    lastUpdated: new Date(Date.now() - 12 * 60 * 60 * 1000), // 12 hours ago
-  },
-  {
-    id: "4",
-    title: "Hope Center",
-    address: "321 Elm Ave, Alameda, CA",
-    totalBeds: 16,
-    availableBeds: 7,
-    lastUpdated: new Date(Date.now() - 96 * 60 * 60 * 1000), // 4 days ago - stale
-  },
-  {
-    id: "5",
-    title: "Safe Haven",
-    address: "654 Market St, San Francisco, CA",
-    totalBeds: 10,
-    availableBeds: 0,
-    lastUpdated: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-  },
-];
 
 function formatLastUpdated(date: Date): string {
   const now = new Date();
@@ -91,9 +52,30 @@ function isStale(date: Date): boolean {
 
 export default function AvailabilityUpdater() {
   const navigation = useNavigation<RootStackNavigationProp>();
-  const [properties, setProperties] = useState(mockProperties);
+  const { data: listings, isLoading } = useProviderListings();
+  const [properties, setProperties] = useState<Property[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [changedMap, setChangedMap] = useState<Record<string, number>>({});
+  const { showToast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Hydrate local state from live listings when loaded
+  useEffect(() => {
+    if (!isLoading && listings) {
+      const mapped: Property[] = listings.map((l) => ({
+        id: l.id,
+        title: l.title,
+        address: l.address,
+        totalBeds: l.totalBeds,
+        availableBeds: l.availableBeds,
+        lastUpdated: new Date(l.lastUpdated),
+      }));
+      setProperties(mapped);
+      setChangedMap({});
+      setHasChanges(false);
+    }
+  }, [isLoading, listings]);
 
   // Check if any property is stale
   const hasStaleData = useMemo(() => {
@@ -130,7 +112,9 @@ export default function AvailabilityUpdater() {
       prev.map((p) => {
         if (p.id === propertyId && p.availableBeds < p.totalBeds) {
           setHasChanges(true);
-          return { ...p, availableBeds: p.availableBeds + 1 };
+          const newVal = p.availableBeds + 1;
+          setChangedMap((m) => ({ ...m, [propertyId]: newVal }));
+          return { ...p, availableBeds: newVal };
         }
         return p;
       })
@@ -142,7 +126,9 @@ export default function AvailabilityUpdater() {
       prev.map((p) => {
         if (p.id === propertyId && p.availableBeds > 0) {
           setHasChanges(true);
-          return { ...p, availableBeds: p.availableBeds - 1 };
+          const newVal = p.availableBeds - 1;
+          setChangedMap((m) => ({ ...m, [propertyId]: newVal }));
+          return { ...p, availableBeds: newVal };
         }
         return p;
       })
@@ -169,17 +155,27 @@ export default function AvailabilityUpdater() {
     }
 
     setIsSaving(true);
+    try {
+      // Persist only changed availableBeds values
+      const entries = Object.entries(changedMap);
+      if (entries.length > 0) {
+        await Promise.all(
+          entries.map(([id, beds]) => updateListing(id, { availableBeds: beds }))
+        );
+      }
 
-    // Simulate API call
-    setTimeout(() => {
+      // Optimistically mark lastUpdated as now
       const now = new Date();
-      setProperties((prev) =>
-        prev.map((p) => ({ ...p, lastUpdated: now }))
-      );
+      setProperties((prev) => prev.map((p) => ({ ...p, lastUpdated: now })));
+      setChangedMap({});
       setHasChanges(false);
+      showToast("Availability updated", "success");
+      await queryClient.invalidateQueries({ queryKey: ["providerListings"] });
+    } catch (e: any) {
+      showToast(e?.message || "Failed to save availability", "error");
+    } finally {
       setIsSaving(false);
-      Alert.alert("Success", "All changes saved successfully");
-    }, 1000);
+    }
   }, [hasChanges, hasStaleData]);
 
   const renderPropertyRow = useCallback((property: Property) => {

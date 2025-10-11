@@ -18,6 +18,20 @@ export type RootStackParamList = {
     propertyTitle: string;
     senderName: string;
   };
+  DevMenu: undefined;
+  ProviderDashboard: undefined;
+  AddListing: undefined;
+  EditListing: {
+    listingId: string;
+    listingData?: {
+      id: string;
+      title: string;
+      address: string;
+      totalBeds: number;
+      availableBeds: number;
+      lastUpdated: string;
+    };
+  };
   AvailabilityUpdater: undefined;
 };
 

@@ -38,17 +38,21 @@ export default function Splash() {
     // Check if user has seen slides before
     const checkAndNavigate = async () => {
       try {
-        const seenSlides = await SecureStore.getItemAsync("seenSlides");
-        const destination = seenSlides === "true" ? "Tabs" : "OnboardingScreen";
-
+        // TEMPORARY: Go to DevMenu to test Provider Dashboard
         navigationTimer.current = setTimeout(() => {
-          navigation.replace(destination);
+          navigation.replace("DevMenu");
         }, 2500);
+
+        // ORIGINAL CODE (commented out for testing):
+        // const seenSlides = await SecureStore.getItemAsync("seenSlides");
+        // const destination = seenSlides === "true" ? "Tabs" : "OnboardingScreen";
+        // navigationTimer.current = setTimeout(() => {
+        //   navigation.replace(destination);
+        // }, 2500);
       } catch (error) {
         console.warn("Error checking slides status:", error);
-        // If error reading, show slides as fallback
         navigationTimer.current = setTimeout(() => {
-          navigation.replace("OnboardingScreen");
+          navigation.replace("DevMenu");
         }, 2500);
       }
     };

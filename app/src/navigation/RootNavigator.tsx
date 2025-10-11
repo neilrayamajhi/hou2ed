@@ -13,6 +13,10 @@ import ForgotPassword from "../screens/Auth/ForgotPassword";
 import ListingDetailsScreen from "../screens/Listing/ListingDetailsScreen";
 import ApplyWizard from "../screens/Applications/ApplyWizard";
 import ThreadScreen from "../screens/Messages/ThreadScreen";
+import DevMenu from "../screens/Dev/DevMenu";
+import ProviderDashboard from "../screens/Provider/ProviderDashboard";
+import AddListing from "../screens/Provider/AddListing";
+import EditListing from "../screens/Provider/EditListing";
 import AvailabilityUpdater from "../screens/Provider/AvailabilityUpdater";
 import { RootStackParamList } from "./types";
 
@@ -64,7 +68,13 @@ export default function RootNavigator() {
         {/* Thread Screen */}
         <Stack.Screen name="Thread" component={ThreadScreen} />
 
+        {/* Dev Menu */}
+        <Stack.Screen name="DevMenu" component={DevMenu} />
+
         {/* Provider Screens */}
+        <Stack.Screen name="ProviderDashboard" component={ProviderDashboard} />
+        <Stack.Screen name="AddListing" component={AddListing} />
+        <Stack.Screen name="EditListing" component={EditListing} />
         <Stack.Screen name="AvailabilityUpdater" component={AvailabilityUpdater} />
       </Stack.Navigator>
     </NavigationContainer>
