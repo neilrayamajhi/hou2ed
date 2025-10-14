@@ -16,11 +16,13 @@ import { RootStackNavigationProp } from "../../navigation/types";
 import { useToast } from "../../components/ui/Toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createListing, getCurrentProviderId } from "../../services/listing.service";
+import { useRequireProvider } from "../../hooks/useRequireProvider";
 
 export default function AddListing() {
   const navigation = useNavigation<RootStackNavigationProp>();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
+  useRequireProvider();
 
   // Form state - these hold the values the user types
   const [propertyName, setPropertyName] = useState("");

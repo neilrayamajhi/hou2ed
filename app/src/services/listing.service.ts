@@ -32,6 +32,8 @@ export interface UpdateListingInput {
   availableBeds?: number;
   price?: number;
   description?: string;
+  images?: string[];
+  availabilityDays?: Record<string, number>; // YYYY-MM-DD -> beds
 }
 
 /**
@@ -57,10 +59,15 @@ export async function getProviderListings(
       )
       .eq("provider_id", providerId)
       .eq("is_active", true)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .abortSignal(AbortSignal.timeout(20000)); // 20 second timeout for this specific query
 
     if (error) {
       console.error("Error fetching provider listings:", error);
+      // Provide more helpful error message
+      if (error.message?.includes('aborted') || error.message?.includes('timeout')) {
+        throw new Error("Request timed out. Please check your internet connection and try again.");
+      }
       throw error;
     }
 
@@ -95,6 +102,55 @@ export async function getProviderListings(
     console.error("Failed to fetch provider listings:", error);
     return [];
   }
+}
+
+/** Fetch a single listing with full details */
+export async function getListingById(listingId: string): Promise<{
+  id: string;
+  title: string;
+  address: string;
+  totalBeds: number;
+  availableBeds: number;
+  lastUpdated: string;
+  images: string[];
+  price?: number;
+  availabilityDays?: Record<string, number>;
+}> {
+  const { data, error } = await supabase
+    .from("listings")
+    .select(`
+      id,
+      title,
+      address,
+      unit_beds,
+      availability,
+      images,
+      cost,
+      updated_at
+    `)
+    .eq("id", listingId)
+    .single();
+
+  if (error || !data) {
+    throw error || new Error("Listing not found");
+  }
+
+  const unitBeds = (data.unit_beds as Record<string, number>) || {};
+  const totalBeds = Object.values(unitBeds).reduce((sum, n) => sum + n, 0);
+  const availability = (data.availability as any) || {};
+  const price = (data.cost as any)?.monthly as number | undefined;
+
+  return {
+    id: data.id,
+    title: data.title,
+    address: data.address,
+    totalBeds,
+    availableBeds: availability.beds_today || 0,
+    lastUpdated: availability.last_updated_at || data.updated_at,
+    images: Array.isArray(data.images) ? (data.images as string[]) : [],
+    price,
+    availabilityDays: availability.days || {},
+  };
 }
 
 /**
@@ -195,8 +251,8 @@ export async function updateListing(
       };
     }
 
-    // Update availability if availableBeds changed
-    if (updates.availableBeds !== undefined) {
+    // Update availability if availableBeds or availabilityDays changed
+    if (updates.availableBeds !== undefined || updates.availabilityDays !== undefined) {
       // First, get the current availability
       const { data: currentListing } = await supabase
         .from("listings")
@@ -206,11 +262,22 @@ export async function updateListing(
 
       const currentAvailability = (currentListing?.availability as any) || {};
 
+      const mergedDays = {
+        ...(currentAvailability.days || {}),
+        ...(updates.availabilityDays || {}),
+      };
+
       updateData.availability = {
         ...currentAvailability,
-        beds_today: updates.availableBeds,
+        ...(updates.availableBeds !== undefined ? { beds_today: updates.availableBeds } : {}),
+        ...(Object.keys(mergedDays).length ? { days: mergedDays } : {}),
         last_updated_at: new Date().toISOString(),
       };
+    }
+
+    // Update images if provided
+    if (updates.images !== undefined) {
+      updateData.images = updates.images;
     }
 
     // Update cost if price changed

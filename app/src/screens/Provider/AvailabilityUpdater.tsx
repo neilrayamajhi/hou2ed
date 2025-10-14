@@ -18,6 +18,7 @@ import { useProviderListings } from "../../hooks/useProviderListings";
 import { updateListing } from "../../services/listing.service";
 import { useToast } from "../../components/ui/Toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRequireProvider } from "../../hooks/useRequireProvider";
 
 interface Property {
   id: string;
@@ -52,6 +53,7 @@ function isStale(date: Date): boolean {
 
 export default function AvailabilityUpdater() {
   const navigation = useNavigation<RootStackNavigationProp>();
+  useRequireProvider();
   const { data: listings, isLoading } = useProviderListings();
   const [properties, setProperties] = useState<Property[]>([]);
   const [hasChanges, setHasChanges] = useState(false);

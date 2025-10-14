@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
-import * as Location from 'expo-location';
 import { Platform } from 'react-native';
+
+// Avoid importing expo-location on web; require lazily on native
+let ExpoLocation: any = null;
+if (Platform.OS !== 'web') {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  ExpoLocation = require('expo-location');
+}
 
 interface LocationData {
   latitude: number;
@@ -25,7 +31,13 @@ export function useLocation(): UseLocationReturn {
       setError(null);
 
       // Request permission
-      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (!ExpoLocation) {
+        // Web: skip real permissions, use fallback immediately
+        setLocation({ latitude: 37.7749, longitude: -122.4194 });
+        return;
+      }
+
+      const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
 
       if (status !== 'granted') {
         setError('Permission to access location was denied');
@@ -34,8 +46,8 @@ export function useLocation(): UseLocationReturn {
       }
 
       // Get current position
-      const currentLocation = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
+      const currentLocation = await ExpoLocation.getCurrentPositionAsync({
+        accuracy: ExpoLocation.Accuracy.Balanced,
       });
 
       setLocation({

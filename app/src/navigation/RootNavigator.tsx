@@ -11,6 +11,7 @@ import Login from "../screens/Auth/Login";
 import VerifyCode from "../screens/Auth/VerifyCode";
 import ForgotPassword from "../screens/Auth/ForgotPassword";
 import ListingDetailsScreen from "../screens/Listing/ListingDetailsScreen";
+import ProviderListingDetails from "../screens/Provider/ListingDetails";
 import ApplyWizard from "../screens/Applications/ApplyWizard";
 import ThreadScreen from "../screens/Messages/ThreadScreen";
 import DevMenu from "../screens/Dev/DevMenu";
@@ -18,6 +19,7 @@ import ProviderDashboard from "../screens/Provider/ProviderDashboard";
 import AddListing from "../screens/Provider/AddListing";
 import EditListing from "../screens/Provider/EditListing";
 import AvailabilityUpdater from "../screens/Provider/AvailabilityUpdater";
+import ListingWizard from "../screens/Provider/ListingWizard";
 import { RootStackParamList } from "./types";
 
 // Create a stack navigator - this manages screens that stack on top of each other
@@ -52,8 +54,10 @@ export default function RootNavigator() {
         {/* Main App */}
         <Stack.Screen name="Tabs" component={TabNavigator} />
 
-        {/* Listing Details */}
+        {/* Listing Details (seeker) */}
         <Stack.Screen name="ListingDetails" component={ListingDetailsScreen} />
+        {/* Provider Listing Details */}
+        <Stack.Screen name="ProviderListingDetails" component={ProviderListingDetails} />
 
         {/* Apply Wizard */}
         <Stack.Screen
@@ -76,6 +80,7 @@ export default function RootNavigator() {
         <Stack.Screen name="AddListing" component={AddListing} />
         <Stack.Screen name="EditListing" component={EditListing} />
         <Stack.Screen name="AvailabilityUpdater" component={AvailabilityUpdater} />
+        <Stack.Screen name="ListingWizard" component={ListingWizard} />
       </Stack.Navigator>
     </NavigationContainer>
   );

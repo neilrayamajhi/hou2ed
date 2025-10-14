@@ -1,8 +1,14 @@
 import { registerRootComponent } from 'expo';
+import { Platform } from 'react-native';
 
-import App from './App';
-
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
-registerRootComponent(App);
+if (Platform.OS === 'web') {
+  const WebPlaceholder = () => {
+    return null;
+  };
+  registerRootComponent(WebPlaceholder);
+} else {
+  // Lazy require App only on native to avoid web bundling native-only deps
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const App = require('./App').default;
+  registerRootComponent(App);
+}

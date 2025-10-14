@@ -1,11 +1,18 @@
 import React from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
-import RNMapView, {
-  Marker as RNMarker,
-  PROVIDER_GOOGLE as RN_PROVIDER_GOOGLE,
-  MapViewProps as RNMapViewProps,
-  Region as RNRegion
-} from 'react-native-maps';
+// Avoid importing react-native-maps on web (no web support)
+let RNMapView: any = null;
+let RNMarker: any = null;
+let RN_PROVIDER_GOOGLE: any = null;
+type RNMapViewProps = any;
+type RNRegion = any;
+if (Platform.OS !== 'web') {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const Maps = require('react-native-maps');
+  RNMapView = Maps.default;
+  RNMarker = Maps.Marker;
+  RN_PROVIDER_GOOGLE = Maps.PROVIDER_GOOGLE;
+}
 
 export type Region = RNRegion;
 

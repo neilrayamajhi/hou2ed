@@ -567,6 +567,7 @@ supabase init
 ### Step 2: Start Supabase locally (optional)
 ```bash
 # Start local Supabase instance:
+
 supabase start
 
 # This downloads Docker images (first time takes 5-10 minutes)

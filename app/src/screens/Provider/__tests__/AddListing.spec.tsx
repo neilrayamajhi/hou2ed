@@ -10,18 +10,22 @@ jest.mock("../../../components/ui/Toast", () => ({
   useToast: () => ({ showToast: jest.fn() }),
 }));
 
-const invalidate = jest.fn();
-jest.mock("@tanstack/react-query", () => ({
-  useMutation: (opts: any) => ({ mutate: opts.mutationFn, isPending: false }),
-  useQueryClient: () => ({ invalidateQueries: invalidate }),
-}));
+jest.mock("@tanstack/react-query", () => {
+  const mockInvalidate = jest.fn();
+  return {
+    useMutation: (opts: any) => ({ mutate: opts.mutationFn, isPending: false }),
+    useQueryClient: () => ({ invalidateQueries: mockInvalidate }),
+  };
+});
 
-const createListing = jest.fn().mockResolvedValue({ success: true, listingId: "1" });
-const getCurrentProviderId = jest.fn().mockResolvedValue("prov-1");
-jest.mock("../../../services/listing.service", () => ({
-  createListing: (...args: any[]) => (createListing as any)(...args),
-  getCurrentProviderId: () => getCurrentProviderId(),
-}));
+jest.mock("../../../services/listing.service", () => {
+  const mockCreate = jest.fn().mockResolvedValue({ success: true, listingId: "1" });
+  const mockGetProv = jest.fn().mockResolvedValue("prov-1");
+  return {
+    createListing: (...args: any[]) => mockCreate(...args),
+    getCurrentProviderId: () => mockGetProv(),
+  };
+});
 
 describe("AddListing", () => {
   it("calls createListing with parsed numbers and invalidates cache", async () => {
@@ -47,4 +51,3 @@ describe("AddListing", () => {
     });
   });
 });
-

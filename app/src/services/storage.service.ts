@@ -1,7 +1,15 @@
 import { supabase } from '../lib/supabase';
 import { Platform } from 'react-native';
-import * as FileSystem from 'expo-file-system';
-import * as ImageManipulator from 'expo-image-manipulator';
+// Avoid importing native-only modules at top-level so web bundler doesn't choke
+// We'll require them lazily only on native platforms
+let FileSystem: any = null;
+let ImageManipulator: any = null;
+if (Platform.OS !== 'web') {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  FileSystem = require('expo-file-system');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  ImageManipulator = require('expo-image-manipulator');
+}
 
 // Constants
 const LISTING_IMAGES_BUCKET = 'listing-images';
@@ -9,7 +17,9 @@ const APPLICATION_DOCS_BUCKET = 'application-docs';
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_DOC_SIZE = 10 * 1024 * 1024; // 10MB
 const IMAGE_QUALITY = 0.8;
-const CACHE_DIR = FileSystem.cacheDirectory + 'images/';
+const CACHE_DIR = Platform.OS !== 'web' && FileSystem?.cacheDirectory
+  ? FileSystem.cacheDirectory + 'images/'
+  : '/tmp/images/';
 
 // Image dimensions
 const IMAGE_SIZES = {
@@ -35,6 +45,7 @@ interface ImageUploadOptions {
  * Ensure cache directory exists
  */
 async function ensureCacheDir() {
+  if (Platform.OS === 'web') return; // no-op on web
   const dirInfo = await FileSystem.getInfoAsync(CACHE_DIR);
   if (!dirInfo.exists) {
     await FileSystem.makeDirectoryAsync(CACHE_DIR, { intermediates: true });
@@ -57,30 +68,20 @@ async function processImage(
   uri: string,
   options: ImageUploadOptions
 ): Promise<string> {
+  if (Platform.OS === 'web' || !ImageManipulator) return uri;
   try {
-    const manipulatorOptions: ImageManipulator.Action[] = [];
-
-    // Add resize if specified
+    const manipulatorOptions: any[] = [];
     if (options.resize && IMAGE_SIZES[options.resize]) {
-      manipulatorOptions.push({
-        resize: IMAGE_SIZES[options.resize],
-      });
+      manipulatorOptions.push({ resize: IMAGE_SIZES[options.resize] });
     }
-
-    // Process image
-    const result = await ImageManipulator.manipulateAsync(
-      uri,
-      manipulatorOptions,
-      {
-        compress: options.quality || IMAGE_QUALITY,
-        format: ImageManipulator.SaveFormat.JPEG,
-      }
-    );
-
+    const result = await ImageManipulator.manipulateAsync(uri, manipulatorOptions, {
+      compress: options.quality || IMAGE_QUALITY,
+      format: ImageManipulator.SaveFormat.JPEG,
+    });
     return result.uri;
   } catch (error) {
     console.error('Image processing error:', error);
-    return uri; // Return original if processing fails
+    return uri;
   }
 }
 
@@ -96,7 +97,7 @@ export async function uploadListingImage(
     // Process image
     const processedUri = await processImage(uri, options);
 
-    // Read file as blob
+    // Read file as blob (works on native and web)
     const response = await fetch(processedUri);
     const blob = await response.blob();
 

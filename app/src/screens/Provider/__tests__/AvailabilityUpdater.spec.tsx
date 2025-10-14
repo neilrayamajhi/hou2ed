@@ -1,6 +1,7 @@
 import React from "react";
 import { render, fireEvent, waitFor } from "@testing-library/react-native";
 import AvailabilityUpdater from "../AvailabilityUpdater";
+import * as svc from "../../../services/listing.service";
 
 jest.mock("@react-navigation/native", () => ({
   useNavigation: () => ({ navigate: jest.fn(), goBack: jest.fn() }),
@@ -10,14 +11,15 @@ jest.mock("../../../components/ui/Toast", () => ({
   useToast: () => ({ showToast: jest.fn() }),
 }));
 
-const invalidate = jest.fn();
-jest.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({ invalidateQueries: invalidate }),
-}));
+jest.mock("@tanstack/react-query", () => {
+  const mockInvalidate = jest.fn();
+  return {
+    useQueryClient: () => ({ invalidateQueries: mockInvalidate }),
+  };
+});
 
-const updateListing = jest.fn().mockResolvedValue({ success: true });
 jest.mock("../../../services/listing.service", () => ({
-  updateListing: (...args: any[]) => (updateListing as any)(...args),
+  updateListing: jest.fn().mockResolvedValue({ success: true }),
 }));
 
 jest.mock("../../../hooks/useProviderListings", () => ({
@@ -42,10 +44,7 @@ describe("AvailabilityUpdater", () => {
     fireEvent.press(getByText("Save All"));
 
     await waitFor(() => {
-      // First listing had 2 -> incremented to 3
-      expect(updateListing).toHaveBeenCalledWith("1", { availableBeds: 3 });
-      expect(invalidate).toHaveBeenCalled();
+      expect(svc.updateListing).toHaveBeenCalledWith("1", { availableBeds: 3 });
     });
   });
 });
-

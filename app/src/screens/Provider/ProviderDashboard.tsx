@@ -13,13 +13,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius, shadows } from "../../theme/tokens";
 import { RootStackNavigationProp } from "../../navigation/types";
 import { useProviderListings } from "../../hooks/useProviderListings";
-import { ActivityIndicator } from "react-native";
+import { ActivityIndicator, RefreshControl } from "react-native";
 import { useToast } from "../../components/ui/Toast";
+import { useRequireProvider } from "../../hooks/useRequireProvider";
 
 // Dashboard now uses live data via useProviderListings
 
 export default function ProviderDashboard() {
   const navigation = useNavigation<RootStackNavigationProp>();
+  useRequireProvider();
   const { data: listings, isLoading, isError, refetch, isRefetching } = useProviderListings();
   const { showToast } = useToast();
 
@@ -42,7 +44,33 @@ export default function ProviderDashboard() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={!!isRefetching}
+            onRefresh={() => refetch()}
+            tintColor={colors.primary[500]}
+          />
+        }
       >
+        {/* Metrics row */}
+        <View style={styles.metricsRow}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricLabel}>Active Listings</Text>
+            <Text style={styles.metricValue}>{(listings || []).length}</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricLabel}>Total Beds</Text>
+            <Text style={styles.metricValue}>{totalBeds}</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricLabel}>Available Today</Text>
+            <Text style={styles.metricValue}>{totalAvailable}</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricLabel}>Pending Apps</Text>
+            <Text style={styles.metricValue}>{newApplications}</Text>
+          </View>
+        </View>
         {/* Three main tiles at the top */}
         <View style={styles.tilesContainer}>
           {/* Beds Available Tile */}
@@ -77,7 +105,7 @@ export default function ProviderDashboard() {
           {/* Add New Listing Tile */}
           <TouchableOpacity
             style={[styles.tile, styles.addListingTile]}
-            onPress={() => navigation.navigate("AddListing")}
+            onPress={() => navigation.navigate("ListingWizard")}
             accessibilityLabel="Add new listing"
             accessibilityRole="button"
           >
@@ -169,7 +197,7 @@ export default function ProviderDashboard() {
                 <TouchableOpacity
                   style={styles.viewButton}
                   onPress={() => {
-                    showToast("Opening listing details", "success");
+                    navigation.navigate("ProviderListingDetails", { listingId: listing.id });
                   }}
                   accessibilityLabel="View listing"
                   accessibilityRole="button"
@@ -179,6 +207,21 @@ export default function ProviderDashboard() {
               </View>
             </View>
           ))}
+
+          {/* Recent Activity (simple) */}
+          {(listings || []).length > 0 && (
+            <View style={{ marginTop: spacing.lg }}>
+              <Text style={styles.sectionTitle}>Recent Activity</Text>
+              {(listings || [])
+                .slice(0, 3)
+                .map((l) => (
+                  <View key={`activity-${l.id}`} style={styles.activityItem}>
+                    <Ionicons name="refresh-outline" size={16} color={colors.gray[400]} />
+                    <Text style={styles.activityText}>Updated availability on {l.title}</Text>
+                  </View>
+                ))}
+            </View>
+          )}
         </View>
 
         {/* Quick Actions Section */}

@@ -2,8 +2,11 @@ import { z } from 'zod';
 
 // Environment variable schema
 const envSchema = z.object({
-  SUPABASE_URL: z.string().url().optional().default('http://192.168.1.8:54321'),
-  SUPABASE_ANON_KEY: z.string().optional().default('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0'),
+  // Supabase config - REQUIRED for production
+  // If not set, app will show a helpful error message
+  SUPABASE_URL: z.string().url(),
+  SUPABASE_ANON_KEY: z.string().min(1),
+  // Optional configs with sensible defaults
   MAPS_PROVIDER: z.enum(['google', 'apple']).optional().default('google'),
   MAPS_IOS_API_KEY: z.string().optional(),
   MAPS_ANDROID_API_KEY: z.string().optional(),
@@ -29,24 +32,37 @@ export const env = (() => {
 
     // Log environment info in development
     if (__DEV__) {
-      console.log('=== Environment Configuration:');
+      console.log('=== Environment Configuration ===');
       console.log('  Supabase URL:', parsed.SUPABASE_URL);
       console.log('  Maps Provider:', parsed.MAPS_PROVIDER);
       console.log('  Sentry:', parsed.SENTRY_DSN ? 'Configured' : 'Not configured');
       console.log('  PostHog:', parsed.POSTHOG_KEY ? 'Configured' : 'Not configured');
+      console.log('================================');
     }
 
     return parsed;
   } catch (error) {
-    if (__DEV__) {
-      console.error('L Environment validation failed:', error);
-      if (error instanceof z.ZodError) {
-        console.error('Issues:', error.issues);
-      }
+    // Show helpful error message if Supabase is not configured
+    console.error('\n❌ ENVIRONMENT CONFIGURATION ERROR ❌\n');
+    console.error('Your app is not properly configured!');
+    console.error('\nMissing required environment variables:');
+
+    if (error instanceof z.ZodError) {
+      error.issues.forEach(issue => {
+        console.error(`  - ${issue.path.join('.')}: ${issue.message}`);
+      });
     }
 
-    // Return defaults in production to prevent crashes
-    return envSchema.parse({});
+    console.error('\n📝 To fix this:');
+    console.error('1. Create a .env.local file in the app/ folder');
+    console.error('2. Add these lines (with your real values):');
+    console.error('   EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co');
+    console.error('   EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here');
+    console.error('3. Restart the app with: npm start -- --clear\n');
+    console.error('📖 See SWITCH_TO_CLOUD_SUPABASE.md for detailed instructions\n');
+
+    // Throw error to prevent app from starting with wrong config
+    throw new Error('Missing required environment variables. Check console for details.');
   }
 })();
 
