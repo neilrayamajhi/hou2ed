@@ -162,13 +162,30 @@ export async function verifyOtp(
   code: string,
 ): Promise<LoginResult> {
   try {
-    const { data, error } = await authHelpers.verifyOtp(email, code);
+    console.log("Verifying OTP for:", email);
+    console.log("Code entered:", code);
+
+    // Use the correct OTP verification method
+    const { data, error } = await supabase.auth.verifyOtp({
+      email: email,
+      token: code,
+      type: "email",
+    });
 
     if (error) {
+      console.error("OTP Verification Error:", error);
+
+      // Check if it's a format error (code vs link)
+      if (error.message?.includes("token") || error.message?.includes("invalid")) {
+        console.log("Tip: Make sure you're entering the 6-digit code from your email");
+        console.log("If you received a link, the code is in the URL after 'token='");
+      }
+
       throw error;
     }
 
     if (data?.user) {
+      console.log("Verification successful for:", email);
       const userData = transformUserData(data.user);
       return {
         success: true,
@@ -176,13 +193,34 @@ export async function verifyOtp(
       };
     }
 
+    if (data?.session) {
+      console.log("Session created, fetching user data");
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (user) {
+        const userData = transformUserData(user);
+        return {
+          success: true,
+          user: userData,
+        };
+      }
+    }
+
     return {
       success: false,
-      error: "Verification failed",
+      error: "Verification failed - no user data returned",
       errorCode: AUTH_ERROR_CODES.UNKNOWN,
     };
   } catch (error) {
     const authError = error as AuthError;
+
+    console.log("================================");
+    console.log("Email Verification Failed");
+    console.log("Error:", authError.message);
+    console.log("Check your email for the 6-digit code");
+    console.log("If you see a link, extract the code from the URL");
+    console.log("================================");
+
     return {
       success: false,
       error: authError.message || "Invalid verification code",
@@ -237,12 +275,29 @@ export async function signUpUser(
   }
 
   try {
+    // Log the API endpoint being used (helpful for debugging)
+    console.log(
+      "Attempting sign up to:",
+      (supabase as any).supabaseUrl || "Unknown URL",
+    );
+
     // Check if username is already taken
-    const { data: existingUser } = await supabase
+    const { data: existingUser, error: usernameCheckError } = await supabase
       .from("profiles")
       .select("id")
       .eq("username", username)
       .single();
+
+    // Handle network errors separately
+    if (usernameCheckError && usernameCheckError.message?.includes("fetch")) {
+      console.error("Network error checking username:", usernameCheckError);
+      return {
+        success: false,
+        error:
+          "Unable to connect to server. Please check your internet connection and try again.",
+        errorCode: "NETWORK_ERROR",
+      };
+    }
 
     if (existingUser) {
       return {
@@ -262,6 +317,21 @@ export async function signUpUser(
     );
 
     if (error) {
+      console.error("Sign up error details:", error);
+
+      // Check for network errors
+      if (
+        error.message?.includes("fetch") ||
+        error.message?.includes("Network request failed")
+      ) {
+        return {
+          success: false,
+          error:
+            "Network connection failed. Please check your internet connection and try again.",
+          errorCode: "NETWORK_ERROR",
+        };
+      }
+
       // Check for specific error types
       if (
         error.message?.includes("already registered") ||
@@ -285,17 +355,66 @@ export async function signUpUser(
       throw error;
     }
 
+    // Log for development - helps with email configuration issues
+    if (__DEV__ && data?.user) {
+      console.log("=================================");
+      console.log("SIGN UP SUCCESSFUL - Email Verification Required");
+      console.log("Email sent to:", email);
+      console.log("User ID:", data.user.id);
+      console.log("Check your email for the 6-digit verification code");
+      console.log("If using default Supabase email, check spam folder");
+      console.log("=================================");
+    }
+
     return {
       success: true,
       user: data?.user ? transformUserData(data.user) : null,
     };
-  } catch (error) {
+  } catch (error: any) {
+    console.error("Unexpected sign up error:", error);
+
+    // Better network error handling
+    if (
+      error?.message?.includes("fetch") ||
+      error?.message?.includes("Network request failed")
+    ) {
+      return {
+        success: false,
+        error:
+          "Unable to connect to server. Please check your internet connection.",
+        errorCode: "NETWORK_ERROR",
+      };
+    }
+
     const authError = error as AuthError;
     return {
       success: false,
-      error: authError.message || "Sign up failed",
+      error: authError.message || "Sign up failed. Please try again.",
       errorCode: authError.code || AUTH_ERROR_CODES.UNKNOWN,
     };
+  }
+}
+
+/**
+ * Get current user
+ */
+export async function getUser() {
+  try {
+    const { user, error } = await authHelpers.getUser();
+
+    if (error) {
+      console.error("Get user error:", error);
+      return null;
+    }
+
+    if (user) {
+      return transformUserData(user);
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Failed to get user:", error);
+    return null;
   }
 }
 

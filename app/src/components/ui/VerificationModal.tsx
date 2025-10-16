@@ -82,14 +82,13 @@ export default function VerificationModal({
     }
 
     setIsVerifying(true);
-    try {
-      // Simulate verification delay
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+    setError("");
 
-      // For demo, accept any 6-digit code
-      onComplete(codeToVerify);
+    try {
+      console.log("Verifying code:", codeToVerify);
+      await onComplete(codeToVerify);
     } catch (error) {
-      setError("Invalid code. Please try again.");
+      setError("Invalid code. Please check your email and try again.");
     } finally {
       setIsVerifying(false);
     }
@@ -201,6 +200,19 @@ export default function VerificationModal({
           <Text style={styles.helpText}>
             Didn't receive the code? Check your spam folder or try resending.
           </Text>
+
+          {/* Help Info */}
+          <View style={styles.devInfo}>
+            <Text style={styles.devInfoText}>
+              📧 Important: Check your email for the 6-digit verification code
+            </Text>
+            <Text style={styles.devInfoText}>
+              If you see a link instead, look for the code in the URL after 'token='
+            </Text>
+            <Text style={styles.devInfoText}>
+              Note: Emails may take 1-2 minutes to arrive. Check spam folder too.
+            </Text>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -295,5 +307,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: "center",
     opacity: 0.7,
+  },
+  devInfo: {
+    marginTop: theme.spacing.md,
+    padding: theme.spacing.sm,
+    backgroundColor: "rgba(212, 175, 55, 0.1)",
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: "rgba(212, 175, 55, 0.3)",
+  },
+  devInfoText: {
+    color: "#D4AF37",
+    fontSize: 11,
+    textAlign: "center",
+    marginVertical: 2,
   },
 });

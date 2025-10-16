@@ -50,7 +50,6 @@ export default function Login() {
     password: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isFormValid, setIsFormValid] = useState(false);
 
@@ -312,38 +311,21 @@ export default function Login() {
             </View>
 
             <View style={styles.inputContainer}>
-              <View style={styles.passwordInputWrapper}>
-                <Input
-                  label="Password"
-                  value={formData.password}
-                  onChangeText={(text) => handleFieldChange("password", text)}
-                  placeholder="Enter your password"
-                  error={errors.password}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!isLoading && !isLocked}
-                  accessibilityLabel="Password input"
-                  accessibilityHint="Enter your password"
-                  testID="login-password-input"
-                />
-                <TouchableOpacity
-                  style={styles.passwordToggle}
-                  onPress={() => setShowPassword(!showPassword)}
-                  accessibilityLabel={
-                    showPassword ? "Hide password" : "Show password"
-                  }
-                  accessibilityRole="button"
-                  disabled={isLoading}
-                  testID="password-toggle"
-                >
-                  <Ionicons
-                    name={showPassword ? "eye-off" : "eye"}
-                    size={20}
-                    color={"#FFFFFF"}
-                  />
-                </TouchableOpacity>
-              </View>
+              <Input
+                label="Password"
+                value={formData.password}
+                onChangeText={(text) => handleFieldChange("password", text)}
+                placeholder="Enter your password"
+                error={errors.password}
+                secureTextEntry={true}
+                showPasswordToggle={true}
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!isLoading && !isLocked}
+                accessibilityLabel="Password input"
+                accessibilityHint="Enter your password"
+                testID="login-password-input"
+              />
             </View>
 
             {/* Forgot Password Link */}
@@ -458,15 +440,6 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     marginBottom: theme.spacing.lg,
-  },
-  passwordInputWrapper: {
-    position: "relative",
-  },
-  passwordToggle: {
-    position: "absolute",
-    right: theme.spacing.md,
-    top: 38,
-    padding: theme.spacing.sm,
   },
   forgotPasswordButton: {
     alignSelf: "flex-end",

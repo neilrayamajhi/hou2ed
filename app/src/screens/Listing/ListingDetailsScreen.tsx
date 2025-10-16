@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,13 +7,15 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Dimensions,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { MapView, Marker } from "../../components/MapView";
 import PhotoCarousel from "../../components/patterns/PhotoCarousel";
 import Badge from "../../components/ui/Badge";
 import { colors, spacing, radius } from "../../theme/tokens";
+import { fetchShelterDetails } from "../../services/shelterDetailsService";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -116,7 +118,78 @@ function CollapsibleSection({
 
 export default function ListingDetailsScreen() {
   const navigation = useNavigation();
+  const route = useRoute();
   const [isSaved, setIsSaved] = useState(false);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(true);
+  const [shelterDetails, setShelterDetails] = useState<any>(null);
+
+  // Get listing from navigation params, fallback to mock data
+  const listingFromParams = route.params?.listing;
+  const baseListing = listingFromParams ? {
+    id: listingFromParams.id,
+    title: listingFromParams.name || "Safe Haven Recovery House",
+    providerName: listingFromParams.provider || "Hope Foundation",
+    isVerified: listingFromParams.verified || false,
+    isDVSensitive: false,
+    images: listingFromParams.images || mockListing.images,
+    bedsAvailable: listingFromParams.bedsAvailable || 3,
+    bedsTotal: listingFromParams.bedsTotal || 8,
+    costPerMonth: listingFromParams.price?.min || 650,
+    intakeMethod: "Call first",
+    lastUpdated: "2 hours ago",
+    type: listingFromParams.type,
+    location: {
+      latitude: listingFromParams.coordinates?.latitude || mockListing.location.latitude,
+      longitude: listingFromParams.coordinates?.longitude || mockListing.location.longitude,
+      address: listingFromParams.address?.street || mockListing.location.address,
+      city: listingFromParams.address?.city || mockListing.location.city,
+      state: listingFromParams.address?.state || mockListing.location.state,
+      zip: listingFromParams.address?.zipCode || mockListing.location.zip,
+    },
+  } : mockListing;
+
+  // Combine base listing with fetched details
+  const listing = shelterDetails ? {
+    ...baseListing,
+    overview: shelterDetails.overview || baseListing.overview,
+    amenities: shelterDetails.amenities || mockListing.amenities,
+    services: shelterDetails.services || mockListing.services,
+    rules: shelterDetails.rules || mockListing.rules,
+    eligibility: shelterDetails.eligibility || mockListing.eligibility,
+    intakeMethod: shelterDetails.intakeProcess || baseListing.intakeMethod,
+  } : {
+    ...baseListing,
+    overview: mockListing.overview,
+    amenities: mockListing.amenities,
+    services: mockListing.services,
+    rules: mockListing.rules,
+    eligibility: mockListing.eligibility,
+  };
+
+  // Fetch detailed shelter information
+  useEffect(() => {
+    async function loadShelterDetails() {
+      setIsLoadingDetails(true);
+      try {
+        const details = await fetchShelterDetails(
+          baseListing.title,
+          baseListing.type,
+          {
+            city: baseListing.location.city,
+            state: baseListing.location.state
+          }
+        );
+        setShelterDetails(details);
+      } catch (error) {
+        console.error('Error loading shelter details:', error);
+        // Fall back to mock data on error
+      } finally {
+        setIsLoadingDetails(false);
+      }
+    }
+
+    loadShelterDetails();
+  }, [baseListing.title, baseListing.type, baseListing.location.city, baseListing.location.state]);
 
   const handleSave = useCallback(() => {
     setIsSaved(!isSaved);
@@ -125,26 +198,51 @@ export default function ListingDetailsScreen() {
   const handleApply = useCallback(() => {
     // Navigate to application flow
     // @ts-ignore
-    navigation.navigate("ApplyWizard", { listingId: mockListing.id });
-  }, [navigation]);
+    navigation.navigate("ApplyWizard", { listingId: listing.id });
+  }, [navigation, listing.id]);
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header with Back Button */}
+      <View style={styles.headerBar}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+          accessibilityLabel="Go back"
+        >
+          <Ionicons name="chevron-back" size={24} color={colors.gold} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={handleSave}
+          style={styles.saveButton}
+          accessibilityLabel={isSaved ? "Remove from saved" : "Save listing"}
+        >
+          <Ionicons
+            name={isSaved ? "bookmark" : "bookmark-outline"}
+            size={24}
+            color={colors.gold}
+          />
+        </TouchableOpacity>
+      </View>
+
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
         {/* Photo Carousel */}
-        <PhotoCarousel images={mockListing.images} height={250} />
+        <PhotoCarousel images={listing.images} height={250} />
 
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>{mockListing.title}</Text>
+          <Text style={styles.title}>{listing.title}</Text>
           <View style={styles.providerRow}>
-            <Text style={styles.providerName}>{mockListing.providerName}</Text>
-            {mockListing.isVerified && (
+            <Text style={styles.providerName}>{listing.providerName}</Text>
+            {listing.isVerified && (
               <Badge type="verified" label="Verified" />
+            )}
+            {listingFromParams?.verified && listingFromParams?.verificationStatus && (
+              <Text style={styles.verificationStatus}>{listingFromParams.verificationStatus}</Text>
             )}
           </View>
         </View>
@@ -155,89 +253,110 @@ export default function ListingDetailsScreen() {
           showsHorizontalScrollIndicator={false}
           style={styles.statsRow}
         >
-          <View style={[styles.statCard, mockListing.bedsAvailable > 0 && styles.statCardAvailable]}>
+          <View style={[styles.statCard, listing.bedsAvailable > 0 && styles.statCardAvailable]}>
             <Ionicons
               name="bed-outline"
               size={20}
-              color={mockListing.bedsAvailable > 0 ? colors.green : colors.gold}
+              color={listing.bedsAvailable > 0 ? colors.green : colors.gold}
             />
-            <Text style={[styles.statValue, mockListing.bedsAvailable > 0 && styles.statValueAvailable]}>
-              {mockListing.bedsAvailable}/{mockListing.bedsTotal}
+            <Text style={[styles.statValue, listing.bedsAvailable > 0 && styles.statValueAvailable]}>
+              {listing.bedsAvailable}/{listing.bedsTotal}
             </Text>
             <Text style={styles.statLabel}>Beds</Text>
           </View>
 
           <View style={styles.statCard}>
             <Ionicons name="cash-outline" size={20} color={colors.gold} />
-            <Text style={styles.statValue}>${mockListing.costPerMonth}</Text>
+            <Text style={styles.statValue}>${listing.costPerMonth}</Text>
             <Text style={styles.statLabel}>Per month</Text>
           </View>
 
           <View style={styles.statCard}>
             <Ionicons name="call-outline" size={20} color={colors.gold} />
-            <Text style={styles.statValue}>{mockListing.intakeMethod}</Text>
+            <Text style={styles.statValue}>{listing.intakeMethod}</Text>
             <Text style={styles.statLabel}>Intake</Text>
           </View>
 
           <View style={styles.statCard}>
             <Ionicons name="time-outline" size={20} color={colors.gold} />
-            <Text style={styles.statValue}>{mockListing.lastUpdated}</Text>
+            <Text style={styles.statValue}>{listing.lastUpdated}</Text>
             <Text style={styles.statLabel}>Updated</Text>
           </View>
         </ScrollView>
 
         {/* Collapsible Sections */}
         <CollapsibleSection title="Overview" defaultExpanded={true}>
-          <Text style={styles.bodyText}>{mockListing.overview}</Text>
+          {isLoadingDetails ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={colors.gold} />
+              <Text style={styles.loadingText}>Loading shelter details...</Text>
+            </View>
+          ) : (
+            <Text style={styles.bodyText}>{listing.overview}</Text>
+          )}
         </CollapsibleSection>
 
         <CollapsibleSection title="Amenities">
-          <View style={styles.tagContainer}>
-            {mockListing.amenities.map((amenity, index) => (
-              <View key={index} style={styles.tag}>
-                <Text style={styles.tagText}>{amenity}</Text>
-              </View>
-            ))}
-          </View>
+          {isLoadingDetails ? (
+            <ActivityIndicator size="small" color={colors.gold} />
+          ) : (
+            <View style={styles.tagContainer}>
+              {listing.amenities.map((amenity, index) => (
+                <View key={index} style={styles.tag}>
+                  <Text style={styles.tagText}>{amenity}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </CollapsibleSection>
 
         <CollapsibleSection title="Services">
-          <View style={styles.listContainer}>
-            {mockListing.services.map((service, index) => (
-              <View key={index} style={styles.listItem}>
-                <Ionicons name="checkmark-circle" size={16} color={colors.gold} />
-                <Text style={styles.listText}>{service}</Text>
-              </View>
-            ))}
-          </View>
+          {isLoadingDetails ? (
+            <ActivityIndicator size="small" color={colors.gold} />
+          ) : (
+            <View style={styles.listContainer}>
+              {listing.services.map((service, index) => (
+                <View key={index} style={styles.listItem}>
+                  <Ionicons name="checkmark-circle" size={16} color={colors.gold} />
+                  <Text style={styles.listText}>{service}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </CollapsibleSection>
 
         <CollapsibleSection title="Rules & Eligibility">
-          <Text style={styles.subheading}>House Rules</Text>
-          <View style={styles.listContainer}>
-            {mockListing.rules.map((rule, index) => (
-              <View key={index} style={styles.listItem}>
-                <Text style={styles.bulletPoint}>•</Text>
-                <Text style={styles.listText}>{rule}</Text>
+          {isLoadingDetails ? (
+            <ActivityIndicator size="small" color={colors.gold} />
+          ) : (
+            <>
+              <Text style={styles.subheading}>House Rules</Text>
+              <View style={styles.listContainer}>
+                {listing.rules.map((rule, index) => (
+                  <View key={index} style={styles.listItem}>
+                    <Text style={styles.bulletPoint}>•</Text>
+                    <Text style={styles.listText}>{rule}</Text>
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
 
-          <Text style={[styles.subheading, { marginTop: spacing.lg }]}>
-            Eligibility Requirements
-          </Text>
-          <View style={styles.listContainer}>
-            {mockListing.eligibility.map((req, index) => (
-              <View key={index} style={styles.listItem}>
-                <Text style={styles.bulletPoint}>•</Text>
-                <Text style={styles.listText}>{req}</Text>
+              <Text style={[styles.subheading, { marginTop: spacing.lg }]}>
+                Eligibility Requirements
+              </Text>
+              <View style={styles.listContainer}>
+                {listing.eligibility.map((req, index) => (
+                  <View key={index} style={styles.listItem}>
+                    <Text style={styles.bulletPoint}>•</Text>
+                    <Text style={styles.listText}>{req}</Text>
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
+            </>
+          )}
         </CollapsibleSection>
 
         <CollapsibleSection title="Location">
-          {mockListing.isDVSensitive ? (
+          {listing.isDVSensitive ? (
             <View style={styles.sensitiveLocation}>
               <Ionicons name="lock-closed" size={24} color={colors.gold} />
               <Text style={styles.sensitiveLocationText}>
@@ -249,8 +368,8 @@ export default function ListingDetailsScreen() {
               <MapView
                 style={styles.map}
                 initialRegion={{
-                  latitude: mockListing.location.latitude,
-                  longitude: mockListing.location.longitude,
+                  latitude: listing.location.latitude,
+                  longitude: listing.location.longitude,
                   latitudeDelta: 0.01,
                   longitudeDelta: 0.01,
                 }}
@@ -258,15 +377,15 @@ export default function ListingDetailsScreen() {
               >
                 <Marker
                   coordinate={{
-                    latitude: mockListing.location.latitude,
-                    longitude: mockListing.location.longitude,
+                    latitude: listing.location.latitude,
+                    longitude: listing.location.longitude,
                   }}
                   pinColor={colors.gold}
                 />
               </MapView>
               <Text style={styles.addressText}>
-                {mockListing.location.address}, {mockListing.location.city},{" "}
-                {mockListing.location.state} {mockListing.location.zip}
+                {listing.location.address}, {listing.location.city},{" "}
+                {listing.location.state} {listing.location.zip}
               </Text>
             </View>
           )}
@@ -346,6 +465,35 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.black,
   },
+  headerBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    position: 'absolute',
+    top: 40,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  },
+  backButton: {
+    padding: spacing.xs,
+  },
+  saveButton: {
+    padding: spacing.xs,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  loadingText: {
+    marginLeft: spacing.sm,
+    color: colors.gray,
+    fontSize: 14,
+  },
   scrollView: {
     flex: 1,
   },
@@ -366,6 +514,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
+    flexWrap: "wrap",
+  },
+  verificationStatus: {
+    fontSize: 10,
+    color: colors.green,
+    fontStyle: "italic",
   },
   providerName: {
     fontSize: 16,

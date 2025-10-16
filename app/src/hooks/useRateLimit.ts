@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AUTH_CONSTANTS } from "../constants/auth.constants";
 
 interface RateLimitState {
@@ -26,8 +27,8 @@ export function useRateLimit(
   useEffect(() => {
     const loadState = async () => {
       try {
-        // In production, use AsyncStorage or SecureStore
-        const storedState = localStorage.getItem(`rateLimit_${key}`);
+        // Use AsyncStorage for React Native
+        const storedState = await AsyncStorage.getItem(`rateLimit_${key}`);
         if (storedState) {
           const parsed = JSON.parse(storedState);
           const now = Date.now();
@@ -95,7 +96,7 @@ export function useRateLimit(
 
       // Save to storage
       try {
-        localStorage.setItem(
+        AsyncStorage.setItem(
           `rateLimit_${key}`,
           JSON.stringify({
             attempts: newState.attempts,
@@ -120,7 +121,7 @@ export function useRateLimit(
     });
 
     try {
-      localStorage.removeItem(`rateLimit_${key}`);
+      AsyncStorage.removeItem(`rateLimit_${key}`);
     } catch (error) {
       console.error("Error clearing rate limit state:", error);
     }

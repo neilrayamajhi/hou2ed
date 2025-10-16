@@ -352,9 +352,9 @@ export default function ProfileScreen() {
             </View>
           </TouchableOpacity>
 
-          <Text style={styles.userName}>{user?.fullName || "John Doe"}</Text>
-          <Text style={styles.userEmail}>{user?.email || "john.doe@example.com"}</Text>
-          <Text style={styles.userRole}>Housing Seeker</Text>
+          <Text style={styles.userName}>{user?.fullName || user?.username || "User"}</Text>
+          <Text style={styles.userEmail}>{user?.email || "Not available"}</Text>
+          <Text style={styles.userRole}>{user?.role === "provider" ? "Housing Provider" : "Housing Seeker"}</Text>
         </View>
 
         {/* Profile Sections */}

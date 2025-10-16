@@ -10,6 +10,8 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import * as SecureStore from "expo-secure-store";
 import { RootStackNavigationProp } from "../../navigation/types";
+import { useAuthStore } from "../../state/useAuthStore";
+import { supabase } from "../../lib/supabase";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -35,18 +37,32 @@ export default function Splash() {
       ]),
     ).start();
 
-    // Check if user has seen slides before
+    // Check authentication and onboarding status
     const checkAndNavigate = async () => {
       try {
+        // First check if user is authenticated
+        const { data: { session } } = await supabase.auth.getSession();
         const seenSlides = await SecureStore.getItemAsync("seenSlides");
-        const destination = seenSlides === "true" ? "Tabs" : "OnboardingScreen";
+
+        let destination: string;
+
+        if (session && session.user) {
+          // User is authenticated - go to main app
+          destination = "Tabs";
+        } else if (seenSlides === "true") {
+          // User has seen slides but is not logged in - go to login
+          destination = "Login";
+        } else {
+          // New user - show onboarding
+          destination = "OnboardingScreen";
+        }
 
         navigationTimer.current = setTimeout(() => {
           navigation.replace(destination);
         }, 2500);
       } catch (error) {
-        console.warn("Error checking slides status:", error);
-        // If error reading, show slides as fallback
+        console.warn("Error checking auth/slides status:", error);
+        // If error, default to onboarding
         navigationTimer.current = setTimeout(() => {
           navigation.replace("OnboardingScreen");
         }, 2500);

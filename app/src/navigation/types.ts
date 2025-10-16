@@ -13,10 +13,12 @@ export type RootStackParamList = {
   ListingDetails: { listingId?: string };
   ApplyWizard: { listingId?: string };
   Thread: {
+    threadId?: string;
     messageId: string;
     applicationId: string;
     propertyTitle: string;
     senderName: string;
+    participantId?: string;
   };
   AvailabilityUpdater: undefined;
 };

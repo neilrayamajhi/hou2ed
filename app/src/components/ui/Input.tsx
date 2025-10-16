@@ -22,7 +22,7 @@ export default function Input({
   label,
   error,
   helpText,
-  secureTextEntry = false,
+  secureTextEntry: secureTextEntryProp = false,
   showPasswordToggle = false,
   style,
   ...props
@@ -30,7 +30,7 @@ export default function Input({
   const [isFocused, setIsFocused] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
-  const shouldHideText = secureTextEntry && !isPasswordVisible;
+  const shouldHideText = secureTextEntryProp && !isPasswordVisible;
 
   return (
     <View style={styles.container}>
@@ -45,6 +45,10 @@ export default function Input({
         ]}
       >
         <TextInput
+          autoCompleteType="off"
+          textContentType="none"
+          importantForAutofill="no"
+          {...props}
           style={[styles.input, style]}
           placeholderTextColor="#666666"
           onFocus={() => setIsFocused(true)}
@@ -53,9 +57,8 @@ export default function Input({
           accessibilityLabel={label || props.placeholder}
           accessibilityHint={error || helpText}
           accessibilityState={{ disabled: props.editable === false }}
-          {...props}
         />
-        {secureTextEntry && showPasswordToggle && (
+        {secureTextEntryProp && showPasswordToggle && (
           <TouchableOpacity
             onPress={() => setIsPasswordVisible(!isPasswordVisible)}
             style={styles.eyeIcon}
@@ -96,6 +99,7 @@ const styles = StyleSheet.create({
     borderColor: "#FFFFFF",
     borderRadius: 8,
     minHeight: 48,
+    overflow: "hidden",
   },
   input: {
     flex: 1,
@@ -103,6 +107,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingHorizontal: 16,
     paddingVertical: 12,
+    minHeight: 48,
+    backgroundColor: "transparent",
   },
   focused: {
     borderColor: "#FFD700",
@@ -126,9 +132,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   eyeIcon: {
-    padding: 12,
-    minWidth: 44,
-    minHeight: 44,
+    padding: 10,
     justifyContent: "center",
     alignItems: "center",
   },

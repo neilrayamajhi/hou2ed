@@ -1,6 +1,6 @@
 /**
  * Service for fetching real shelter data from OpenStreetMap
- * Uses Overpass API to query OSM data - completely free!
+ * Data sources: OpenStreetMap Overpass API and provider accounts
  */
 
 interface OSMShelter {
@@ -26,6 +26,7 @@ interface OSMShelter {
     description?: string;
   };
 }
+
 
 export async function fetchRealShelters(
   latitude: number,
