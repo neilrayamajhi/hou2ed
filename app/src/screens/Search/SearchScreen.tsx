@@ -138,8 +138,9 @@ export default function SearchScreen() {
   // Open details
   const openDetails = useCallback((listing: Listing) => {
     console.log("Open details:", listing.id);
-    // TODO: Navigate to details
-  }, []);
+    // @ts-ignore - Navigation types will be updated
+    navigation.navigate("ListingDetails", { listingId: listing.id, listing });
+  }, [navigation]);
 
   // Render listing item
   const renderListingItem = useCallback(

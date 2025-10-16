@@ -84,6 +84,8 @@ export default function HomeScreen() {
   const [showFilters, setShowFilters] = useState(false);
   const [showListView, setShowListView] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
+  const [isRealData, setIsRealData] = useState(false);
+  const [dataSource, setDataSource] = useState('Mock Data');
   const [mapRegion, setMapRegion] = useState<Region>({
     latitude: 37.7749,
     longitude: -122.4194,
@@ -117,6 +119,8 @@ export default function HomeScreen() {
           // Use real shelter data
           allListings = realShelters as any;
           console.log(`Found ${realShelters.length} real shelters nearby`);
+          setIsRealData(true);
+          setDataSource('OpenStreetMap Data');
         } else {
           // Fall back to mock data if no real shelters found
           console.log('No real shelters found, using mock data');
@@ -202,8 +206,9 @@ export default function HomeScreen() {
   // Navigate to listing details
   const openDetails = useCallback(
     (listing: Listing) => {
+      console.log("Opening details for:", listing.name);
       // @ts-ignore - Navigation types will be updated
-      navigation.navigate("ListingDetails", { listingId: listing.id });
+      navigation.navigate("ListingDetails", { listingId: listing.id, listing });
     },
     [navigation],
   );
@@ -300,6 +305,15 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
+      {/* Real Data Indicator */}
+      {isRealData && (
+        <View style={styles.realDataBanner}>
+          <Ionicons name="checkmark-circle" size={16} color="#21C55D" />
+          <Text style={styles.realDataText}>{dataSource}</Text>
+          <Text style={styles.realDataSubtext}>Live Updates</Text>
+        </View>
+      )}
+
       {/* Simplified Search Bar */}
       <View style={styles.searchWrapper}>
         <View style={styles.searchContainer}>
@@ -495,9 +509,34 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#000000",
   },
-  searchWrapper: {
+  realDataBanner: {
     position: "absolute",
     top: 50,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(33, 197, 93, 0.15)",
+    borderColor: "#21C55D",
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    zIndex: 11,
+    gap: 6,
+  },
+  realDataText: {
+    color: "#21C55D",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  realDataSubtext: {
+    color: "#21C55D",
+    fontSize: 11,
+    opacity: 0.8,
+  },
+  searchWrapper: {
+    position: "absolute",
+    top: 90,
     left: 0,
     right: 0,
     zIndex: 10,

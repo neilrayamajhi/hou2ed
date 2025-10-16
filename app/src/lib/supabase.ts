@@ -130,14 +130,38 @@ export const authHelpers = {
       role: "seeker" | "provider" | "admin";
     },
   ) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: metadata,
+    // IMPORTANT: We use signInWithOtp to create the user AND send OTP code
+    // This sends a 6-digit code instead of a magic link
+    console.log("Creating user and sending OTP code to:", email);
+
+    // First, send OTP to the email (this will create the user if they don't exist)
+    const { data: otpData, error: otpError } =
+      await supabase.auth.signInWithOtp({
+        email: email,
+        options: {
+          shouldCreateUser: true, // Create user if doesn't exist
+          data: metadata, // User metadata
+        },
+      });
+
+    if (otpError) {
+      console.error("Failed to create user or send OTP:", otpError);
+      return { data: null, error: otpError };
+    }
+
+    console.log("OTP code sent successfully!");
+    console.log("User should receive a 6-digit code (not a link)");
+
+    // Note: In a real app, you'd handle password setting differently
+    // For now, we'll rely on the user logging in after verification
+
+    return {
+      data: {
+        user: null, // User will be returned after OTP verification
+        session: null,
       },
-    });
-    return { data, error };
+      error: null,
+    };
   },
 
   signIn: async (email: string, password: string) => {

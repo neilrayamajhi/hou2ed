@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -6,85 +6,20 @@ import {
   FlatList,
   TouchableOpacity,
   SafeAreaView,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { RootStackNavigationProp } from "../../navigation/types";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
+import { messageService, ThreadWithDetails } from "../../services/messageService";
+import { supabase } from "../../lib/supabase";
 
-interface Message {
-  id: string;
-  applicationId: string;
-  propertyTitle: string;
-  senderName: string;
-  senderRole: "provider" | "applicant";
-  lastMessage: string;
-  timestamp: Date;
-  unreadCount: number;
-  avatarColor: string;
-}
-
-const mockMessages: Message[] = [
-  {
-    id: "1",
-    applicationId: "app-123",
-    propertyTitle: "Sunset View Apartments",
-    senderName: "John Smith",
-    senderRole: "provider",
-    lastMessage: "Thank you for your application. We'd like to schedule a viewing...",
-    timestamp: new Date(Date.now() - 3600000),
-    unreadCount: 2,
-    avatarColor: "#FF6B6B",
-  },
-  {
-    id: "2",
-    applicationId: "app-124",
-    propertyTitle: "Green Valley Homes",
-    senderName: "Sarah Johnson",
-    senderRole: "provider",
-    lastMessage: "Your documents have been received and are under review.",
-    timestamp: new Date(Date.now() - 86400000),
-    unreadCount: 0,
-    avatarColor: "#4ECDC4",
-  },
-  {
-    id: "3",
-    applicationId: "app-125",
-    propertyTitle: "Downtown Lofts",
-    senderName: "Mike Chen",
-    senderRole: "provider",
-    lastMessage: "Could you please provide additional income verification?",
-    timestamp: new Date(Date.now() - 172800000),
-    unreadCount: 1,
-    avatarColor: "#45B7D1",
-  },
-  {
-    id: "4",
-    applicationId: "app-126",
-    propertyTitle: "Riverside Commons",
-    senderName: "Emily Davis",
-    senderRole: "provider",
-    lastMessage: "Congratulations! Your application has been approved.",
-    timestamp: new Date(Date.now() - 259200000),
-    unreadCount: 0,
-    avatarColor: "#96CEB4",
-  },
-  {
-    id: "5",
-    applicationId: "app-127",
-    propertyTitle: "Oak Park Residences",
-    senderName: "Robert Wilson",
-    senderRole: "provider",
-    lastMessage: "We have a few questions about your application.",
-    timestamp: new Date(Date.now() - 604800000),
-    unreadCount: 0,
-    avatarColor: "#FECA57",
-  },
-];
-
-function formatTimestamp(date: Date): string {
+function formatTimestamp(date: Date | string): string {
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
   const now = new Date();
-  const diff = now.getTime() - date.getTime();
+  const diff = now.getTime() - dateObj.getTime();
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
 
@@ -96,7 +31,7 @@ function formatTimestamp(date: Date): string {
   } else if (days < 7) {
     return `${days}d`;
   } else {
-    return date.toLocaleDateString("en-US", {
+    return dateObj.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric"
     });
@@ -114,17 +49,88 @@ function getInitials(name: string): string {
 
 export default function InboxScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
+  const [threads, setThreads] = useState<ThreadWithDetails[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  const handleThreadPress = useCallback((message: Message) => {
+  // Initialize and fetch threads
+  const loadThreads = useCallback(async () => {
+    try {
+      // Initialize message service
+      const userId = await messageService.initialize();
+      setCurrentUserId(userId);
+
+      // Fetch threads
+      const fetchedThreads = await messageService.getThreads();
+      setThreads(fetchedThreads);
+    } catch (error) {
+      console.error('Error loading threads:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  // Load threads on mount and when screen focuses
+  useFocusEffect(
+    useCallback(() => {
+      loadThreads();
+
+      // Subscribe to inbox updates
+      const unsubscribe = messageService.subscribeToInbox(() => {
+        // Reload threads when there's an update
+        loadThreads();
+      });
+
+      return () => {
+        unsubscribe();
+      };
+    }, [loadThreads])
+  );
+
+  // Handle pull to refresh
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadThreads();
+  }, [loadThreads]);
+
+  const handleThreadPress = useCallback((thread: ThreadWithDetails) => {
+    // Mark messages as read when opening thread
+    messageService.markMessagesAsRead(thread.id);
+
+    // Get other participant for display
+    const otherParticipant = thread.participants?.find(
+      p => p.id !== currentUserId
+    );
+
     navigation.navigate("Thread", {
-      messageId: message.id,
-      applicationId: message.applicationId,
-      propertyTitle: message.propertyTitle,
-      senderName: message.senderName,
+      threadId: thread.id,
+      messageId: thread.id, // For backward compatibility
+      applicationId: thread.application_id || '',
+      propertyTitle: thread.subject || 'Conversation',
+      senderName: otherParticipant?.full_name || 'User',
+      participantId: otherParticipant?.id || '',
     });
-  }, [navigation]);
+  }, [navigation, currentUserId]);
 
-  const renderMessage = useCallback(({ item }: { item: Message }) => {
+  const renderMessage = useCallback(({ item }: { item: ThreadWithDetails }) => {
+    // Get other participant (not the current user)
+    const otherParticipant = item.participants?.find(
+      p => p.id !== currentUserId
+    );
+
+    if (!otherParticipant) return null;
+
+    const avatarColors = [
+      "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FECA57",
+      "#48C9B0", "#9B59B6", "#E74C3C", "#3498DB", "#F39C12"
+    ];
+
+    // Generate consistent color based on user ID
+    const colorIndex = otherParticipant.id.charCodeAt(0) % avatarColors.length;
+    const avatarColor = avatarColors[colorIndex];
+
     return (
       <TouchableOpacity
         style={styles.messageCard}
@@ -133,9 +139,20 @@ export default function InboxScreen() {
       >
         <View style={styles.messageContent}>
           <View style={styles.avatarContainer}>
-            <View style={[styles.avatar, { backgroundColor: item.avatarColor }]}>
-              <Text style={styles.avatarText}>{getInitials(item.senderName)}</Text>
-            </View>
+            {otherParticipant.avatar_url ? (
+              <View style={styles.avatar}>
+                {/* In a real app, you'd use an Image component here */}
+                <Text style={styles.avatarText}>
+                  {getInitials(otherParticipant.full_name)}
+                </Text>
+              </View>
+            ) : (
+              <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
+                <Text style={styles.avatarText}>
+                  {getInitials(otherParticipant.full_name)}
+                </Text>
+              </View>
+            )}
             {item.unreadCount > 0 && (
               <View style={styles.unreadBadge}>
                 <Text style={styles.unreadCount}>{item.unreadCount}</Text>
@@ -146,13 +163,17 @@ export default function InboxScreen() {
           <View style={styles.messageDetails}>
             <View style={styles.messageHeader}>
               <Text style={styles.senderName} numberOfLines={1}>
-                {item.senderName}
+                {otherParticipant.full_name}
               </Text>
-              <Text style={styles.timestamp}>{formatTimestamp(item.timestamp)}</Text>
+              <Text style={styles.timestamp}>
+                {item.last_message_at ? formatTimestamp(item.last_message_at) : ''}
+              </Text>
             </View>
-            <Text style={styles.propertyTitle} numberOfLines={1}>
-              {item.propertyTitle}
-            </Text>
+            {item.subject && (
+              <Text style={styles.propertyTitle} numberOfLines={1}>
+                {item.subject}
+              </Text>
+            )}
             <Text
               style={[
                 styles.lastMessage,
@@ -160,15 +181,15 @@ export default function InboxScreen() {
               ]}
               numberOfLines={2}
             >
-              {item.lastMessage}
+              {item.lastMessage?.body || 'Start a conversation...'}
             </Text>
           </View>
         </View>
       </TouchableOpacity>
     );
-  }, [handleThreadPress]);
+  }, [handleThreadPress, currentUserId]);
 
-  const keyExtractor = useCallback((item: Message) => item.id, []);
+  const keyExtractor = useCallback((item: ThreadWithDetails) => item.id, []);
 
   const ItemSeparator = useCallback(() => (
     <View style={styles.separator} />
@@ -184,10 +205,27 @@ export default function InboxScreen() {
     </View>
   ), []);
 
-  const sortedMessages = useMemo(() =>
-    [...mockMessages].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()),
-    []
+  const sortedThreads = useMemo(() =>
+    [...threads].sort((a, b) => {
+      const aTime = new Date(a.last_message_at || 0).getTime();
+      const bTime = new Date(b.last_message_at || 0).getTime();
+      return bTime - aTime;
+    }),
+    [threads]
   );
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Messages</Text>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary[400]} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -196,13 +234,20 @@ export default function InboxScreen() {
       </View>
 
       <FlatList
-        data={sortedMessages}
+        data={sortedThreads}
         renderItem={renderMessage}
         keyExtractor={keyExtractor}
         contentContainerStyle={styles.listContent}
         ItemSeparatorComponent={ItemSeparator}
         ListEmptyComponent={EmptyComponent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary[400]}
+          />
+        }
       />
     </SafeAreaView>
   );
@@ -246,6 +291,7 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: colors.primary[500],
   },
   avatarText: {
     fontSize: typography.sizes.lg,
@@ -327,5 +373,10 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     color: colors.gray[400],
     textAlign: "center",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

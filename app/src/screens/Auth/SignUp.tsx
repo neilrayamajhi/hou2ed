@@ -128,8 +128,6 @@ export default function SignUp() {
   const watchPassword = watch("password");
 
   // State
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showVerification, setShowVerification] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState("");
   const [passwordStrength, setPasswordStrength] = useState<ReturnType<
@@ -241,6 +239,17 @@ export default function SignUp() {
               );
               break;
 
+            case "NETWORK_ERROR":
+              Alert.alert(
+                "Connection Error",
+                "Unable to connect to the server. Please check your internet connection and try again.",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Retry", onPress: () => handleSubmit(onSubmit)() },
+                ],
+              );
+              break;
+
             default:
               Alert.alert(
                 "Error",
@@ -248,13 +257,28 @@ export default function SignUp() {
               );
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Sign up error:", error);
         incrementAttempts();
 
         if (!mounted.current) return;
 
-        Alert.alert("Error", AUTH_MESSAGES.ERROR.SIGNUP_FAILED);
+        // Check for network errors
+        if (
+          error?.message?.includes("fetch") ||
+          error?.message?.includes("Network request failed")
+        ) {
+          Alert.alert(
+            "Connection Error",
+            "Unable to connect to the server. Please check your internet connection.",
+            [
+              { text: "Cancel", style: "cancel" },
+              { text: "Retry", onPress: () => handleSubmit(onSubmit)() },
+            ],
+          );
+        } else {
+          Alert.alert("Error", AUTH_MESSAGES.ERROR.SIGNUP_FAILED);
+        }
       } finally {
         if (loadingTimeout.current) {
           clearTimeout(loadingTimeout.current);
@@ -270,6 +294,21 @@ export default function SignUp() {
       remainingAttempts,
     ],
   );
+
+  // Handle resend code (defined before handleVerificationComplete)
+  const handleResendCode = useCallback(async () => {
+    try {
+      const result = await resendVerificationCode(verificationEmail);
+      if (result.success) {
+        Alert.alert("Success", "Verification code sent successfully. Check your email inbox and spam folder.");
+      } else {
+        Alert.alert("Error", result.error || "Failed to resend code");
+      }
+    } catch (error) {
+      console.error("Resend error:", error);
+      Alert.alert("Error", "Failed to resend verification code");
+    }
+  }, [verificationEmail]);
 
   // Handle verification
   const handleVerificationComplete = useCallback(
@@ -296,32 +335,38 @@ export default function SignUp() {
             },
           ]);
         } else {
-          Alert.alert("Error", result.error || AUTH_MESSAGES.ERROR.UNKNOWN);
+          Alert.alert(
+            "Verification Failed",
+            result.error || AUTH_MESSAGES.ERROR.UNKNOWN,
+            [
+              { text: "Try Again", style: "cancel" },
+              {
+                text: "Resend Code",
+                onPress: handleResendCode,
+              },
+            ]
+          );
         }
       } catch (error) {
         console.error("Verification error:", error);
         if (mounted.current) {
-          Alert.alert("Error", AUTH_MESSAGES.ERROR.UNKNOWN);
+          Alert.alert(
+            "Error",
+            "Failed to verify code. Please check your email and try again.",
+            [
+              { text: "OK", style: "cancel" },
+              {
+                text: "Resend Code",
+                onPress: handleResendCode,
+              },
+            ]
+          );
         }
       }
     },
-    [verificationEmail, setUser, navigation],
+    [verificationEmail, setUser, navigation, handleResendCode],
   );
 
-  // Handle resend code
-  const handleResendCode = useCallback(async () => {
-    try {
-      const result = await resendVerificationCode(verificationEmail);
-      if (result.success) {
-        Alert.alert("Success", "Verification code sent successfully");
-      } else {
-        Alert.alert("Error", result.error || "Failed to resend code");
-      }
-    } catch (error) {
-      console.error("Resend error:", error);
-      Alert.alert("Error", "Failed to resend verification code");
-    }
-  }, [verificationEmail]);
 
   // Get password strength color
   const getPasswordStrengthColor = () => {
@@ -379,11 +424,7 @@ export default function SignUp() {
           {/* Rate limit warning */}
           {isLocked && (
             <View style={styles.rateLimitWarning} accessibilityRole="alert">
-              <Ionicons
-                name="lock-closed"
-                size={20}
-                color={"#EF4444"}
-              />
+              <Ionicons name="lock-closed" size={20} color={"#EF4444"} />
               <Text style={styles.rateLimitText}>
                 Too many attempts. Try again in {timeUntilUnlock} seconds.
               </Text>
@@ -427,6 +468,7 @@ export default function SignUp() {
                     placeholder="Choose a username"
                     error={errors.username?.message}
                     autoCapitalize="none"
+                    textContentType="username"
                     helpText="Letters, numbers, and underscores only"
                     editable={!isSubmitting && !isLocked}
                     accessibilityLabel="Username input"
@@ -451,6 +493,7 @@ export default function SignUp() {
                     error={errors.email?.message}
                     autoCapitalize="none"
                     keyboardType="email-address"
+                    textContentType="emailAddress"
                     autoCorrect={false}
                     editable={!isSubmitting && !isLocked}
                     accessibilityLabel="Email input"
@@ -462,52 +505,36 @@ export default function SignUp() {
             </View>
 
             <View style={styles.inputContainer}>
-              <View style={styles.passwordInputWrapper}>
-                <Controller
-                  control={control}
-                  name="password"
-                  render={({ field: { onChange, onBlur, value } }) => (
-                    <Input
-                      label="Password"
-                      value={value}
-                      onChangeText={(text) => {
-                        onChange(text);
-                        // Trigger confirm password validation when password changes
-                        if (watch("confirmPassword")) {
-                          trigger("confirmPassword");
-                        }
-                      }}
-                      onBlur={onBlur}
-                      placeholder="Create a password"
-                      error={errors.password?.message}
-                      secureTextEntry={!showPassword}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      helpText="At least 8 characters, with uppercase, lowercase, and numbers"
-                      editable={!isSubmitting && !isLocked}
-                      accessibilityLabel="Password input"
-                      accessibilityHint="Create a strong password"
-                      testID="signup-password-input"
-                    />
-                  )}
-                />
-                <TouchableOpacity
-                  style={styles.passwordToggle}
-                  onPress={() => setShowPassword(!showPassword)}
-                  accessibilityLabel={
-                    showPassword ? "Hide password" : "Show password"
-                  }
-                  accessibilityRole="button"
-                  disabled={isSubmitting}
-                  testID="password-toggle"
-                >
-                  <Ionicons
-                    name={showPassword ? "eye-off" : "eye"}
-                    size={20}
-                    color={"#FFFFFF"}
+              <Controller
+                control={control}
+                name="password"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <Input
+                    label="Password"
+                    value={value}
+                    onChangeText={(text) => {
+                      onChange(text);
+                      // Trigger confirm password validation when password changes
+                      if (watch("confirmPassword")) {
+                        trigger("confirmPassword");
+                      }
+                    }}
+                    onBlur={onBlur}
+                    placeholder="Create a password"
+                    error={errors.password?.message}
+                    secureTextEntry={true}
+                    showPasswordToggle={true}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    textContentType="newPassword"
+                    helpText="At least 8 characters, with uppercase, lowercase, and numbers"
+                    editable={!isSubmitting && !isLocked}
+                    accessibilityLabel="Password input"
+                    accessibilityHint="Create a strong password"
+                    testID="signup-password-input"
                   />
-                </TouchableOpacity>
-              </View>
+                )}
+              />
 
               {/* Password Strength Indicator */}
               {passwordStrength && (
@@ -545,45 +572,28 @@ export default function SignUp() {
             </View>
 
             <View style={styles.inputContainer}>
-              <View style={styles.passwordInputWrapper}>
-                <Controller
-                  control={control}
-                  name="confirmPassword"
-                  render={({ field: { onChange, onBlur, value } }) => (
-                    <Input
-                      label="Confirm Password"
-                      value={value}
-                      onChangeText={onChange}
-                      onBlur={onBlur}
-                      placeholder="Confirm your password"
-                      error={errors.confirmPassword?.message}
-                      secureTextEntry={!showConfirmPassword}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      editable={!isSubmitting && !isLocked}
-                      accessibilityLabel="Confirm password input"
-                      accessibilityHint="Re-enter your password"
-                      testID="signup-confirm-password-input"
-                    />
-                  )}
-                />
-                <TouchableOpacity
-                  style={styles.passwordToggle}
-                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                  accessibilityLabel={
-                    showConfirmPassword ? "Hide password" : "Show password"
-                  }
-                  accessibilityRole="button"
-                  disabled={isSubmitting}
-                  testID="confirm-password-toggle"
-                >
-                  <Ionicons
-                    name={showConfirmPassword ? "eye-off" : "eye"}
-                    size={20}
-                    color={"#FFFFFF"}
+              <Controller
+                control={control}
+                name="confirmPassword"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <Input
+                    label="Confirm Password"
+                    value={value}
+                    onChangeText={onChange}
+                    onBlur={onBlur}
+                    placeholder="Confirm your password"
+                    error={errors.confirmPassword?.message}
+                    secureTextEntry={true}
+                    showPasswordToggle={true}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    editable={!isSubmitting && !isLocked}
+                    accessibilityLabel="Confirm password input"
+                    accessibilityHint="Re-enter your password"
+                    testID="signup-confirm-password-input"
                   />
-                </TouchableOpacity>
-              </View>
+                )}
+              />
             </View>
 
             {/* Sign Up Button */}
@@ -696,15 +706,6 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     marginBottom: theme.spacing.lg,
-  },
-  passwordInputWrapper: {
-    position: "relative",
-  },
-  passwordToggle: {
-    position: "absolute",
-    right: theme.spacing.md,
-    top: 38,
-    padding: theme.spacing.sm,
   },
   passwordStrengthContainer: {
     marginTop: theme.spacing.sm,

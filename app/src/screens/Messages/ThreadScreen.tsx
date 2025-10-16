@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo } from "react";
+import React, { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Modal,
   Alert,
   Pressable,
+  ActivityIndicator,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,15 +20,8 @@ import { RootStackNavigationProp, RootStackRouteProp } from "../../navigation/ty
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
-
-interface ChatMessage {
-  id: string;
-  text: string;
-  sender: "user" | "provider";
-  timestamp: Date;
-  isRead: boolean;
-  attachments?: Attachment[];
-}
+import { messageService, MessageWithSender, ThreadWithDetails } from "../../services/messageService";
+import { supabase } from "../../lib/supabase";
 
 interface Attachment {
   id: string;
@@ -37,66 +31,20 @@ interface Attachment {
   size: number;
 }
 
-const mockMessages: ChatMessage[] = [
-  {
-    id: "1",
-    text: "Thank you for your application to Sunset View Apartments. We'd like to schedule a viewing with you.",
-    sender: "provider",
-    timestamp: new Date(Date.now() - 7200000),
-    isRead: true,
-  },
-  {
-    id: "2",
-    text: "That sounds great! I'm available most weekdays after 3 PM and anytime on weekends.",
-    sender: "user",
-    timestamp: new Date(Date.now() - 6000000),
-    isRead: true,
-  },
-  {
-    id: "3",
-    text: "Perfect! How about this Saturday at 2 PM? The address is 123 Main St.",
-    sender: "provider",
-    timestamp: new Date(Date.now() - 4800000),
-    isRead: true,
-  },
-  {
-    id: "4",
-    text: "Saturday at 2 PM works for me. Should I bring any documents?",
-    sender: "user",
-    timestamp: new Date(Date.now() - 3600000),
-    isRead: true,
-  },
-  {
-    id: "5",
-    text: "Please bring a valid ID and proof of income if you have it handy. Looking forward to meeting you!",
-    sender: "provider",
-    timestamp: new Date(Date.now() - 1800000),
-    isRead: true,
-    attachments: [
-      {
-        id: "att-1",
-        name: "viewing_checklist.pdf",
-        type: "document",
-        uri: "https://example.com/doc.pdf",
-        size: 245000,
-      },
-    ],
-  },
-];
-
-function formatMessageTime(date: Date): string {
+function formatMessageTime(date: Date | string): string {
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
   const now = new Date();
-  const isToday = date.toDateString() === now.toDateString();
+  const isToday = dateObj.toDateString() === now.toDateString();
 
   if (isToday) {
-    return date.toLocaleTimeString("en-US", {
+    return dateObj.toLocaleTimeString("en-US", {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
     });
   }
 
-  return date.toLocaleDateString("en-US", {
+  return dateObj.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -116,34 +64,134 @@ export default function ThreadScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
   const flatListRef = useRef<FlatList>(null);
 
-  const [messages, setMessages] = useState(mockMessages);
+  const [thread, setThread] = useState<ThreadWithDetails | null>(null);
+  const [messages, setMessages] = useState<MessageWithSender[]>([]);
   const [inputText, setInputText] = useState("");
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportText, setReportText] = useState("");
   const [selectedAttachments, setSelectedAttachments] = useState<Attachment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  const { propertyTitle, senderName } = route.params || {};
+  const { threadId, participantId, propertyTitle, senderName } = route.params || {};
 
-  const handleSend = useCallback(() => {
-    if (!inputText.trim() && selectedAttachments.length === 0) return;
+  // Initialize and load thread
+  useEffect(() => {
+    async function loadThread() {
+      try {
+        // Initialize message service
+        const userId = await messageService.initialize();
+        setCurrentUserId(userId);
 
-    const newMessage: ChatMessage = {
-      id: Date.now().toString(),
-      text: inputText.trim(),
-      sender: "user",
-      timestamp: new Date(),
-      isRead: false,
-      attachments: selectedAttachments.length > 0 ? selectedAttachments : undefined,
+        // If we have a threadId, load the thread
+        if (threadId) {
+          const threadData = await messageService.getThread(threadId);
+          if (threadData) {
+            setThread(threadData);
+            setMessages(threadData.messages || []);
+          }
+        } else if (participantId && userId) {
+          // Create a new thread if needed
+          const newThread = await messageService.createThread(
+            [userId, participantId],
+            propertyTitle || 'New Conversation'
+          );
+          if (newThread) {
+            setThread({ ...newThread, messages: [], participants: [] });
+            setMessages([]);
+          }
+        }
+
+        // Mark messages as read
+        if (threadId) {
+          await messageService.markMessagesAsRead(threadId);
+        }
+      } catch (error) {
+        console.error('Error loading thread:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadThread();
+  }, [threadId, participantId, propertyTitle]);
+
+  // Subscribe to real-time messages
+  useEffect(() => {
+    if (!threadId) return;
+
+    const unsubscribe = messageService.subscribeToThread(
+      threadId,
+      (newMessage: MessageWithSender) => {
+        setMessages(prev => {
+          // Check if message already exists (update) or is new
+          const existingIndex = prev.findIndex(m => m.id === newMessage.id);
+          if (existingIndex >= 0) {
+            // Update existing message
+            const updated = [...prev];
+            updated[existingIndex] = newMessage;
+            return updated;
+          } else {
+            // Add new message
+            return [...prev, newMessage];
+          }
+        });
+
+        // Mark as read if from other user
+        if (newMessage.sender_id !== currentUserId) {
+          messageService.markMessagesAsRead(threadId);
+        }
+
+        // Scroll to bottom on new message
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    );
+
+    return () => {
+      unsubscribe();
     };
+  }, [threadId, currentUserId]);
 
-    setMessages((prev) => [...prev, newMessage]);
-    setInputText("");
-    setSelectedAttachments([]);
+  const handleSend = useCallback(async () => {
+    if (!inputText.trim() && selectedAttachments.length === 0) return;
+    if (!thread?.id) {
+      Alert.alert('Error', 'Unable to send message. Thread not initialized.');
+      return;
+    }
 
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-  }, [inputText, selectedAttachments]);
+    setSending(true);
+    try {
+      // Upload attachments if any (in a real app)
+      const attachmentUrls = selectedAttachments.length > 0
+        ? selectedAttachments.map(a => a.uri)
+        : undefined;
+
+      // Send message
+      const sentMessage = await messageService.sendMessage(
+        thread.id,
+        inputText.trim(),
+        attachmentUrls
+      );
+
+      if (sentMessage) {
+        // Clear input
+        setInputText("");
+        setSelectedAttachments([]);
+
+        // Message will be added via real-time subscription
+      } else {
+        Alert.alert('Error', 'Failed to send message. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      Alert.alert('Error', 'Failed to send message. Please try again.');
+    } finally {
+      setSending(false);
+    }
+  }, [inputText, selectedAttachments, thread]);
 
   const handleAttachmentPress = useCallback(async () => {
     Alert.alert(
@@ -199,15 +247,15 @@ export default function ThreadScreen() {
     );
   }, []);
 
-  const handleAttachmentLongPress = useCallback((attachment: Attachment) => {
+  const handleAttachmentLongPress = useCallback((attachmentUrl: string) => {
     Alert.alert(
-      attachment.name,
-      `Size: ${formatFileSize(attachment.size)}`,
+      "Attachment",
+      "What would you like to do?",
       [
         {
           text: "Open",
           onPress: () => {
-            Alert.alert("Opening", `Would open ${attachment.name}`);
+            Alert.alert("Opening", `Would open attachment`);
           },
         },
         {
@@ -235,27 +283,38 @@ export default function ThreadScreen() {
     setReportText("");
   }, [reportText]);
 
-  const renderMessage = useCallback(({ item }: { item: ChatMessage }) => {
-    const isUser = item.sender === "user";
+  const renderMessage = useCallback(({ item }: { item: MessageWithSender }) => {
+    const isUser = item.sender_id === currentUserId;
+
+    // Skip deleted messages
+    if (item.deleted_at) {
+      return (
+        <View style={[styles.messageRow, isUser && styles.userMessageRow]}>
+          <View style={styles.deletedMessage}>
+            <Text style={styles.deletedMessageText}>Message deleted</Text>
+          </View>
+        </View>
+      );
+    }
 
     return (
       <View style={[styles.messageRow, isUser && styles.userMessageRow]}>
         <View style={[styles.messageBubble, isUser ? styles.userBubble : styles.providerBubble]}>
-          {item.text ? (
+          {item.body ? (
             <Text style={[styles.messageText, isUser && styles.userMessageText]}>
-              {item.text}
+              {item.body}
             </Text>
           ) : null}
 
-          {item.attachments?.map((attachment) => (
+          {item.attachment_urls?.map((url, index) => (
             <TouchableOpacity
-              key={attachment.id}
+              key={`${item.id}-attachment-${index}`}
               style={styles.attachmentChip}
-              onLongPress={() => handleAttachmentLongPress(attachment)}
+              onLongPress={() => handleAttachmentLongPress(url)}
               delayLongPress={500}
             >
               <Ionicons
-                name={attachment.type === "image" ? "image-outline" : "document-outline"}
+                name="document-outline"
                 size={16}
                 color={isUser ? colors.gray[900] : colors.gray[50]}
               />
@@ -263,19 +322,17 @@ export default function ThreadScreen() {
                 style={[styles.attachmentName, isUser && styles.userAttachmentName]}
                 numberOfLines={1}
               >
-                {attachment.name}
-              </Text>
-              <Text style={[styles.attachmentSize, isUser && styles.userAttachmentSize]}>
-                {formatFileSize(attachment.size)}
+                Attachment {index + 1}
               </Text>
             </TouchableOpacity>
           ))}
 
           <View style={styles.messageFooter}>
             <Text style={[styles.timestamp, isUser && styles.userTimestamp]}>
-              {formatMessageTime(item.timestamp)}
+              {formatMessageTime(item.created_at)}
+              {item.edited_at && ' (edited)'}
             </Text>
-            {isUser && item.isRead && (
+            {isUser && item.read_by && item.read_by.length > 1 && (
               <Ionicons
                 name="checkmark-done"
                 size={14}
@@ -287,14 +344,37 @@ export default function ThreadScreen() {
         </View>
       </View>
     );
-  }, [handleAttachmentLongPress]);
+  }, [currentUserId, handleAttachmentLongPress]);
 
-  const keyExtractor = useCallback((item: ChatMessage) => item.id, []);
+  const keyExtractor = useCallback((item: MessageWithSender) => item.id, []);
 
   const sortedMessages = useMemo(() =>
-    [...messages].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime()),
+    [...messages].sort((a, b) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    ),
     [messages]
   );
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color={colors.gray[50]} />
+          </TouchableOpacity>
+          <View style={styles.headerInfo}>
+            <Text style={styles.senderName}>{senderName || 'Loading...'}</Text>
+          </View>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary[400]} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -332,6 +412,13 @@ export default function ThreadScreen() {
           contentContainerStyle={styles.messagesList}
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+          ListEmptyComponent={
+            <View style={styles.emptyChat}>
+              <Text style={styles.emptyChatText}>
+                Start a conversation about {propertyTitle || 'this listing'}
+              </Text>
+            </View>
+          }
         />
 
         {selectedAttachments.length > 0 && (
@@ -373,18 +460,26 @@ export default function ThreadScreen() {
             placeholder="Type a message..."
             placeholderTextColor={colors.gray[500]}
             multiline
+            editable={!sending}
           />
 
           <TouchableOpacity
-            style={[styles.sendButton, (!inputText.trim() && selectedAttachments.length === 0) && styles.sendButtonDisabled]}
+            style={[
+              styles.sendButton,
+              (!inputText.trim() && selectedAttachments.length === 0) && styles.sendButtonDisabled
+            ]}
             onPress={handleSend}
-            disabled={!inputText.trim() && selectedAttachments.length === 0}
+            disabled={!inputText.trim() && selectedAttachments.length === 0 || sending}
           >
-            <Ionicons
-              name="send"
-              size={20}
-              color={(!inputText.trim() && selectedAttachments.length === 0) ? colors.gray[600] : colors.primary[400]}
-            />
+            {sending ? (
+              <ActivityIndicator size="small" color={colors.primary[400]} />
+            ) : (
+              <Ionicons
+                name="send"
+                size={20}
+                color={(!inputText.trim() && selectedAttachments.length === 0) ? colors.gray[600] : colors.primary[400]}
+              />
+            )}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -505,6 +600,16 @@ const styles = StyleSheet.create({
   userMessageText: {
     color: colors.gray[900],
   },
+  deletedMessage: {
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.gray[800],
+  },
+  deletedMessageText: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray[500],
+    fontStyle: 'italic',
+  },
   attachmentChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -521,14 +626,6 @@ const styles = StyleSheet.create({
   },
   userAttachmentName: {
     color: colors.gray[900],
-  },
-  attachmentSize: {
-    fontSize: typography.sizes.xs,
-    color: colors.gray[600],
-    marginLeft: spacing.xs,
-  },
-  userAttachmentSize: {
-    color: colors.gray[700],
   },
   messageFooter: {
     flexDirection: "row",
@@ -653,5 +750,21 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     fontWeight: "600",
     color: colors.gray[900],
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyChat: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: spacing.xl,
+  },
+  emptyChatText: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray[500],
+    textAlign: "center",
   },
 });
