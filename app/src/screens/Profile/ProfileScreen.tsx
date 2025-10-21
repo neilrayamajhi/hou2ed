@@ -40,7 +40,8 @@ export default function ProfileScreen() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
-  const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
+  const [changePasswordModalVisible, setChangePasswordModalVisible] =
+    useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -63,7 +64,10 @@ export default function ProfileScreen() {
   }, []);
 
   const handleSavedSearches = useCallback(() => {
-    Alert.alert("Saved Searches", `You have ${savedSearches.length} saved searches`);
+    Alert.alert(
+      "Saved Searches",
+      `You have ${savedSearches.length} saved searches`,
+    );
   }, [savedSearches]);
 
   const handleChangePassword = useCallback(() => {
@@ -125,39 +129,106 @@ export default function ProfileScreen() {
                     });
                   },
                 },
-              ]
+              ],
             );
           },
         },
-      ]
+      ],
     );
   }, [logout, navigation]);
 
   const handleLogout = useCallback(() => {
+    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Sign Out",
+        style: "destructive",
+        onPress: () => {
+          logout();
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "Login" }],
+          });
+        },
+      },
+    ]);
+  }, [logout, navigation]);
+
+  const handleSwitchRole = useCallback(async () => {
+    const newRole = user?.role === "provider" ? "seeker" : "provider";
     Alert.alert(
-      "Sign Out",
-      "Are you sure you want to sign out?",
+      "Switch Role",
+      `Switch to ${newRole === "provider" ? "Housing Provider" : "Housing Seeker"}?`,
       [
         {
           text: "Cancel",
           style: "cancel",
         },
         {
-          text: "Sign Out",
-          style: "destructive",
-          onPress: () => {
-            logout();
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "Login" }],
-            });
+          text: "Switch",
+          onPress: async () => {
+            try {
+              const { supabase } = await import("../../lib/supabase");
+              const {
+                data: { user: authUser },
+              } = await supabase.auth.getUser();
+
+              if (!authUser) {
+                Alert.alert("Error", "Not logged in");
+                return;
+              }
+
+              const { error } = await supabase
+                .from("profiles")
+                .update({ role: newRole })
+                .eq("id", authUser.id);
+
+              if (error) {
+                Alert.alert("Error", "Failed to switch role");
+                return;
+              }
+
+              Alert.alert(
+                "Success",
+                `Switched to ${newRole}. Please sign out and back in to see changes.`,
+                [
+                  {
+                    text: "OK",
+                    onPress: () => {
+                      logout();
+                      navigation.reset({
+                        index: 0,
+                        routes: [{ name: "Login" }],
+                      });
+                    },
+                  },
+                ],
+              );
+            } catch (err) {
+              Alert.alert("Error", "Failed to switch role");
+            }
           },
         },
-      ]
+      ],
     );
-  }, [logout, navigation]);
+  }, [user?.role, logout, navigation]);
 
   const profileSections: ProfileSection[] = [
+    // Provider Dashboard - only show if user is a provider
+    ...(user?.role === "provider"
+      ? [
+          {
+            id: "provider-dashboard",
+            title: "Provider Dashboard",
+            icon: "home-outline" as keyof typeof Ionicons.glyphMap,
+            onPress: () => navigation.navigate("ProviderDashboard"),
+            showArrow: true,
+          },
+        ]
+      : []),
     {
       id: "applications",
       title: "My Applications",
@@ -183,141 +254,193 @@ export default function ProfileScreen() {
     },
   ];
 
-  const renderSection = useCallback((section: ProfileSection) => {
-    if (section.id === "account-settings") {
+  const renderSection = useCallback(
+    (section: ProfileSection) => {
+      if (section.id === "account-settings") {
+        return (
+          <View key={section.id} style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons
+                name={section.icon}
+                size={20}
+                color={colors.primary[400]}
+              />
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+            </View>
+
+            <View style={styles.settingsContent}>
+              <TouchableOpacity
+                style={styles.settingRow}
+                onPress={handleChangePassword}
+                accessibilityLabel="Change password"
+                accessibilityRole="button"
+              >
+                <View style={styles.settingLeft}>
+                  <Ionicons
+                    name="key-outline"
+                    size={18}
+                    color={colors.gray[400]}
+                  />
+                  <Text style={styles.settingText}>Change Password</Text>
+                </View>
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.gray[500]}
+                />
+              </TouchableOpacity>
+
+              <View style={styles.settingRow}>
+                <View style={styles.settingLeft}>
+                  <Ionicons
+                    name="notifications-outline"
+                    size={18}
+                    color={colors.gray[400]}
+                  />
+                  <Text style={styles.settingText}>Push Notifications</Text>
+                </View>
+                <Switch
+                  value={pushNotifications}
+                  onValueChange={setPushNotifications}
+                  trackColor={{
+                    false: colors.gray[700],
+                    true: colors.primary[600],
+                  }}
+                  thumbColor={
+                    pushNotifications ? colors.primary[400] : colors.gray[400]
+                  }
+                  accessibilityLabel="Push notifications toggle"
+                  accessibilityRole="switch"
+                />
+              </View>
+
+              <View style={styles.settingRow}>
+                <View style={styles.settingLeft}>
+                  <Ionicons
+                    name="mail-outline"
+                    size={18}
+                    color={colors.gray[400]}
+                  />
+                  <Text style={styles.settingText}>Email Notifications</Text>
+                </View>
+                <Switch
+                  value={emailNotifications}
+                  onValueChange={setEmailNotifications}
+                  trackColor={{
+                    false: colors.gray[700],
+                    true: colors.primary[600],
+                  }}
+                  thumbColor={
+                    emailNotifications ? colors.primary[400] : colors.gray[400]
+                  }
+                  accessibilityLabel="Email notifications toggle"
+                  accessibilityRole="switch"
+                />
+              </View>
+
+              <TouchableOpacity
+                style={styles.settingRow}
+                onPress={() => {
+                  Alert.alert(
+                    "Select Language",
+                    "Choose your preferred language",
+                    [
+                      ...LANGUAGES.map((lang) => ({
+                        text: `${lang.nativeName} (${lang.name})`,
+                        onPress: () => i18n.setLanguage(lang.code),
+                      })),
+                      { text: "Cancel", style: "cancel" },
+                    ],
+                  );
+                }}
+                accessibilityLabel="Change language"
+                accessibilityRole="button"
+              >
+                <View style={styles.settingLeft}>
+                  <Ionicons
+                    name="language-outline"
+                    size={18}
+                    color={colors.gray[400]}
+                  />
+                  <Text style={styles.settingText}>Language</Text>
+                </View>
+                <View style={styles.settingRight}>
+                  <Text style={styles.settingValue}>
+                    {LANGUAGES.find((l) => l.code === i18n.language)?.name ||
+                      "English"}
+                  </Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={colors.gray[500]}
+                  />
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.settingRow, styles.dangerRow]}
+                onPress={handleDeleteAccount}
+                accessibilityLabel="Delete account"
+                accessibilityRole="button"
+              >
+                <View style={styles.settingLeft}>
+                  <Ionicons name="trash-outline" size={18} color={colors.red} />
+                  <Text style={[styles.settingText, styles.dangerText]}>
+                    Delete Account
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.red} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+      }
+
       return (
-        <View key={section.id} style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name={section.icon} size={20} color={colors.primary[400]} />
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-          </View>
-
-          <View style={styles.settingsContent}>
-            <TouchableOpacity
-              style={styles.settingRow}
-              onPress={handleChangePassword}
-              accessibilityLabel="Change password"
-              accessibilityRole="button"
-            >
-              <View style={styles.settingLeft}>
-                <Ionicons name="key-outline" size={18} color={colors.gray[400]} />
-                <Text style={styles.settingText}>Change Password</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.gray[500]} />
-            </TouchableOpacity>
-
-            <View style={styles.settingRow}>
-              <View style={styles.settingLeft}>
-                <Ionicons name="notifications-outline" size={18} color={colors.gray[400]} />
-                <Text style={styles.settingText}>Push Notifications</Text>
-              </View>
-              <Switch
-                value={pushNotifications}
-                onValueChange={setPushNotifications}
-                trackColor={{ false: colors.gray[700], true: colors.primary[600] }}
-                thumbColor={pushNotifications ? colors.primary[400] : colors.gray[400]}
-                accessibilityLabel="Push notifications toggle"
-                accessibilityRole="switch"
+        <TouchableOpacity
+          key={section.id}
+          style={styles.section}
+          onPress={section.onPress}
+          accessibilityLabel={section.title}
+          accessibilityRole="button"
+        >
+          <View style={styles.sectionContent}>
+            <View style={styles.sectionLeft}>
+              <Ionicons
+                name={section.icon}
+                size={20}
+                color={colors.primary[400]}
               />
+              <Text style={styles.sectionTitle}>{section.title}</Text>
             </View>
-
-            <View style={styles.settingRow}>
-              <View style={styles.settingLeft}>
-                <Ionicons name="mail-outline" size={18} color={colors.gray[400]} />
-                <Text style={styles.settingText}>Email Notifications</Text>
-              </View>
-              <Switch
-                value={emailNotifications}
-                onValueChange={setEmailNotifications}
-                trackColor={{ false: colors.gray[700], true: colors.primary[600] }}
-                thumbColor={emailNotifications ? colors.primary[400] : colors.gray[400]}
-                accessibilityLabel="Email notifications toggle"
-                accessibilityRole="switch"
-              />
+            <View style={styles.sectionRight}>
+              {section.badge !== undefined && section.badge > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{section.badge}</Text>
+                </View>
+              )}
+              {section.showArrow && (
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.gray[500]}
+                />
+              )}
             </View>
-
-            <TouchableOpacity
-              style={styles.settingRow}
-              onPress={() => {
-                Alert.alert(
-                  "Select Language",
-                  "Choose your preferred language",
-                  [
-                    ...LANGUAGES.map(lang => ({
-                      text: `${lang.nativeName} (${lang.name})`,
-                      onPress: () => i18n.setLanguage(lang.code),
-                    })),
-                    { text: "Cancel", style: "cancel" }
-                  ]
-                );
-              }}
-              accessibilityLabel="Change language"
-              accessibilityRole="button"
-            >
-              <View style={styles.settingLeft}>
-                <Ionicons name="language-outline" size={18} color={colors.gray[400]} />
-                <Text style={styles.settingText}>Language</Text>
-              </View>
-              <View style={styles.settingRight}>
-                <Text style={styles.settingValue}>
-                  {LANGUAGES.find(l => l.code === i18n.language)?.name || "English"}
-                </Text>
-                <Ionicons name="chevron-forward" size={18} color={colors.gray[500]} />
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.settingRow, styles.dangerRow]}
-              onPress={handleDeleteAccount}
-              accessibilityLabel="Delete account"
-              accessibilityRole="button"
-            >
-              <View style={styles.settingLeft}>
-                <Ionicons name="trash-outline" size={18} color={colors.red} />
-                <Text style={[styles.settingText, styles.dangerText]}>Delete Account</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.red} />
-            </TouchableOpacity>
           </View>
-        </View>
+        </TouchableOpacity>
       );
-    }
-
-    return (
-      <TouchableOpacity
-        key={section.id}
-        style={styles.section}
-        onPress={section.onPress}
-        accessibilityLabel={section.title}
-        accessibilityRole="button"
-      >
-        <View style={styles.sectionContent}>
-          <View style={styles.sectionLeft}>
-            <Ionicons name={section.icon} size={20} color={colors.primary[400]} />
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-          </View>
-          <View style={styles.sectionRight}>
-            {section.badge !== undefined && section.badge > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{section.badge}</Text>
-              </View>
-            )}
-            {section.showArrow && (
-              <Ionicons name="chevron-forward" size={18} color={colors.gray[500]} />
-            )}
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  }, [
-    pushNotifications,
-    emailNotifications,
-    handleChangePassword,
-    handleDeleteAccount,
-    handleApplications,
-    handleSavedSearches,
-    savedSearches.length,
-  ]);
+    },
+    [
+      pushNotifications,
+      emailNotifications,
+      handleChangePassword,
+      handleDeleteAccount,
+      handleApplications,
+      handleSavedSearches,
+      savedSearches.length,
+    ],
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -338,11 +461,19 @@ export default function ProfileScreen() {
               <View style={styles.avatar}>
                 {avatarUri ? (
                   <View style={styles.avatarPlaceholder}>
-                    <Ionicons name="person" size={40} color={colors.gray[600]} />
+                    <Ionicons
+                      name="person"
+                      size={40}
+                      color={colors.gray[600]}
+                    />
                   </View>
                 ) : (
                   <View style={styles.avatarPlaceholder}>
-                    <Ionicons name="person" size={40} color={colors.gray[600]} />
+                    <Ionicons
+                      name="person"
+                      size={40}
+                      color={colors.gray[600]}
+                    />
                   </View>
                 )}
               </View>
@@ -352,14 +483,53 @@ export default function ProfileScreen() {
             </View>
           </TouchableOpacity>
 
-          <Text style={styles.userName}>{user?.fullName || user?.username || "User"}</Text>
+          <Text style={styles.userName}>
+            {user?.fullName || user?.username || "User"}
+          </Text>
           <Text style={styles.userEmail}>{user?.email || "Not available"}</Text>
-          <Text style={styles.userRole}>{user?.role === "provider" ? "Housing Provider" : "Housing Seeker"}</Text>
+          <Text style={styles.userRole}>
+            {user?.role === "provider" ? "Housing Provider" : "Housing Seeker"}
+          </Text>
         </View>
 
         {/* Profile Sections */}
         <View style={styles.sectionsContainer}>
           {profileSections.map(renderSection)}
+        </View>
+
+        {/* Dev Tools Section */}
+        <View style={styles.devToolsSection}>
+          <Text style={styles.devToolsTitle}>Developer Tools</Text>
+
+          <TouchableOpacity
+            style={styles.devButton}
+            onPress={() => navigation.navigate("DevMenu")}
+            accessibilityLabel="Open dev menu"
+            accessibilityRole="button"
+          >
+            <Ionicons
+              name="code-outline"
+              size={20}
+              color={colors.primary[500]}
+            />
+            <Text style={styles.devButtonText}>Dev Menu</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.devButton}
+            onPress={handleSwitchRole}
+            accessibilityLabel="Switch role"
+            accessibilityRole="button"
+          >
+            <Ionicons
+              name="swap-horizontal-outline"
+              size={20}
+              color={colors.primary[500]}
+            />
+            <Text style={styles.devButtonText}>
+              Switch to {user?.role === "provider" ? "Seeker" : "Provider"}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Sign Out Button */}
@@ -385,7 +555,10 @@ export default function ProfileScreen() {
           style={styles.modalOverlay}
           onPress={() => setChangePasswordModalVisible(false)}
         >
-          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+          <Pressable
+            style={styles.modalContent}
+            onPress={(e) => e.stopPropagation()}
+          >
             <Text style={styles.modalTitle}>Change Password</Text>
 
             <TextInput
@@ -603,6 +776,36 @@ const styles = StyleSheet.create({
   },
   dangerText: {
     color: colors.red,
+  },
+  devToolsSection: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.xl,
+    marginBottom: spacing.md,
+  },
+  devToolsTitle: {
+    fontSize: typography.sizes.xs,
+    fontWeight: "600",
+    color: colors.gray[500],
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: spacing.md,
+  },
+  devButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.gray[850],
+    borderWidth: 1,
+    borderColor: colors.primary[500],
+    marginBottom: spacing.sm,
+  },
+  devButtonText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: "500",
+    color: colors.primary[500],
+    marginLeft: spacing.sm,
   },
   signOutButton: {
     flexDirection: "row",

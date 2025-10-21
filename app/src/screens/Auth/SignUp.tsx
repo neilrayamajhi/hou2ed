@@ -300,7 +300,10 @@ export default function SignUp() {
     try {
       const result = await resendVerificationCode(verificationEmail);
       if (result.success) {
-        Alert.alert("Success", "Verification code sent successfully. Check your email inbox and spam folder.");
+        Alert.alert(
+          "Success",
+          "Verification code sent successfully. Check your email inbox and spam folder.",
+        );
       } else {
         Alert.alert("Error", result.error || "Failed to resend code");
       }
@@ -327,10 +330,18 @@ export default function SignUp() {
             {
               text: "Continue",
               onPress: () => {
-                navigation.reset({
-                  index: 0,
-                  routes: [{ name: "Tabs" }],
-                });
+                // Route based on user role
+                if (result.user.role === "provider") {
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: "ProviderDashboard" }],
+                  });
+                } else {
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: "Tabs" }],
+                  });
+                }
               },
             },
           ]);
@@ -344,7 +355,7 @@ export default function SignUp() {
                 text: "Resend Code",
                 onPress: handleResendCode,
               },
-            ]
+            ],
           );
         }
       } catch (error) {
@@ -359,14 +370,13 @@ export default function SignUp() {
                 text: "Resend Code",
                 onPress: handleResendCode,
               },
-            ]
+            ],
           );
         }
       }
     },
     [verificationEmail, setUser, navigation, handleResendCode],
   );
-
 
   // Get password strength color
   const getPasswordStrengthColor = () => {

@@ -217,10 +217,18 @@ export default function VerifyCode() {
           {
             text: "Continue",
             onPress: () => {
-              navigation.reset({
-                index: 0,
-                routes: [{ name: "Tabs" }],
-              });
+              // Route based on user role
+              if (result.user.role === "provider") {
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: "ProviderDashboard" }],
+                });
+              } else {
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: "Tabs" }],
+                });
+              }
             },
           },
         ]);
@@ -369,11 +377,7 @@ export default function VerifyCode() {
           <View style={styles.resendContainer}>
             {!canResend ? (
               <View style={styles.timerContainer}>
-                <Ionicons
-                  name="time-outline"
-                  size={16}
-                  color={"#4B5563"}
-                />
+                <Ionicons name="time-outline" size={16} color={"#4B5563"} />
                 <Text style={styles.timerText}>
                   Resend code in {formatTimerDisplay(timer)}
                 </Text>
@@ -545,4 +549,3 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
   },
 });
-
