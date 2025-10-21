@@ -19,6 +19,7 @@ import { useNavigation } from "@react-navigation/native";
 import { theme } from "../../theme";
 import ListingCard from "../../components/ListingCard";
 import FiltersSheet from "../Search/FiltersSheet";
+import EmergencyDisclaimer from "../../components/EmergencyDisclaimer";
 import { useFilterStore } from "../../state/useFilterStore";
 import { useLocation } from "../../hooks/useLocation";
 import {
@@ -305,6 +306,11 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
+      {/* Emergency Disclaimer */}
+      <View style={styles.disclaimerWrapper}>
+        <EmergencyDisclaimer />
+      </View>
+
       {/* Real Data Indicator */}
       {isRealData && (
         <View style={styles.realDataBanner}>
@@ -508,6 +514,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#000000",
+  },
+  disclaimerWrapper: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    paddingTop: 50,
   },
   realDataBanner: {
     position: "absolute",

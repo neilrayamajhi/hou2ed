@@ -10,7 +10,13 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing, typography, radius, shadows } from "../../theme/tokens";
+import {
+  colors,
+  spacing,
+  typography,
+  radius,
+  shadows,
+} from "../../theme/tokens";
 import { RootStackNavigationProp } from "../../navigation/types";
 import { useProviderListings } from "../../hooks/useProviderListings";
 import { ActivityIndicator, RefreshControl } from "react-native";
@@ -22,10 +28,19 @@ import { useRequireProvider } from "../../hooks/useRequireProvider";
 export default function ProviderDashboard() {
   const navigation = useNavigation<RootStackNavigationProp>();
   useRequireProvider();
-  const { data: listings, isLoading, isError, refetch, isRefetching } = useProviderListings();
+  const {
+    data: listings,
+    isLoading,
+    isError,
+    refetch,
+    isRefetching,
+  } = useProviderListings();
   const { showToast } = useToast();
 
-  const totalBeds = (listings || []).reduce((sum, l) => sum + (l.totalBeds || 0), 0);
+  const totalBeds = (listings || []).reduce(
+    (sum, l) => sum + (l.totalBeds || 0),
+    0,
+  );
   const totalAvailable = (listings || []).reduce(
     (sum, l) => sum + (l.availableBeds || 0),
     0,
@@ -75,7 +90,11 @@ export default function ProviderDashboard() {
         <View style={styles.tilesContainer}>
           {/* Beds Available Tile */}
           <View style={[styles.tile, styles.bedsTile]}>
-            <Ionicons name="bed-outline" size={32} color={colors.primary[500]} />
+            <Ionicons
+              name="bed-outline"
+              size={32}
+              color={colors.primary[500]}
+            />
             <Text style={styles.tileNumber}>{totalAvailable}</Text>
             <Text style={styles.tileLabel}>Beds Available</Text>
           </View>
@@ -83,15 +102,16 @@ export default function ProviderDashboard() {
           {/* New Applications Tile */}
           <TouchableOpacity
             style={[styles.tile, styles.applicationsTile]}
-            onPress={() => {
-              // TODO: Navigate to Applications screen when it's built
-              console.log("Navigate to Applications");
-            }}
+            onPress={() => navigation.navigate("Applications")}
             accessibilityLabel="View new applications"
             accessibilityRole="button"
           >
             <View style={styles.badgeContainer}>
-              <Ionicons name="document-text-outline" size={32} color={colors.primary[500]} />
+              <Ionicons
+                name="document-text-outline"
+                size={32}
+                color={colors.primary[500]}
+              />
               {newApplications > 0 && (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>{newApplications}</Text>
@@ -126,8 +146,13 @@ export default function ProviderDashboard() {
 
           {isError && (
             <View style={styles.listingCard}>
-              <Text style={{ color: colors.red }}>Failed to load listings.</Text>
-              <TouchableOpacity onPress={() => refetch()} style={styles.viewButton}>
+              <Text style={{ color: colors.red }}>
+                Failed to load listings.
+              </Text>
+              <TouchableOpacity
+                onPress={() => refetch()}
+                style={styles.viewButton}
+              >
                 <Text style={styles.viewButtonText}>Retry</Text>
               </TouchableOpacity>
             </View>
@@ -140,7 +165,9 @@ export default function ProviderDashboard() {
                 style={[styles.viewButton, { marginTop: spacing.sm }]}
                 onPress={() => navigation.navigate("AddListing")}
               >
-                <Text style={styles.viewButtonText}>Add Your First Listing</Text>
+                <Text style={styles.viewButtonText}>
+                  Add Your First Listing
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -161,11 +188,15 @@ export default function ProviderDashboard() {
                   {listing.address}
                 </Text>
                 <View style={styles.listingStats}>
-                  <Ionicons name="bed-outline" size={14} color={colors.primary[500]} />
-                <Text style={styles.listingStatsText}>
-                  {listing.availableBeds}/{listing.totalBeds} available
-                </Text>
-              </View>
+                  <Ionicons
+                    name="bed-outline"
+                    size={14}
+                    color={colors.primary[500]}
+                  />
+                  <Text style={styles.listingStatsText}>
+                    {listing.availableBeds}/{listing.totalBeds} available
+                  </Text>
+                </View>
                 <Text style={styles.lastUpdatedText}>
                   Updated {listing.lastUpdated}
                 </Text>
@@ -197,7 +228,9 @@ export default function ProviderDashboard() {
                 <TouchableOpacity
                   style={styles.viewButton}
                   onPress={() => {
-                    navigation.navigate("ProviderListingDetails", { listingId: listing.id });
+                    navigation.navigate("ProviderListingDetails", {
+                      listingId: listing.id,
+                    });
                   }}
                   accessibilityLabel="View listing"
                   accessibilityRole="button"
@@ -212,14 +245,18 @@ export default function ProviderDashboard() {
           {(listings || []).length > 0 && (
             <View style={{ marginTop: spacing.lg }}>
               <Text style={styles.sectionTitle}>Recent Activity</Text>
-              {(listings || [])
-                .slice(0, 3)
-                .map((l) => (
-                  <View key={`activity-${l.id}`} style={styles.activityItem}>
-                    <Ionicons name="refresh-outline" size={16} color={colors.gray[400]} />
-                    <Text style={styles.activityText}>Updated availability on {l.title}</Text>
-                  </View>
-                ))}
+              {(listings || []).slice(0, 3).map((l) => (
+                <View key={`activity-${l.id}`} style={styles.activityItem}>
+                  <Ionicons
+                    name="refresh-outline"
+                    size={16}
+                    color={colors.gray[400]}
+                  />
+                  <Text style={styles.activityText}>
+                    Updated availability on {l.title}
+                  </Text>
+                </View>
+              ))}
             </View>
           )}
         </View>
@@ -234,33 +271,46 @@ export default function ProviderDashboard() {
             accessibilityLabel="Update bed availability"
             accessibilityRole="button"
           >
-            <Ionicons name="refresh-outline" size={24} color={colors.primary[500]} />
+            <Ionicons
+              name="refresh-outline"
+              size={24}
+              color={colors.primary[500]}
+            />
             <View style={styles.quickActionTextContainer}>
               <Text style={styles.quickActionTitle}>Update Availability</Text>
               <Text style={styles.quickActionSubtitle}>
                 Keep bed counts current for seekers
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.gray[400]} />
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color={colors.gray[400]}
+            />
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.quickActionButton}
-            onPress={() => {
-              // TODO: Will navigate to Applications Pipeline when it's built
-              console.log("Applications Pipeline - Coming soon!");
-            }}
+            onPress={() => navigation.navigate("Applications")}
             accessibilityLabel="View all applications"
             accessibilityRole="button"
           >
-            <Ionicons name="people-outline" size={24} color={colors.primary[500]} />
+            <Ionicons
+              name="people-outline"
+              size={24}
+              color={colors.primary[500]}
+            />
             <View style={styles.quickActionTextContainer}>
               <Text style={styles.quickActionTitle}>Manage Applications</Text>
               <Text style={styles.quickActionSubtitle}>
                 Review and process applications
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.gray[400]} />
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color={colors.gray[400]}
+            />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -272,14 +322,22 @@ export default function ProviderDashboard() {
             accessibilityLabel="View analytics"
             accessibilityRole="button"
           >
-            <Ionicons name="analytics-outline" size={24} color={colors.primary[500]} />
+            <Ionicons
+              name="analytics-outline"
+              size={24}
+              color={colors.primary[500]}
+            />
             <View style={styles.quickActionTextContainer}>
               <Text style={styles.quickActionTitle}>Analytics</Text>
               <Text style={styles.quickActionSubtitle}>
                 View performance metrics
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.gray[400]} />
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color={colors.gray[400]}
+            />
           </TouchableOpacity>
         </View>
       </ScrollView>

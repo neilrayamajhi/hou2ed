@@ -20,6 +20,8 @@ import AddListing from "../screens/Provider/AddListing";
 import EditListing from "../screens/Provider/EditListing";
 import AvailabilityUpdater from "../screens/Provider/AvailabilityUpdater";
 import ListingWizard from "../screens/Provider/ListingWizard";
+import AdminPanelScreen from "../screens/Admin/AdminPanelScreen";
+import ApplicationsScreen from "../screens/Provider/ApplicationsScreen";
 import { RootStackParamList } from "./types";
 
 // Create a stack navigator - this manages screens that stack on top of each other
@@ -57,7 +59,10 @@ export default function RootNavigator() {
         {/* Listing Details (seeker) */}
         <Stack.Screen name="ListingDetails" component={ListingDetailsScreen} />
         {/* Provider Listing Details */}
-        <Stack.Screen name="ProviderListingDetails" component={ProviderListingDetails} />
+        <Stack.Screen
+          name="ProviderListingDetails"
+          component={ProviderListingDetails}
+        />
 
         {/* Apply Wizard */}
         <Stack.Screen
@@ -79,8 +84,15 @@ export default function RootNavigator() {
         <Stack.Screen name="ProviderDashboard" component={ProviderDashboard} />
         <Stack.Screen name="AddListing" component={AddListing} />
         <Stack.Screen name="EditListing" component={EditListing} />
-        <Stack.Screen name="AvailabilityUpdater" component={AvailabilityUpdater} />
+        <Stack.Screen
+          name="AvailabilityUpdater"
+          component={AvailabilityUpdater}
+        />
         <Stack.Screen name="ListingWizard" component={ListingWizard} />
+        <Stack.Screen name="Applications" component={ApplicationsScreen} />
+
+        {/* Admin Screens */}
+        <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

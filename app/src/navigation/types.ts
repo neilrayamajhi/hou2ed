@@ -35,6 +35,10 @@ export type RootStackParamList = {
     };
   };
   AvailabilityUpdater: undefined;
+  ListingWizard: undefined;
+  ProviderListingDetails: { listingId: string };
+  Applications: undefined;
+  AdminPanel: undefined;
 };
 
 export type RootStackNavigationProp =

@@ -73,7 +73,10 @@ export const supabase = createClient<Database>(
   env.SUPABASE_ANON_KEY,
   {
     auth: {
-      storage: Platform.OS === "web" ? (WebLocalStorageAdapter as any) : ExpoSecureStoreAdapter,
+      storage:
+        Platform.OS === "web"
+          ? (WebLocalStorageAdapter as any)
+          : ExpoSecureStoreAdapter,
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
@@ -81,7 +84,7 @@ export const supabase = createClient<Database>(
     global: {
       headers: {
         // Add user agent for debugging
-        'x-client-info': 'hou2ed-app',
+        "x-client-info": "hou2ed-app",
       },
       // Set timeout to 30 seconds for all requests
       // This prevents hanging on slow networks
@@ -130,36 +133,31 @@ export const authHelpers = {
       role: "seeker" | "provider" | "admin";
     },
   ) => {
-    // IMPORTANT: We use signInWithOtp to create the user AND send OTP code
-    // This sends a 6-digit code instead of a magic link
-    console.log("Creating user and sending OTP code to:", email);
+    // FIXED: Use signUp with password instead of OTP-only
+    console.log(
+      "Creating user with password and sending verification email to:",
+      email,
+    );
 
-    // First, send OTP to the email (this will create the user if they don't exist)
-    const { data: otpData, error: otpError } =
-      await supabase.auth.signInWithOtp({
-        email: email,
-        options: {
-          shouldCreateUser: true, // Create user if doesn't exist
-          data: metadata, // User metadata
-        },
-      });
+    const { data, error } = await supabase.auth.signUp({
+      email: email,
+      password: password,
+      options: {
+        data: metadata, // User metadata
+        emailRedirectTo: undefined, // Don't redirect, just send code
+      },
+    });
 
-    if (otpError) {
-      console.error("Failed to create user or send OTP:", otpError);
-      return { data: null, error: otpError };
+    if (error) {
+      console.error("Failed to create user:", error);
+      return { data: null, error };
     }
 
-    console.log("OTP code sent successfully!");
-    console.log("User should receive a 6-digit code (not a link)");
-
-    // Note: In a real app, you'd handle password setting differently
-    // For now, we'll rely on the user logging in after verification
+    console.log("User created successfully! Email verification sent.");
+    console.log("User will receive a 6-digit code to verify their email");
 
     return {
-      data: {
-        user: null, // User will be returned after OTP verification
-        session: null,
-      },
+      data: data,
       error: null,
     };
   },

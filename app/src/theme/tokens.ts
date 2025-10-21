@@ -30,6 +30,23 @@ export const colors = {
     800: "#554616",
     900: "#2B230B",
   },
+  success: {
+    500: "#21C55D",
+    900: "#0A3D1F",
+  },
+  error: {
+    100: "#FEE2E2",
+    200: "#FECACA",
+    400: "#F87171",
+    500: "#EF4444",
+    900: "#7F1D1D",
+  },
+  warning: {
+    500: "#F59E0B",
+  },
+  info: {
+    500: "#3B82F6",
+  },
   darkGray: "#1A1A1A",
   borderGray: "#2A2A2A",
 } as const;
@@ -87,6 +104,12 @@ export const typography = {
     "2xl": 24,
     "3xl": 30,
     "4xl": 36,
+  },
+  weights: {
+    normal: "400" as const,
+    medium: "500" as const,
+    semibold: "600" as const,
+    bold: "700" as const,
   },
   heading: {
     fontWeight: "600" as const,

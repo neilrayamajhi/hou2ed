@@ -20,10 +20,7 @@ import EmptyState from "../../components/EmptyState";
 import OfflineBanner from "../../components/OfflineBanner";
 import FiltersSheet from "./FiltersSheet";
 import { useFilterStore } from "../../state/useFilterStore";
-import {
-  generateMockListings,
-  filterListingsByQuick,
-} from "../../data/mockListings";
+import { useInfiniteSearch } from "../../hooks/useSearch";
 import { sortListings, SORT_OPTIONS } from "../../utils/sortListings";
 import { usePerformance } from "../../utils/perf";
 import type { Listing } from "../../types/listing";
@@ -90,31 +87,17 @@ export default function SearchScreen() {
     setIsOffline(false);
   }, []);
 
-  // Load and filter listings
+  // Fetch listings from database
+  const { data, isLoading, refetch } = useInfiniteSearch();
+
+  // Update local listings when data changes
   useEffect(() => {
-    searchPerf.start();
-
-    const allListings = generateMockListings(30);
-    let filtered = filterListingsByQuick(allListings, quickFilters);
-
-    // Apply search query filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (l) =>
-          l.name.toLowerCase().includes(query) ||
-          l.description.toLowerCase().includes(query) ||
-          l.address.city.toLowerCase().includes(query) ||
-          l.provider.toLowerCase().includes(query)
-      );
+    if (data?.pages) {
+      const allListings = data.pages.flatMap((page) => page.data || []);
+      const sorted = sortListings(allListings, sortBy);
+      setListings(sorted);
     }
-
-    // Apply sorting
-    const sorted = sortListings(filtered, sortBy);
-    setListings(sorted);
-
-    searchPerf.end();
-  }, [quickFilters, searchQuery, sortBy]); // Removed searchPerf from dependencies
+  }, [data, sortBy]);
 
   // Handle search
   const handleSearch = useCallback(() => {
@@ -124,11 +107,9 @@ export default function SearchScreen() {
   // Handle refresh
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    // Simulate network delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    // In real app, this would fetch new data
+    await refetch();
     setIsRefreshing(false);
-  }, []);
+  }, [refetch]);
 
   // Open filters
   const openFilters = useCallback(() => {
@@ -136,11 +117,14 @@ export default function SearchScreen() {
   }, []);
 
   // Open details
-  const openDetails = useCallback((listing: Listing) => {
-    console.log("Open details:", listing.id);
-    // @ts-ignore - Navigation types will be updated
-    navigation.navigate("ListingDetails", { listingId: listing.id, listing });
-  }, [navigation]);
+  const openDetails = useCallback(
+    (listing: Listing) => {
+      console.log("Open details:", listing.id);
+      // @ts-ignore - Navigation types will be updated
+      navigation.navigate("ListingDetails", { listingId: listing.id, listing });
+    },
+    [navigation],
+  );
 
   // Render listing item
   const renderListingItem = useCallback(
@@ -149,18 +133,15 @@ export default function SearchScreen() {
         <ListingCard listing={item} onPress={() => openDetails(item)} />
       </View>
     ),
-    [openDetails]
+    [openDetails],
   );
 
   // List key extractor
   const keyExtractor = useCallback((item: Listing) => item.id, []);
 
   // Filter count text
-  const filterCountText = useMemo(() => {
-    const count = getActiveFilterCount();
-    if (count === 0) return "";
-    return ` (${count})`;
-  }, [getActiveFilterCount]);
+  const filterCount = getActiveFilterCount();
+  const filterCountText = filterCount === 0 ? "" : ` (${filterCount})`;
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -168,11 +149,7 @@ export default function SearchScreen() {
       <View style={styles.header}>
         {/* Search Bar */}
         <View style={styles.searchBar}>
-          <Ionicons
-            name="search-outline"
-            size={20}
-            color={"#4B5563"}
-          />
+          <Ionicons name="search-outline" size={20} color={"#4B5563"} />
           <TextInput
             style={styles.searchInput}
             placeholder="Search location or shelter..."
@@ -184,7 +161,9 @@ export default function SearchScreen() {
           />
           <TouchableOpacity onPress={openFilters} style={styles.filterButton}>
             <Ionicons name="options-outline" size={20} color={"#D4AF37"} />
-            <Text style={styles.filterButtonText}>Filters{filterCountText}</Text>
+            <Text style={styles.filterButtonText}>
+              Filters{filterCountText}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -249,11 +228,7 @@ export default function SearchScreen() {
             <Text style={styles.sortText}>
               {SORT_OPTIONS.find((o) => o.value === sortBy)?.label || "Sort"}
             </Text>
-            <Ionicons
-              name="chevron-down-outline"
-              size={16}
-              color={"#4B5563"}
-            />
+            <Ionicons name="chevron-down-outline" size={16} color={"#4B5563"} />
           </TouchableOpacity>
         </View>
       </View>
@@ -371,11 +346,7 @@ export default function SearchScreen() {
                     {option.label}
                   </Text>
                   {sortBy === option.value && (
-                    <Ionicons
-                      name="checkmark"
-                      size={20}
-                      color={"#D4AF37"}
-                    />
+                    <Ionicons name="checkmark" size={20} color={"#D4AF37"} />
                   )}
                 </TouchableOpacity>
               ))}
@@ -385,7 +356,10 @@ export default function SearchScreen() {
       </Modal>
 
       {/* Filters Sheet */}
-      <FiltersSheet visible={showFilters} onClose={() => setShowFilters(false)} />
+      <FiltersSheet
+        visible={showFilters}
+        onClose={() => setShowFilters(false)}
+      />
     </SafeAreaView>
   );
 }

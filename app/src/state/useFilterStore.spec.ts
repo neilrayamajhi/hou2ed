@@ -3,7 +3,7 @@
  * Following CLAUDE.md test best practices
  */
 
-import { renderHook, act } from "@testing-library/react-hooks";
+import { renderHook, act } from "@testing-library/react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFilterStore } from "./useFilterStore";
 import { FilterState } from "../types/filters";
