@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir /s /b node_modules)",
+      "Bash(findstr /i \"expo.*tsconfig\")",
+      "Bash(npx expo-doctor)",
+      "Bash(npx expo install expo-font)",
+      "Bash(npx expo install react-native-screens@~4.16.0)",
+      "Bash(dir /s /b package.json)",
+      "Bash(npm run typecheck)",
+      "Bash(npx typescript --noEmit)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(find src/data/mockListings.ts -exec wc -l {} ;)",
+      "Bash(git add .)",
+      "Bash(del nul)",
+      "Bash(dir hou2ed /a)",
+      "Bash(rm nul)",
+      "Bash(rm -rf hou2ed/.git)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
