@@ -27,22 +27,13 @@ import {
   sanitizeUsername,
   sanitizePassword,
 } from "../../utils/sanitization";
-import { useRateLimit } from "../../hooks/useRateLimit";
 import { AUTH_MESSAGES, AUTH_CONSTANTS } from "../../constants/auth.constants";
 
 export default function Login() {
   const navigation = useNavigation<RootStackNavigationProp>();
   const setUser = useAuthStore((state) => state.setUser);
 
-  // Rate limiting
-  const {
-    isLocked,
-    remainingAttempts,
-    timeUntilUnlock,
-    incrementAttempts,
-    resetAttempts,
-    checkRateLimit,
-  } = useRateLimit("login");
+  // Rate limiting removed - no longer needed
 
   // Form state
   const [formData, setFormData] = useState({
@@ -81,10 +72,9 @@ export default function Login() {
   useEffect(() => {
     const isValid =
       formData.emailOrUsername.trim().length >= 3 &&
-      formData.password.trim().length >= AUTH_CONSTANTS.MIN_PASSWORD_LENGTH &&
-      !isLocked;
+      formData.password.trim().length >= AUTH_CONSTANTS.MIN_PASSWORD_LENGTH;
     setIsFormValid(isValid);
-  }, [formData, isLocked]);
+  }, [formData]);
 
   // Sanitize and update field
   const handleFieldChange = useCallback(
@@ -138,15 +128,6 @@ export default function Login() {
 
   // Handle login with all production features
   const handleLogin = useCallback(async () => {
-    // Check rate limiting
-    if (!checkRateLimit()) {
-      Alert.alert(
-        "Too Many Attempts",
-        `Please wait ${timeUntilUnlock} seconds before trying again.`,
-      );
-      return;
-    }
-
     if (!validateForm()) return;
 
     setIsLoading(true);
@@ -174,7 +155,6 @@ export default function Login() {
       if (!mounted.current) return; // Component unmounted
 
       if (result.success && result.user) {
-        resetAttempts(); // Reset rate limiting on success
         setUser(result.user);
 
         // Route based on user role
@@ -192,18 +172,13 @@ export default function Login() {
           });
         }
       } else {
-        incrementAttempts(); // Increment failed attempts
-
         const errorCode = result.errorCode || AUTH_ERROR_CODES.UNKNOWN;
 
         switch (errorCode) {
           case AUTH_ERROR_CODES.INVALID_CREDENTIALS:
           case AUTH_ERROR_CODES.USER_NOT_FOUND:
             setErrors({
-              password:
-                remainingAttempts > 1
-                  ? `Invalid credentials. ${remainingAttempts - 1} attempts remaining.`
-                  : AUTH_MESSAGES.ERROR.INVALID_CREDENTIALS,
+              password: AUTH_MESSAGES.ERROR.INVALID_CREDENTIALS,
             });
             break;
 
@@ -223,7 +198,6 @@ export default function Login() {
       }
     } catch (error) {
       console.error("Login error:", error);
-      incrementAttempts();
 
       if (!mounted.current) return;
 
@@ -237,13 +211,8 @@ export default function Login() {
       }
     }
   }, [
-    checkRateLimit,
     validateForm,
     formData,
-    incrementAttempts,
-    resetAttempts,
-    remainingAttempts,
-    timeUntilUnlock,
     setUser,
     navigation,
   ]);
@@ -284,15 +253,6 @@ export default function Login() {
             </TouchableOpacity>
           </View>
 
-          {/* Rate limit warning */}
-          {isLocked && (
-            <View style={styles.rateLimitWarning} accessibilityRole="alert">
-              <Ionicons name="lock-closed" size={20} color={"#EF4444"} />
-              <Text style={styles.rateLimitText}>
-                Too many attempts. Try again in {timeUntilUnlock} seconds.
-              </Text>
-            </View>
-          )}
 
           {/* Login Form */}
           <View style={styles.form}>
@@ -308,7 +268,7 @@ export default function Login() {
                 autoCapitalize="none"
                 keyboardType="default"
                 autoCorrect={false}
-                editable={!isLoading && !isLocked}
+                editable={!isLoading}
                 accessibilityLabel="Email or username input"
                 accessibilityHint="Enter your email address or username"
                 testID="login-email-input"
@@ -326,7 +286,7 @@ export default function Login() {
                 showPasswordToggle={true}
                 autoCapitalize="none"
                 autoCorrect={false}
-                editable={!isLoading && !isLocked}
+                editable={!isLoading}
                 accessibilityLabel="Password input"
                 accessibilityHint="Enter your password"
                 testID="login-password-input"
@@ -350,15 +310,13 @@ export default function Login() {
               variant="primary"
               onPress={handleLogin}
               loading={isLoading}
-              disabled={!isFormValid || isLoading || isLocked}
+              disabled={!isFormValid || isLoading}
               style={styles.loginButton}
               accessibilityLabel="Log in button"
               accessibilityHint={
-                isLocked
-                  ? `Locked for ${timeUntilUnlock} seconds`
-                  : isFormValid
-                    ? "Double tap to log in"
-                    : "Fill in all fields to enable"
+                isFormValid
+                  ? "Double tap to log in"
+                  : "Fill in all fields to enable"
               }
               testID="login-button"
             >

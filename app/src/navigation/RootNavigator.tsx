@@ -10,6 +10,7 @@ import SignUp from "../screens/Auth/SignUp";
 import Login from "../screens/Auth/Login";
 import VerifyCode from "../screens/Auth/VerifyCode";
 import ForgotPassword from "../screens/Auth/ForgotPassword";
+import ResetPassword from "../screens/Auth/ResetPassword";
 import ListingDetailsScreen from "../screens/Listing/ListingDetailsScreen";
 import ProviderListingDetails from "../screens/Provider/ListingDetails";
 import ApplyWizard from "../screens/Applications/ApplyWizard";
@@ -50,6 +51,7 @@ export default function RootNavigator() {
         <Stack.Screen name="Login" component={Login} />
         <Stack.Screen name="VerifyCode" component={VerifyCode} />
         <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
+        <Stack.Screen name="ResetPassword" component={ResetPassword} />
 
         {/* Main App */}
         <Stack.Screen name="Tabs" component={TabNavigator} />

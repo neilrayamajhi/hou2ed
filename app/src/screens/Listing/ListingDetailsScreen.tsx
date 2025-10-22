@@ -16,6 +16,7 @@ import PhotoCarousel from "../../components/patterns/PhotoCarousel";
 import Badge from "../../components/ui/Badge";
 import { colors, spacing, radius } from "../../theme/tokens";
 import { fetchShelterDetails } from "../../services/shelterDetailsService";
+import useSavedStore from "../../state/useSavedStore";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -119,7 +120,7 @@ function CollapsibleSection({
 export default function ListingDetailsScreen() {
   const navigation = useNavigation();
   const route = useRoute();
-  const [isSaved, setIsSaved] = useState(false);
+  const { isListingSaved, toggleListing } = useSavedStore();
   const [isLoadingDetails, setIsLoadingDetails] = useState(true);
   const [shelterDetails, setShelterDetails] = useState<any>(null);
 
@@ -191,9 +192,26 @@ export default function ListingDetailsScreen() {
     loadShelterDetails();
   }, [baseListing.title, baseListing.type, baseListing.location.city, baseListing.location.state]);
 
+  // Check if listing is saved
+  const isSaved = isListingSaved(baseListing.id);
+
   const handleSave = useCallback(() => {
-    setIsSaved(!isSaved);
-  }, [isSaved]);
+    // Create SavedListing object for the store
+    const savedListing = {
+      id: baseListing.id,
+      title: baseListing.title,
+      address: baseListing.location?.fullAddress || "Address not available",
+      rent: baseListing.costPerMonth,
+      bedrooms: baseListing.bedsTotal || 0,
+      bathrooms: 1, // Default value as it's not in the data
+      sqft: 0, // Default value as it's not in the data
+      imageUrl: baseListing.images?.[0] || "",
+      savedAt: new Date(),
+      availableUnits: baseListing.bedsAvailable,
+      propertyType: baseListing.type,
+    };
+    toggleListing(savedListing);
+  }, [baseListing, toggleListing]);
 
   const handleApply = useCallback(() => {
     // Navigate to application flow

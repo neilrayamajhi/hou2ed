@@ -192,6 +192,12 @@ export default function SignUp() {
       }, 30000); // 30 second timeout
 
       try {
+        console.log("=== SIGNUP ATTEMPT ===");
+        console.log("Email:", data.email);
+        console.log("Username:", data.username);
+        console.log("Selected Role:", selectedRole);
+        console.log("Is Provider:", selectedRole === "provider");
+
         const result = await signUpUser({
           fullName: data.fullName,
           username: data.username,
@@ -208,10 +214,15 @@ export default function SignUp() {
         if (!mounted.current) return;
 
         if (result.success) {
+          console.log("✅ Signup successful!");
+          console.log("Setting verification email to:", data.email);
+          console.log("Showing verification modal");
+
           resetAttempts();
           setVerificationEmail(data.email);
           setShowVerification(true);
         } else {
+          console.error("❌ Signup failed:", result.error);
           incrementAttempts();
 
           const errorCode = result.errorCode || AUTH_ERROR_CODES.UNKNOWN;
@@ -731,6 +742,13 @@ export default function SignUp() {
           email={verificationEmail}
           onComplete={handleVerificationComplete}
           onResend={handleResendCode}
+          onBack={() => {
+            // Close verification modal and return to signup form
+            setShowVerification(false);
+            setVerificationEmail("");
+            // Reset the form so user can try with different email if needed
+            reset();
+          }}
         />
       )}
     </SafeAreaView>

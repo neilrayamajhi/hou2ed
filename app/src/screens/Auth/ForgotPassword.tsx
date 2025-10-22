@@ -103,14 +103,12 @@ export default function ForgotPassword() {
         throw new Error("Invalid email format");
       }
 
-      // Send reset email with retry logic
+      // Send reset email with OTP (no redirect, just code)
       await resilientRequest(
         async () => {
           const { error } = await supabase.auth.resetPasswordForEmail(
             sanitizedEmail,
-            {
-              redirectTo: `${process.env.EXPO_PUBLIC_APP_URL || "exp://localhost:8081"}/reset-password`,
-            },
+            // No redirectTo - this will send an OTP code instead of magic link
           );
 
           if (error) throw error;
@@ -127,22 +125,13 @@ export default function ForgotPassword() {
 
       // Show success message
       setSuccessMessage(
-        "If an account exists with this email, you'll receive a password reset link shortly.",
+        "We've sent a 6-digit code to your email. Check your inbox!",
       );
 
-      // Navigate back after delay
+      // Navigate to ResetPassword screen after delay
       setTimeout(() => {
         if (mounted.current) {
-          Alert.alert(
-            "Email Sent",
-            "Check your inbox for the password reset link.",
-            [
-              {
-                text: "Back to Login",
-                onPress: () => navigation.navigate("Login"),
-              },
-            ],
-          );
+          navigation.navigate("ResetPassword" as any, { email: sanitizedEmail });
         }
       }, 2000);
     } catch (error) {
@@ -186,7 +175,7 @@ export default function ForgotPassword() {
 
           {/* Description */}
           <Text style={styles.description}>
-            Enter your email address and we'll send you a link to reset your
+            Enter your email address and we'll send you a 6-digit code to reset your
             password.
           </Text>
 
@@ -246,7 +235,7 @@ export default function ForgotPassword() {
             accessibilityHint="Double tap to send password reset email"
             testID="submit-button"
           >
-            {isSubmitting ? "Sending..." : "Send Reset Link"}
+            {isSubmitting ? "Sending..." : "Send Reset Code"}
           </Button>
 
           {/* Back to Login */}
@@ -270,7 +259,7 @@ export default function ForgotPassword() {
               color={"#4B5563"}
             />
             <Text style={styles.noteText}>
-              For security reasons, we'll send a reset link to this email only
+              For security reasons, we'll send a reset code to this email only
               if an account exists.
             </Text>
           </View>

@@ -19,6 +19,7 @@ interface VerificationModalProps {
   email: string;
   onComplete: (code: string) => void;
   onResend: () => Promise<void>;
+  onBack?: () => void;
 }
 
 export default function VerificationModal({
@@ -26,6 +27,7 @@ export default function VerificationModal({
   email,
   onComplete,
   onResend,
+  onBack,
 }: VerificationModalProps) {
   const [code, setCode] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState("");
@@ -127,7 +129,19 @@ export default function VerificationModal({
       >
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Enter Verification Code</Text>
+            {onBack && (
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={onBack}
+                accessibilityLabel="Go back"
+                accessibilityHint="Return to signup form"
+              >
+                <Ionicons name="arrow-back" size={24} color={"#D4AF37"} />
+              </TouchableOpacity>
+            )}
+            <Text style={[styles.modalTitle, onBack && styles.modalTitleWithBack]}>
+              Enter Verification Code
+            </Text>
             <TouchableOpacity
               style={styles.closeButton}
               onPress={() => {
@@ -135,6 +149,8 @@ export default function VerificationModal({
                 setCode(["", "", "", "", "", ""]);
                 setError("");
               }}
+              accessibilityLabel="Reset code"
+              accessibilityHint="Clear the verification code input"
             >
               <Ionicons name="refresh" size={24} color={"#D4AF37"} />
             </TouchableOpacity>
@@ -245,6 +261,14 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "bold",
     color: "#D4AF37",
+    flex: 1,
+    textAlign: "center",
+  },
+  modalTitleWithBack: {
+    marginLeft: -24, // Compensate for back button to keep title centered
+  },
+  backButton: {
+    padding: theme.spacing.xs,
   },
   closeButton: {
     padding: theme.spacing.xs,

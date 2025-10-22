@@ -4,15 +4,20 @@ import { User } from "@supabase/supabase-js";
  * Transform Supabase user to app user format
  * Eliminates code duplication across auth components
  */
-export const transformUserData = (user: User) => ({
-  id: user.id,
-  email: user.email || "",
-  fullName: user.user_metadata?.full_name || "",
-  username: user.user_metadata?.username || "",
-  role: (user.user_metadata?.role as "seeker" | "provider") || "seeker",
-  isVerified: user.email_confirmed_at !== null,
-  createdAt: user.created_at || new Date().toISOString(),
-});
+export const transformUserData = (user: User) => {
+  console.log("Transforming user data. Raw metadata:", user.user_metadata);
+  const transformed = {
+    id: user.id,
+    email: user.email || "",
+    fullName: user.user_metadata?.full_name || "",
+    username: user.user_metadata?.username || "",
+    role: (user.user_metadata?.role as "seeker" | "provider") || "seeker",
+    isVerified: user.email_confirmed_at !== null,
+    createdAt: user.created_at || new Date().toISOString(),
+  };
+  console.log("Transformed user data:", transformed);
+  return transformed;
+};
 
 /**
  * Validate email format

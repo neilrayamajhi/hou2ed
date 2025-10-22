@@ -116,6 +116,16 @@ export async function loginUser(
         status: (error as any).status,
         code: (error as any).code,
       });
+
+      // Provide more detailed error information
+      if (error.message?.includes("Invalid login credentials")) {
+        console.log("Authentication failed - possible causes:");
+        console.log("1. Incorrect password");
+        console.log("2. User doesn't exist in auth.users table");
+        console.log("3. Email not verified (if verification is required)");
+        console.log("4. Account may need password reset");
+      }
+
       throw error;
     }
 
@@ -330,6 +340,30 @@ export async function signUpUser(
       (supabase as any).supabaseUrl || "Unknown URL",
     );
 
+    // CRITICAL: Check if email is already registered FIRST
+    // This prevents the confusing scenario where signup appears to succeed
+    // but verification fails because the email already exists
+    console.log("Checking if email already exists:", email);
+    const { data: existingEmailUser, error: emailCheckError } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("email", email.toLowerCase())
+      .maybeSingle();
+
+    if (emailCheckError && !emailCheckError.message?.includes("No rows")) {
+      console.error("Error checking email:", emailCheckError);
+      // Don't block on check errors, continue with signup
+    }
+
+    if (existingEmailUser) {
+      console.log("Email already registered:", email);
+      return {
+        success: false,
+        error: "This email is already registered. Please use a different email or try logging in.",
+        errorCode: AUTH_ERROR_CODES.EMAIL_EXISTS,
+      };
+    }
+
     // Check if username is already taken
     const { data: existingUser, error: usernameCheckError } = await supabase
       .from("profiles")
@@ -376,6 +410,42 @@ export async function signUpUser(
 
     if (error) {
       console.error("Sign up error details:", error);
+      console.error("Full error object:", JSON.stringify(error, null, 2));
+
+      // IMPORTANT: Check for duplicate email in auth.users table
+      // This catches cases where email exists in auth but not profiles
+      if (
+        error.message?.includes("User already registered") ||
+        error.message?.includes("already been registered") ||
+        error.message?.includes("duplicate key value") ||
+        error.code === "user_already_exists" ||
+        error.code === "email_exists"
+      ) {
+        console.log("Signup failed: Email already exists in auth.users");
+        return {
+          success: false,
+          error: "This email is already registered. Please use a different email or try logging in.",
+          errorCode: AUTH_ERROR_CODES.EMAIL_EXISTS,
+        };
+      }
+
+      // Check for specific password issues
+      if (error.message?.includes("Password must be at least")) {
+        return {
+          success: false,
+          error: error.message,
+          errorCode: "WEAK_PASSWORD",
+        };
+      }
+
+      // Check for weak password from Supabase
+      if (error.message?.includes("weak_password")) {
+        return {
+          success: false,
+          error: "Password is too weak. Please use a stronger password with at least 8 characters.",
+          errorCode: "WEAK_PASSWORD",
+        };
+      }
 
       // Check for network errors
       if (
@@ -424,9 +494,36 @@ export async function signUpUser(
       console.log("=================================");
     }
 
+    // Add detailed logging for successful signup
+    if (data?.user) {
+      const userData = transformUserData(data.user);
+
+      console.log("✅ Signup Summary:");
+      console.log("  - User ID:", data.user.id);
+      console.log("  - Email:", data.user.email);
+      console.log("  - Role:", userData.role);
+      console.log("  - Username:", userData.username);
+      console.log("  - Email verified:", data.user.email_confirmed_at ? "Yes" : "No");
+      console.log("  - Session created:", data.session ? "Yes" : "No");
+
+      // Warn if no session was created (might indicate password issue)
+      if (!data.session) {
+        console.warn("⚠️ No session created during signup - user will need to verify email first");
+        console.log("  This is normal for email verification flow");
+      }
+
+      return {
+        success: true,
+        user: userData,
+      };
+    }
+
+    // If we get here, something went wrong but no error was thrown
+    console.error("⚠️ Signup completed but no user data returned");
     return {
-      success: true,
-      user: data?.user ? transformUserData(data.user) : null,
+      success: false,
+      error: "Signup process completed but user data was not returned",
+      errorCode: "SIGNUP_INCOMPLETE",
     };
   } catch (error: any) {
     console.error("Unexpected sign up error:", error);

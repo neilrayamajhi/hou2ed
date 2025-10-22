@@ -119,6 +119,9 @@ export default function SearchScreen() {
   // Handle search
   const handleSearch = useCallback(() => {
     setSearchQuery(searchText);
+    console.log("Searching for:", searchText);
+    // TODO: Add geocoding to center map on searched location
+    // For now, just filter the listings by text
   }, [searchText, setSearchQuery]);
 
   // Handle refresh
@@ -182,6 +185,9 @@ export default function SearchScreen() {
             onSubmitEditing={handleSearch}
             returnKeyType="search"
           />
+          <TouchableOpacity onPress={handleSearch} style={styles.searchButton}>
+            <Text style={styles.searchButtonText}>Search</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={openFilters} style={styles.filterButton}>
             <Ionicons name="options-outline" size={20} color={"#D4AF37"} />
             <Text style={styles.filterButtonText}>Filters{filterCountText}</Text>
@@ -415,6 +421,18 @@ const styles = StyleSheet.create({
     marginHorizontal: theme.spacing.sm,
     fontSize: theme.typography.fontSize.md,
     color: "#FFFFFF",
+  },
+  searchButton: {
+    backgroundColor: "#D4AF37",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.borderRadius.sm,
+    marginRight: theme.spacing.xs,
+  },
+  searchButtonText: {
+    fontSize: theme.typography.fontSize.sm,
+    color: "#000000",
+    fontWeight: theme.typography.fontWeight.semibold,
   },
   filterButton: {
     flexDirection: "row",

@@ -136,6 +136,17 @@ export const authHelpers = {
     },
   ) => {
     console.log("Creating user with password and sending verification email to:", email);
+    console.log("User metadata being sent:", metadata);
+    console.log("Password length:", password.length, "characters");
+
+    // Validate password before sending to Supabase
+    if (!password || password.length < 8) {
+      console.error("Password validation failed: Must be at least 8 characters");
+      return {
+        data: null,
+        error: new Error("Password must be at least 8 characters long")
+      };
+    }
 
     // Use auth.signUp which saves the password AND sends verification email
     const { data, error } = await supabase.auth.signUp({
@@ -147,14 +158,58 @@ export const authHelpers = {
       },
     });
 
+    // IMPORTANT: Supabase has a quirk where if an unconfirmed user already exists,
+    // it returns success but with identities = [] (empty array)
+    // This is how we detect duplicate email signups
+    if (data?.user && (!data.user.identities || data.user.identities.length === 0)) {
+      console.warn('⚠️ Duplicate email detected - user returned with no identities');
+      console.warn('   Email:', email);
+      console.warn('   User ID returned:', data.user.id);
+      console.warn('   This email is already registered in the system');
+      return {
+        data: null,
+        error: new Error('This email is already registered. Please use a different email or try logging in.')
+      };
+    }
+
     if (error) {
       console.error("Failed to create user:", error);
+      console.error("Error details:", {
+        message: error.message,
+        status: (error as any).status,
+        code: (error as any).code,
+      });
+
+      // Check for specific error types
+      if (error.message?.includes("weak_password")) {
+        console.error("Password is too weak. Supabase requires stronger passwords.");
+      } else if (error.message?.includes("already_exists")) {
+        console.error("User already exists with this email.");
+      }
+
       return { data: null, error };
     }
 
-    console.log("User created successfully! Email verification sent.");
-    console.log("User will receive a 6-digit code to verify their email");
-    console.log("After verification, they can login with email + password");
+    // Verify the user was created with proper fields
+    if (data?.user) {
+      console.log("✅ User created successfully!");
+      console.log("   User ID:", data.user.id);
+      console.log("   Email:", data.user.email);
+      console.log("   Metadata saved:", data.user.user_metadata);
+      console.log("   Email confirmed:", data.user.email_confirmed_at ? "Yes" : "Needs verification");
+
+      // Important: Log session status
+      if (data.session) {
+        console.log("   Session created:", "Yes (user can login immediately)");
+      } else {
+        console.log("   Session created:", "No (email verification required first)");
+      }
+
+      console.log("\n📧 Email verification sent with 6-digit OTP code");
+      console.log("   User should check inbox (and spam folder)");
+    } else {
+      console.warn("⚠️ User data not returned properly - signup may have failed");
+    }
 
     return {
       data: data,

@@ -199,7 +199,7 @@ export async function getThreadMessages(
       .order('created_at', { ascending: false })
       .limit(limit);
 
-    if (before) {
+    if (before) {1
       query = query.lt('created_at', before);
     }
 

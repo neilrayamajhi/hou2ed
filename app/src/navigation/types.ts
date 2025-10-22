@@ -9,6 +9,7 @@ export type RootStackParamList = {
   Login: undefined;
   VerifyCode: { email?: string };
   ForgotPassword: undefined;
+  ResetPassword: { email?: string };
   Tabs: undefined;
   ListingDetails: { listingId?: string };
   ApplyWizard: { listingId?: string };
