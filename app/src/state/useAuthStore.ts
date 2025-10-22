@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import * as SecureStore from "expo-secure-store";
+import { supabase } from "../lib/supabase";
 
 export type UserRole = "seeker" | "provider";
 
@@ -21,7 +22,7 @@ type AuthState = {
   selectedRole: UserRole | null;
   setUser: (user: User | null) => void;
   setSelectedRole: (role: UserRole | null) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
   setLoading: (loading: boolean) => void;
 };
 
@@ -43,7 +44,7 @@ const secureStorage = {
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       isAuthenticated: false,
       isLoading: false,
@@ -57,12 +58,30 @@ export const useAuthStore = create<AuthState>()(
 
       setSelectedRole: (role) => set({ selectedRole: role }),
 
-      logout: () =>
-        set({
-          user: null,
-          isAuthenticated: false,
-          selectedRole: null,
-        }),
+      logout: async () => {
+        try {
+          // Sign out from Supabase first
+          await supabase.auth.signOut();
+
+          // Clear all auth-related storage
+          await secureStorage.removeItem("auth-storage");
+
+          // Clear the zustand state
+          set({
+            user: null,
+            isAuthenticated: false,
+            selectedRole: null,
+          });
+        } catch (error) {
+          console.error("Logout error:", error);
+          // Even if Supabase signOut fails, clear local state
+          set({
+            user: null,
+            isAuthenticated: false,
+            selectedRole: null,
+          });
+        }
+      },
 
       setLoading: (loading) => set({ isLoading: loading }),
     }),

@@ -28,6 +28,7 @@ class MessageService {
   private messageSubscriptions: Map<string, RealtimeChannel> = new Map();
   private threadSubscriptions: Map<string, RealtimeChannel> = new Map();
   private userId: string | null = null;
+  private threadTableName: string = 'message_threads'; // Will fallback to 'threads' if needed
 
   /**
    * Initialize the service with current user
@@ -35,7 +36,59 @@ class MessageService {
   async initialize() {
     const { data: { user } } = await supabase.auth.getUser();
     this.userId = user?.id || null;
+
+    // Check which table name to use
+    await this.detectThreadTableName();
+
     return this.userId;
+  }
+
+  /**
+   * Detect whether to use 'message_threads' or 'threads' table
+   */
+  private async detectThreadTableName() {
+    try {
+      // Try to query message_threads table
+      const { error: messageThreadsError } = await supabase
+        .from('message_threads')
+        .select('id')
+        .limit(0);
+
+      if (!messageThreadsError) {
+        this.threadTableName = 'message_threads';
+        return;
+      }
+
+      // If message_threads doesn't exist, try threads
+      if (messageThreadsError.code === 'PGRST205') {
+        const { error: threadsError } = await supabase
+          .from('threads')
+          .select('id')
+          .limit(0);
+
+        if (!threadsError) {
+          this.threadTableName = 'threads';
+          console.warn('Using "threads" table (legacy). Please run database migration.');
+          return;
+        }
+
+        // Neither table exists
+        if (threadsError.code === 'PGRST205') {
+          console.error('⚠️ No messaging tables found. Please run the database migration to create them.');
+          console.error('Run the SQL from /Users/neilrayamajhi/h2d/CREATE_MESSAGING_TABLES.sql in Supabase');
+          // Use message_threads as default (will fail but with better error)
+          this.threadTableName = 'message_threads';
+          return;
+        }
+      }
+
+      // Some other error
+      console.error('Error detecting thread table:', messageThreadsError);
+      this.threadTableName = 'message_threads';
+    } catch (error) {
+      console.error('Error detecting thread table name:', error);
+      this.threadTableName = 'message_threads';
+    }
   }
 
   /**
@@ -81,7 +134,7 @@ class MessageService {
       };
 
       const { data, error } = await supabase
-        .from('message_threads')
+        .from(this.threadTableName)
         .insert(threadData)
         .select()
         .single();
@@ -108,7 +161,7 @@ class MessageService {
   ): Promise<MessageThread | null> {
     try {
       let query = supabase
-        .from('message_threads')
+        .from(this.threadTableName)
         .select('*')
         .contains('participant_ids', participantIds);
 
@@ -143,7 +196,7 @@ class MessageService {
 
     try {
       const { data: threads, error } = await supabase
-        .from('message_threads')
+        .from(this.threadTableName)
         .select(`
           *,
           messages (
@@ -161,6 +214,11 @@ class MessageService {
         .order('last_message_at', { ascending: false });
 
       if (error) {
+        // If table doesn't exist, return empty array instead of crashing
+        if (error.code === 'PGRST205') {
+          console.warn('Message threads table not found. Messaging system needs to be initialized.');
+          return [];
+        }
         console.error('Error fetching threads:', error);
         return [];
       }
@@ -215,7 +273,7 @@ class MessageService {
   async getThread(threadId: string): Promise<ThreadWithDetails | null> {
     try {
       const { data: thread, error } = await supabase
-        .from('message_threads')
+        .from(this.threadTableName)
         .select(`
           *,
           messages (
@@ -310,7 +368,7 @@ class MessageService {
 
       // Update thread's last_message_at
       await supabase
-        .from('message_threads')
+        .from(this.threadTableName)
         .update({ last_message_at: new Date().toISOString() })
         .eq('id', threadId);
 
@@ -454,7 +512,7 @@ class MessageService {
         {
           event: '*',
           schema: 'public',
-          table: 'message_threads',
+          table: this.threadTableName,
         },
         async (payload) => {
           // Check if user is a participant

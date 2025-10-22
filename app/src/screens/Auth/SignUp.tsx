@@ -90,10 +90,11 @@ export default function SignUp() {
   const navigation = useNavigation<RootStackNavigationProp>();
   const route = useRoute();
   const setUser = useAuthStore((state) => state.setUser);
-  const userRole =
+  const [selectedRole, setSelectedRole] = useState<"seeker" | "provider">(
     (route.params as any)?.role ||
     useAuthStore((state) => state.selectedRole) ||
-    "seeker";
+    "seeker"
+  );
 
   // Rate limiting
   const {
@@ -196,7 +197,7 @@ export default function SignUp() {
           username: data.username,
           email: data.email,
           password: data.password,
-          role: userRole as "seeker" | "provider",
+          role: selectedRole,
         });
 
         // Clear timeout on successful response
@@ -288,7 +289,7 @@ export default function SignUp() {
     [
       checkRateLimit,
       timeUntilUnlock,
-      userRole,
+      selectedRole,
       incrementAttempts,
       resetAttempts,
       remainingAttempts,
@@ -418,6 +419,82 @@ export default function SignUp() {
               accessibilityLabel="Sign up tab, currently selected"
             >
               <Text style={styles.activeTabText}>Sign Up</Text>
+            </View>
+          </View>
+
+          {/* Role Selection */}
+          <View style={styles.roleContainer}>
+            <Text style={styles.roleTitle}>I want to:</Text>
+            <View style={styles.roleButtonsContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.roleButton,
+                  selectedRole === "seeker" && styles.roleButtonActive,
+                ]}
+                onPress={() => setSelectedRole("seeker")}
+                activeOpacity={0.8}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: selectedRole === "seeker" }}
+                accessibilityLabel="Seeker role"
+                accessibilityHint="Select to sign up as someone looking for housing"
+              >
+                <Ionicons
+                  name="home-outline"
+                  size={24}
+                  color={selectedRole === "seeker" ? "#000000" : "#FFFFFF"}
+                />
+                <Text
+                  style={[
+                    styles.roleButtonText,
+                    selectedRole === "seeker" && styles.roleButtonTextActive,
+                  ]}
+                >
+                  Find Housing
+                </Text>
+                <Text
+                  style={[
+                    styles.roleButtonSubtext,
+                    selectedRole === "seeker" && styles.roleButtonSubtextActive,
+                  ]}
+                >
+                  (Seeker)
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.roleButton,
+                  selectedRole === "provider" && styles.roleButtonActive,
+                ]}
+                onPress={() => setSelectedRole("provider")}
+                activeOpacity={0.8}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: selectedRole === "provider" }}
+                accessibilityLabel="Provider role"
+                accessibilityHint="Select to sign up as a housing provider"
+              >
+                <Ionicons
+                  name="business-outline"
+                  size={24}
+                  color={selectedRole === "provider" ? "#000000" : "#FFFFFF"}
+                />
+                <Text
+                  style={[
+                    styles.roleButtonText,
+                    selectedRole === "provider" && styles.roleButtonTextActive,
+                  ]}
+                >
+                  Offer Housing
+                </Text>
+                <Text
+                  style={[
+                    styles.roleButtonSubtext,
+                    selectedRole === "provider" && styles.roleButtonSubtextActive,
+                  ]}
+                >
+                  (Provider)
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -752,5 +829,53 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: theme.typography.fontSize.md,
     textDecorationLine: "underline",
+  },
+  roleContainer: {
+    marginBottom: theme.spacing.xl,
+  },
+  roleTitle: {
+    color: "#FFFFFF",
+    fontSize: theme.typography.fontSize.lg,
+    fontWeight: theme.typography.fontWeight.semibold,
+    marginBottom: theme.spacing.md,
+    textAlign: "center",
+  },
+  roleButtonsContainer: {
+    flexDirection: "row",
+    gap: theme.spacing.md,
+  },
+  roleButton: {
+    flex: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: theme.borderRadius.lg,
+    paddingVertical: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.md,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 100,
+  },
+  roleButtonActive: {
+    backgroundColor: "#D4AF37",
+    borderColor: "#D4AF37",
+  },
+  roleButtonText: {
+    color: "#FFFFFF",
+    fontSize: theme.typography.fontSize.md,
+    fontWeight: theme.typography.fontWeight.semibold,
+    marginTop: theme.spacing.sm,
+    textAlign: "center",
+  },
+  roleButtonTextActive: {
+    color: "#000000",
+  },
+  roleButtonSubtext: {
+    color: "rgba(255, 255, 255, 0.7)",
+    fontSize: theme.typography.fontSize.sm,
+    marginTop: theme.spacing.xs,
+  },
+  roleButtonSubtextActive: {
+    color: "rgba(0, 0, 0, 0.7)",
   },
 });

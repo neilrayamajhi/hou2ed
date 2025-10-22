@@ -11,8 +11,10 @@ import type { Database } from "./supabase-types";
 
 // Log which environment we're using (helpful for debugging)
 if (__DEV__) {
+  console.log("=== Supabase Configuration ===");
   console.log("Supabase URL:", env.SUPABASE_URL);
   console.log("Running in:", "Development");
+  console.log("==============================");
 }
 
 // Storage adapters: use SecureStore on native, localStorage on web
@@ -73,7 +75,10 @@ export const supabase = createClient<Database>(
   env.SUPABASE_ANON_KEY,
   {
     auth: {
-      storage: Platform.OS === "web" ? (WebLocalStorageAdapter as any) : ExpoSecureStoreAdapter,
+      storage:
+        Platform.OS === "web"
+          ? (WebLocalStorageAdapter as any)
+          : ExpoSecureStoreAdapter,
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
@@ -81,7 +86,7 @@ export const supabase = createClient<Database>(
     global: {
       headers: {
         // Add user agent for debugging
-        'x-client-info': 'hou2ed-app',
+        "x-client-info": "hou2ed-app",
       },
       // Set timeout to 30 seconds for all requests
       // This prevents hanging on slow networks
@@ -174,6 +179,12 @@ export const authHelpers = {
 
   signOut: async () => {
     const { error } = await supabase.auth.signOut();
+    // Also clear any session storage
+    if (Platform.OS === "web") {
+      await WebLocalStorageAdapter.removeItem("supabase.auth.token");
+    } else {
+      await ExpoSecureStoreAdapter.removeItem("supabase.auth.token");
+    }
     return { error };
   },
 

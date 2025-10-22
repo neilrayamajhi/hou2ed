@@ -41,21 +41,37 @@ export default function AuthProvider({
     // Listen for auth state changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log("Auth event:", event);
-        setSession(session);
-        setUser(session?.user || null);
+        console.log("Auth event:", event, "Session:", session ? "exists" : "null");
 
-        if (session?.user) {
-          // Update store with user data
-          const userData = transformUserData(session.user);
-          setStoreUser(userData);
-        } else {
-          // Clear user from store
-          logout();
+        // Handle different auth events
+        if (event === "SIGNED_OUT") {
+          setSession(null);
+          setUser(null);
+          await logout();
+          return;
         }
 
-        if (event === "SIGNED_OUT") {
-          logout();
+        if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+          setSession(session);
+          setUser(session?.user || null);
+
+          if (session?.user) {
+            const userData = transformUserData(session.user);
+            setStoreUser(userData);
+          }
+        } else if (event === "INITIAL_SESSION") {
+          // Handle initial session carefully
+          if (session) {
+            setSession(session);
+            setUser(session.user);
+            const userData = transformUserData(session.user);
+            setStoreUser(userData);
+          } else {
+            // No initial session, but don't call logout
+            // Just set the state to not authenticated
+            setSession(null);
+            setUser(null);
+          }
         }
       },
     );

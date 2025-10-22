@@ -26,15 +26,24 @@ async function resolveEmailFromUsername(
       .from("profiles")
       .select("email")
       .eq("username", username)
-      .single();
+      .maybeSingle(); // Use maybeSingle to handle no results gracefully
 
-    if (error || !profile) {
+    if (error) {
+      // Only log actual errors, not "no rows" results
+      if (!error.message?.includes("No rows")) {
+        console.error("Error resolving username:", error);
+      }
       return null;
     }
 
-    return profile.email;
+    if (!profile) {
+      // Username doesn't exist
+      return null;
+    }
+
+    return profile?.email || null;
   } catch (error) {
-    console.error("Error resolving username:", error);
+    console.error("Unexpected error resolving username:", error);
     return null;
   }
 }
@@ -58,6 +67,8 @@ export async function resolveEmail(
  * Performs the authentication with retry logic
  */
 async function performAuthentication(email: string, password: string) {
+  // Don't clear session before login - this causes auth state issues
+  // The new login will replace any existing session automatically
   return retryWithBackoff(() => authHelpers.signIn(email, password));
 }
 
@@ -79,10 +90,13 @@ export async function loginUser(
   }
 
   try {
+    console.log("Login attempt for:", emailOrUsername);
+
     // Resolve email from username if needed
     const email = await resolveEmail(emailOrUsername);
 
     if (!email) {
+      console.log("Could not resolve email for:", emailOrUsername);
       return {
         success: false,
         error: "Username not found",
@@ -90,14 +104,23 @@ export async function loginUser(
       };
     }
 
+    console.log("Attempting authentication with email:", email);
+
     // Perform authentication
     const { data, error } = await performAuthentication(email, password);
 
     if (error) {
+      console.error("Authentication error:", error);
+      console.error("Error details:", {
+        message: error.message,
+        status: (error as any).status,
+        code: (error as any).code,
+      });
       throw error;
     }
 
     if (data?.user) {
+      console.log("Login successful for user:", data.user.id);
       const userData = transformUserData(data.user);
       return {
         success: true,
@@ -105,12 +128,29 @@ export async function loginUser(
       };
     }
 
+    console.log("Login failed - no user data returned");
     return {
       success: false,
       error: "Login failed",
       errorCode: AUTH_ERROR_CODES.UNKNOWN,
     };
-  } catch (error) {
+  } catch (error: any) {
+    console.error("Login error details:", error);
+
+    // Check for network/connection errors
+    if (
+      error?.message?.includes("fetch") ||
+      error?.message?.includes("NetworkError") ||
+      error?.message?.includes("Failed to fetch") ||
+      error?.message?.includes("Network request failed")
+    ) {
+      return {
+        success: false,
+        error: "Unable to connect to server. Please check your internet connection.",
+        errorCode: "NETWORK_ERROR",
+      };
+    }
+
     const authError = error as AuthError;
     return {
       success: false,
@@ -176,9 +216,16 @@ export async function verifyOtp(
       console.error("OTP Verification Error:", error);
 
       // Check if it's a format error (code vs link)
-      if (error.message?.includes("token") || error.message?.includes("invalid")) {
-        console.log("Tip: Make sure you're entering the 6-digit code from your email");
-        console.log("If you received a link, the code is in the URL after 'token='");
+      if (
+        error.message?.includes("token") ||
+        error.message?.includes("invalid")
+      ) {
+        console.log(
+          "Tip: Make sure you're entering the 6-digit code from your email",
+        );
+        console.log(
+          "If you received a link, the code is in the URL after 'token='",
+        );
       }
 
       throw error;
@@ -195,7 +242,9 @@ export async function verifyOtp(
 
     if (data?.session) {
       console.log("Session created, fetching user data");
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
       if (user) {
         const userData = transformUserData(user);
@@ -286,17 +335,26 @@ export async function signUpUser(
       .from("profiles")
       .select("id")
       .eq("username", username)
-      .single();
+      .maybeSingle(); // Use maybeSingle instead of single to handle no results
 
-    // Handle network errors separately
-    if (usernameCheckError && usernameCheckError.message?.includes("fetch")) {
-      console.error("Network error checking username:", usernameCheckError);
-      return {
-        success: false,
-        error:
-          "Unable to connect to server. Please check your internet connection and try again.",
-        errorCode: "NETWORK_ERROR",
-      };
+    // Handle actual network/connection errors
+    if (usernameCheckError) {
+      // Only treat as network error if it's actually a fetch/connection issue
+      if (
+        usernameCheckError.message?.includes("fetch") ||
+        usernameCheckError.message?.includes("NetworkError") ||
+        usernameCheckError.message?.includes("Failed to fetch")
+      ) {
+        console.error("Network error checking username:", usernameCheckError);
+        return {
+          success: false,
+          error:
+            "Unable to connect to server. Please check your internet connection and try again.",
+          errorCode: "NETWORK_ERROR",
+        };
+      }
+      // For other errors, log but continue (might be a query issue, not network)
+      console.log("Username check query issue:", usernameCheckError);
     }
 
     if (existingUser) {
@@ -360,7 +418,7 @@ export async function signUpUser(
       console.log("=================================");
       console.log("SIGN UP SUCCESSFUL - Email Verification Required");
       console.log("Email sent to:", email);
-      console.log("User ID:", data.user.id);
+      console.log("User ID:", (data.user as any).id);
       console.log("Check your email for the 6-digit verification code");
       console.log("If using default Supabase email, check spam folder");
       console.log("=================================");

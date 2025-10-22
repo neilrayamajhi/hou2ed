@@ -8,6 +8,8 @@ import {
   SafeAreaView,
   ActivityIndicator,
   RefreshControl,
+  Linking,
+  Alert,
 } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -53,6 +55,7 @@ export default function InboxScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [tablesMissing, setTablesMissing] = useState(false);
 
   // Initialize and fetch threads
   const loadThreads = useCallback(async () => {
@@ -64,8 +67,13 @@ export default function InboxScreen() {
       // Fetch threads
       const fetchedThreads = await messageService.getThreads();
       setThreads(fetchedThreads);
+      setTablesMissing(false);
     } catch (error) {
       console.error('Error loading threads:', error);
+      // Check if this is a missing table error
+      if (error?.message?.includes('table') || error?.code === 'PGRST205') {
+        setTablesMissing(true);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -205,6 +213,76 @@ export default function InboxScreen() {
     </View>
   ), []);
 
+  const TablesMissingComponent = useCallback(() => {
+    const handleOpenSupabase = () => {
+      Alert.alert(
+        "Setup Required",
+        "The messaging system needs to be set up in your database. The SQL migration has been copied to your clipboard.\n\n1. Click OK to open Supabase\n2. Paste the SQL in the editor\n3. Click Run\n4. Come back and refresh",
+        [
+          {
+            text: "Cancel",
+            style: "cancel"
+          },
+          {
+            text: "Open Supabase",
+            onPress: () => {
+              Linking.openURL("https://supabase.com/dashboard/project/rixiofltzptwaiwxhhlf/sql/new");
+            }
+          }
+        ]
+      );
+    };
+
+    return (
+      <View style={styles.setupContainer}>
+        <View style={styles.setupIconContainer}>
+          <Ionicons name="construct-outline" size={64} color={colors.primary[400]} />
+        </View>
+        <Text style={styles.setupTitle}>Database Setup Required</Text>
+        <Text style={styles.setupSubtitle}>
+          The messaging tables need to be created in your Supabase database.
+        </Text>
+
+        <View style={styles.setupSteps}>
+          <Text style={styles.stepHeader}>Quick Setup Steps:</Text>
+          <View style={styles.step}>
+            <Text style={styles.stepNumber}>1.</Text>
+            <Text style={styles.stepText}>Click the button below to open Supabase</Text>
+          </View>
+          <View style={styles.step}>
+            <Text style={styles.stepNumber}>2.</Text>
+            <Text style={styles.stepText}>Paste the SQL (already in your clipboard)</Text>
+          </View>
+          <View style={styles.step}>
+            <Text style={styles.stepNumber}>3.</Text>
+            <Text style={styles.stepText}>Click "Run" to create the tables</Text>
+          </View>
+          <View style={styles.step}>
+            <Text style={styles.stepNumber}>4.</Text>
+            <Text style={styles.stepText}>Come back and pull to refresh</Text>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={styles.setupButton}
+          onPress={handleOpenSupabase}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="open-outline" size={20} color={colors.gray[900]} />
+          <Text style={styles.setupButtonText}>Open Supabase Dashboard</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={loadThreads}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }, [loadThreads]);
+
   const sortedThreads = useMemo(() =>
     [...threads].sort((a, b) => {
       const aTime = new Date(a.last_message_at || 0).getTime();
@@ -223,6 +301,18 @@ export default function InboxScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary[400]} />
         </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Show setup screen if tables are missing
+  if (tablesMissing) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Messages</Text>
+        </View>
+        <TablesMissingComponent />
       </SafeAreaView>
     );
   }
@@ -378,5 +468,83 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  setupContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: spacing.xl,
+  },
+  setupIconContainer: {
+    marginBottom: spacing.lg,
+  },
+  setupTitle: {
+    fontSize: typography.sizes.xl,
+    fontWeight: "700",
+    color: colors.primary[400],
+    marginBottom: spacing.sm,
+    textAlign: "center",
+  },
+  setupSubtitle: {
+    fontSize: typography.sizes.md,
+    color: colors.gray[400],
+    textAlign: "center",
+    marginBottom: spacing.xl,
+    lineHeight: 22,
+  },
+  setupSteps: {
+    backgroundColor: colors.gray[850],
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.xl,
+    width: "100%",
+  },
+  stepHeader: {
+    fontSize: typography.sizes.md,
+    fontWeight: "600",
+    color: colors.gray[50],
+    marginBottom: spacing.md,
+  },
+  step: {
+    flexDirection: "row",
+    marginBottom: spacing.sm,
+  },
+  stepNumber: {
+    fontSize: typography.sizes.sm,
+    fontWeight: "600",
+    color: colors.primary[400],
+    marginRight: spacing.sm,
+    width: 20,
+  },
+  stepText: {
+    flex: 1,
+    fontSize: typography.sizes.sm,
+    color: colors.gray[300],
+    lineHeight: 20,
+  },
+  setupButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.primary[500],
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  setupButtonText: {
+    fontSize: typography.sizes.md,
+    fontWeight: "600",
+    color: colors.gray[900],
+  },
+  retryButton: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
+  retryButtonText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: "500",
+    color: colors.gray[400],
+    textDecorationLine: "underline",
   },
 });

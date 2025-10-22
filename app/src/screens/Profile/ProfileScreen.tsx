@@ -40,7 +40,8 @@ export default function ProfileScreen() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
-  const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
+  const [changePasswordModalVisible, setChangePasswordModalVisible] =
+    useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -63,7 +64,10 @@ export default function ProfileScreen() {
   }, []);
 
   const handleSavedSearches = useCallback(() => {
-    Alert.alert("Saved Searches", `You have ${savedSearches.length} saved searches`);
+    Alert.alert(
+      "Saved Searches",
+      `You have ${savedSearches.length} saved searches`,
+    );
   }, [savedSearches]);
 
   const handleChangePassword = useCallback(() => {
@@ -117,44 +121,55 @@ export default function ProfileScreen() {
                 {
                   text: "Confirm",
                   style: "destructive",
-                  onPress: () => {
-                    logout();
+                  onPress: async () => {
+                    await logout();
                     navigation.reset({
                       index: 0,
                       routes: [{ name: "OnboardingScreen" }],
                     });
                   },
                 },
-              ]
+              ],
             );
           },
         },
-      ]
+      ],
     );
   }, [logout, navigation]);
 
   const handleLogout = useCallback(() => {
-    Alert.alert(
-      "Sign Out",
-      "Are you sure you want to sign out?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Sign Out",
-          style: "destructive",
-          onPress: () => {
-            logout();
+    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Sign Out",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            // First logout completely
+            await logout();
+
+            // Small delay to ensure state is cleared
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Navigate to RoleSelection (the entry point for auth flow)
             navigation.reset({
               index: 0,
-              routes: [{ name: "Login" }],
+              routes: [{ name: "RoleSelection" }],
             });
-          },
+          } catch (error) {
+            console.error("Logout error:", error);
+            // Even if logout fails, still navigate to auth screen
+            navigation.reset({
+              index: 0,
+              routes: [{ name: "RoleSelection" }],
+            });
+          }
         },
-      ]
-    );
+      },
+    ]);
   }, [logout, navigation]);
 
   const profileSections: ProfileSection[] = [
@@ -183,141 +198,193 @@ export default function ProfileScreen() {
     },
   ];
 
-  const renderSection = useCallback((section: ProfileSection) => {
-    if (section.id === "account-settings") {
+  const renderSection = useCallback(
+    (section: ProfileSection) => {
+      if (section.id === "account-settings") {
+        return (
+          <View key={section.id} style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons
+                name={section.icon}
+                size={20}
+                color={colors.primary[400]}
+              />
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+            </View>
+
+            <View style={styles.settingsContent}>
+              <TouchableOpacity
+                style={styles.settingRow}
+                onPress={handleChangePassword}
+                accessibilityLabel="Change password"
+                accessibilityRole="button"
+              >
+                <View style={styles.settingLeft}>
+                  <Ionicons
+                    name="key-outline"
+                    size={18}
+                    color={colors.gray[400]}
+                  />
+                  <Text style={styles.settingText}>Change Password</Text>
+                </View>
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.gray[500]}
+                />
+              </TouchableOpacity>
+
+              <View style={styles.settingRow}>
+                <View style={styles.settingLeft}>
+                  <Ionicons
+                    name="notifications-outline"
+                    size={18}
+                    color={colors.gray[400]}
+                  />
+                  <Text style={styles.settingText}>Push Notifications</Text>
+                </View>
+                <Switch
+                  value={pushNotifications}
+                  onValueChange={setPushNotifications}
+                  trackColor={{
+                    false: colors.gray[700],
+                    true: colors.primary[600],
+                  }}
+                  thumbColor={
+                    pushNotifications ? colors.primary[400] : colors.gray[400]
+                  }
+                  accessibilityLabel="Push notifications toggle"
+                  accessibilityRole="switch"
+                />
+              </View>
+
+              <View style={styles.settingRow}>
+                <View style={styles.settingLeft}>
+                  <Ionicons
+                    name="mail-outline"
+                    size={18}
+                    color={colors.gray[400]}
+                  />
+                  <Text style={styles.settingText}>Email Notifications</Text>
+                </View>
+                <Switch
+                  value={emailNotifications}
+                  onValueChange={setEmailNotifications}
+                  trackColor={{
+                    false: colors.gray[700],
+                    true: colors.primary[600],
+                  }}
+                  thumbColor={
+                    emailNotifications ? colors.primary[400] : colors.gray[400]
+                  }
+                  accessibilityLabel="Email notifications toggle"
+                  accessibilityRole="switch"
+                />
+              </View>
+
+              <TouchableOpacity
+                style={styles.settingRow}
+                onPress={() => {
+                  Alert.alert(
+                    "Select Language",
+                    "Choose your preferred language",
+                    [
+                      ...LANGUAGES.map((lang) => ({
+                        text: `${lang.nativeName} (${lang.name})`,
+                        onPress: () => i18n.setLanguage(lang.code),
+                      })),
+                      { text: "Cancel", style: "cancel" },
+                    ],
+                  );
+                }}
+                accessibilityLabel="Change language"
+                accessibilityRole="button"
+              >
+                <View style={styles.settingLeft}>
+                  <Ionicons
+                    name="language-outline"
+                    size={18}
+                    color={colors.gray[400]}
+                  />
+                  <Text style={styles.settingText}>Language</Text>
+                </View>
+                <View style={styles.settingRight}>
+                  <Text style={styles.settingValue}>
+                    {LANGUAGES.find((l) => l.code === i18n.language)?.name ||
+                      "English"}
+                  </Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={colors.gray[500]}
+                  />
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.settingRow, styles.dangerRow]}
+                onPress={handleDeleteAccount}
+                accessibilityLabel="Delete account"
+                accessibilityRole="button"
+              >
+                <View style={styles.settingLeft}>
+                  <Ionicons name="trash-outline" size={18} color={colors.red} />
+                  <Text style={[styles.settingText, styles.dangerText]}>
+                    Delete Account
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.red} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+      }
+
       return (
-        <View key={section.id} style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name={section.icon} size={20} color={colors.primary[400]} />
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-          </View>
-
-          <View style={styles.settingsContent}>
-            <TouchableOpacity
-              style={styles.settingRow}
-              onPress={handleChangePassword}
-              accessibilityLabel="Change password"
-              accessibilityRole="button"
-            >
-              <View style={styles.settingLeft}>
-                <Ionicons name="key-outline" size={18} color={colors.gray[400]} />
-                <Text style={styles.settingText}>Change Password</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.gray[500]} />
-            </TouchableOpacity>
-
-            <View style={styles.settingRow}>
-              <View style={styles.settingLeft}>
-                <Ionicons name="notifications-outline" size={18} color={colors.gray[400]} />
-                <Text style={styles.settingText}>Push Notifications</Text>
-              </View>
-              <Switch
-                value={pushNotifications}
-                onValueChange={setPushNotifications}
-                trackColor={{ false: colors.gray[700], true: colors.primary[600] }}
-                thumbColor={pushNotifications ? colors.primary[400] : colors.gray[400]}
-                accessibilityLabel="Push notifications toggle"
-                accessibilityRole="switch"
+        <TouchableOpacity
+          key={section.id}
+          style={styles.section}
+          onPress={section.onPress}
+          accessibilityLabel={section.title}
+          accessibilityRole="button"
+        >
+          <View style={styles.sectionContent}>
+            <View style={styles.sectionLeft}>
+              <Ionicons
+                name={section.icon}
+                size={20}
+                color={colors.primary[400]}
               />
+              <Text style={styles.sectionTitle}>{section.title}</Text>
             </View>
-
-            <View style={styles.settingRow}>
-              <View style={styles.settingLeft}>
-                <Ionicons name="mail-outline" size={18} color={colors.gray[400]} />
-                <Text style={styles.settingText}>Email Notifications</Text>
-              </View>
-              <Switch
-                value={emailNotifications}
-                onValueChange={setEmailNotifications}
-                trackColor={{ false: colors.gray[700], true: colors.primary[600] }}
-                thumbColor={emailNotifications ? colors.primary[400] : colors.gray[400]}
-                accessibilityLabel="Email notifications toggle"
-                accessibilityRole="switch"
-              />
+            <View style={styles.sectionRight}>
+              {section.badge !== undefined && section.badge > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{section.badge}</Text>
+                </View>
+              )}
+              {section.showArrow && (
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.gray[500]}
+                />
+              )}
             </View>
-
-            <TouchableOpacity
-              style={styles.settingRow}
-              onPress={() => {
-                Alert.alert(
-                  "Select Language",
-                  "Choose your preferred language",
-                  [
-                    ...LANGUAGES.map(lang => ({
-                      text: `${lang.nativeName} (${lang.name})`,
-                      onPress: () => i18n.setLanguage(lang.code),
-                    })),
-                    { text: "Cancel", style: "cancel" }
-                  ]
-                );
-              }}
-              accessibilityLabel="Change language"
-              accessibilityRole="button"
-            >
-              <View style={styles.settingLeft}>
-                <Ionicons name="language-outline" size={18} color={colors.gray[400]} />
-                <Text style={styles.settingText}>Language</Text>
-              </View>
-              <View style={styles.settingRight}>
-                <Text style={styles.settingValue}>
-                  {LANGUAGES.find(l => l.code === i18n.language)?.name || "English"}
-                </Text>
-                <Ionicons name="chevron-forward" size={18} color={colors.gray[500]} />
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.settingRow, styles.dangerRow]}
-              onPress={handleDeleteAccount}
-              accessibilityLabel="Delete account"
-              accessibilityRole="button"
-            >
-              <View style={styles.settingLeft}>
-                <Ionicons name="trash-outline" size={18} color={colors.red} />
-                <Text style={[styles.settingText, styles.dangerText]}>Delete Account</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.red} />
-            </TouchableOpacity>
           </View>
-        </View>
+        </TouchableOpacity>
       );
-    }
-
-    return (
-      <TouchableOpacity
-        key={section.id}
-        style={styles.section}
-        onPress={section.onPress}
-        accessibilityLabel={section.title}
-        accessibilityRole="button"
-      >
-        <View style={styles.sectionContent}>
-          <View style={styles.sectionLeft}>
-            <Ionicons name={section.icon} size={20} color={colors.primary[400]} />
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-          </View>
-          <View style={styles.sectionRight}>
-            {section.badge !== undefined && section.badge > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{section.badge}</Text>
-              </View>
-            )}
-            {section.showArrow && (
-              <Ionicons name="chevron-forward" size={18} color={colors.gray[500]} />
-            )}
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  }, [
-    pushNotifications,
-    emailNotifications,
-    handleChangePassword,
-    handleDeleteAccount,
-    handleApplications,
-    handleSavedSearches,
-    savedSearches.length,
-  ]);
+    },
+    [
+      pushNotifications,
+      emailNotifications,
+      handleChangePassword,
+      handleDeleteAccount,
+      handleApplications,
+      handleSavedSearches,
+      savedSearches.length,
+    ],
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -338,11 +405,19 @@ export default function ProfileScreen() {
               <View style={styles.avatar}>
                 {avatarUri ? (
                   <View style={styles.avatarPlaceholder}>
-                    <Ionicons name="person" size={40} color={colors.gray[600]} />
+                    <Ionicons
+                      name="person"
+                      size={40}
+                      color={colors.gray[600]}
+                    />
                   </View>
                 ) : (
                   <View style={styles.avatarPlaceholder}>
-                    <Ionicons name="person" size={40} color={colors.gray[600]} />
+                    <Ionicons
+                      name="person"
+                      size={40}
+                      color={colors.gray[600]}
+                    />
                   </View>
                 )}
               </View>
@@ -352,9 +427,13 @@ export default function ProfileScreen() {
             </View>
           </TouchableOpacity>
 
-          <Text style={styles.userName}>{user?.fullName || user?.username || "User"}</Text>
+          <Text style={styles.userName}>
+            {user?.fullName || user?.username || "User"}
+          </Text>
           <Text style={styles.userEmail}>{user?.email || "Not available"}</Text>
-          <Text style={styles.userRole}>{user?.role === "provider" ? "Housing Provider" : "Housing Seeker"}</Text>
+          <Text style={styles.userRole}>
+            {user?.role === "provider" ? "Housing Provider" : "Housing Seeker"}
+          </Text>
         </View>
 
         {/* Profile Sections */}
@@ -385,7 +464,10 @@ export default function ProfileScreen() {
           style={styles.modalOverlay}
           onPress={() => setChangePasswordModalVisible(false)}
         >
-          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+          <Pressable
+            style={styles.modalContent}
+            onPress={(e) => e.stopPropagation()}
+          >
             <Text style={styles.modalTitle}>Change Password</Text>
 
             <TextInput

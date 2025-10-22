@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,281 +7,377 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Image,
+  Dimensions,
+  Platform,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing, typography, radius, shadows } from "../../theme/tokens";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { RootStackNavigationProp } from "../../navigation/types";
 import { useProviderListings } from "../../hooks/useProviderListings";
 import { ActivityIndicator, RefreshControl } from "react-native";
 import { useToast } from "../../components/ui/Toast";
 import { useRequireProvider } from "../../hooks/useRequireProvider";
+import { useAuthStore } from "../../state/useAuthStore";
 
-// Dashboard now uses live data via useProviderListings
+const { width: screenWidth } = Dimensions.get("window");
 
 export default function ProviderDashboard() {
   const navigation = useNavigation<RootStackNavigationProp>();
   useRequireProvider();
+  const user = useAuthStore((state) => state.user);
   const { data: listings, isLoading, isError, refetch, isRefetching } = useProviderListings();
   const { showToast } = useToast();
+  const [selectedPeriod, setSelectedPeriod] = useState<"week" | "month" | "year">("month");
 
+  // Calculate metrics
   const totalBeds = (listings || []).reduce((sum, l) => sum + (l.totalBeds || 0), 0);
   const totalAvailable = (listings || []).reduce(
     (sum, l) => sum + (l.availableBeds || 0),
     0,
   );
-  const newApplications = 0; // Placeholder until applications are wired
+  const occupancyRate = totalBeds > 0 ? Math.round(((totalBeds - totalAvailable) / totalBeds) * 100) : 0;
+  const newApplications = 12; // Mock data
+  const revenue = 45280; // Mock monthly revenue
+  const rating = 4.8; // Mock rating
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header with welcome message */}
-      <View style={styles.header}>
-        <Text style={styles.welcomeText}>Provider Dashboard</Text>
-        <Text style={styles.providerName}>Your Properties</Text>
-      </View>
-
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={!!isRefetching}
             onRefresh={() => refetch()}
-            tintColor={colors.primary[500]}
+            tintColor="#FF5A5F"
           />
         }
       >
-        {/* Metrics row */}
-        <View style={styles.metricsRow}>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>Active Listings</Text>
-            <Text style={styles.metricValue}>{(listings || []).length}</Text>
-          </View>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>Total Beds</Text>
-            <Text style={styles.metricValue}>{totalBeds}</Text>
-          </View>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>Available Today</Text>
-            <Text style={styles.metricValue}>{totalAvailable}</Text>
-          </View>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>Pending Apps</Text>
-            <Text style={styles.metricValue}>{newApplications}</Text>
+        {/* Header Section */}
+        <View style={styles.header}>
+          <View style={styles.headerTop}>
+            <View>
+              <Text style={styles.greeting}>Welcome back,</Text>
+              <Text style={styles.userName}>{user?.fullName || "Provider"}</Text>
+            </View>
+            <TouchableOpacity style={styles.notificationButton}>
+              <View style={styles.notificationIconContainer}>
+                <Ionicons name="notifications-outline" size={24} color="#222" />
+                {newApplications > 0 && <View style={styles.notificationDot} />}
+              </View>
+            </TouchableOpacity>
           </View>
         </View>
-        {/* Three main tiles at the top */}
-        <View style={styles.tilesContainer}>
-          {/* Beds Available Tile */}
-          <View style={[styles.tile, styles.bedsTile]}>
-            <Ionicons name="bed-outline" size={32} color={colors.primary[500]} />
-            <Text style={styles.tileNumber}>{totalAvailable}</Text>
-            <Text style={styles.tileLabel}>Beds Available</Text>
+
+        {/* Performance Overview Card */}
+        <View style={styles.performanceCard}>
+          <View style={styles.performanceHeader}>
+            <Text style={styles.performanceTitle}>Performance Overview</Text>
+            <View style={styles.periodSelector}>
+              {(["week", "month", "year"] as const).map((period) => (
+                <TouchableOpacity
+                  key={period}
+                  style={[
+                    styles.periodButton,
+                    selectedPeriod === period && styles.periodButtonActive,
+                  ]}
+                  onPress={() => setSelectedPeriod(period)}
+                >
+                  <Text
+                    style={[
+                      styles.periodButtonText,
+                      selectedPeriod === period && styles.periodButtonTextActive,
+                    ]}
+                  >
+                    {period.charAt(0).toUpperCase() + period.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
-          {/* New Applications Tile */}
-          <TouchableOpacity
-            style={[styles.tile, styles.applicationsTile]}
-            onPress={() => {
-              // TODO: Navigate to Applications screen when it's built
-              console.log("Navigate to Applications");
-            }}
-            accessibilityLabel="View new applications"
-            accessibilityRole="button"
+          {/* Key Metrics Grid */}
+          <View style={styles.metricsGrid}>
+            <View style={styles.metricItem}>
+              <View style={styles.metricIconContainer}>
+                <MaterialCommunityIcons name="cash" size={20} color="#00A699" />
+              </View>
+              <Text style={styles.metricValue}>${revenue.toLocaleString()}</Text>
+              <Text style={styles.metricLabel}>Revenue</Text>
+              <View style={styles.metricChange}>
+                <Ionicons name="trending-up" size={14} color="#00A699" />
+                <Text style={styles.metricChangeText}>+12%</Text>
+              </View>
+            </View>
+
+            <View style={styles.metricItem}>
+              <View style={styles.metricIconContainer}>
+                <Ionicons name="bed-outline" size={20} color="#FF5A5F" />
+              </View>
+              <Text style={styles.metricValue}>{occupancyRate}%</Text>
+              <Text style={styles.metricLabel}>Occupancy</Text>
+              <View style={styles.metricChange}>
+                <Ionicons name="trending-up" size={14} color="#00A699" />
+                <Text style={styles.metricChangeText}>+5%</Text>
+              </View>
+            </View>
+
+            <View style={styles.metricItem}>
+              <View style={styles.metricIconContainer}>
+                <Ionicons name="star" size={20} color="#FFB400" />
+              </View>
+              <Text style={styles.metricValue}>{rating}</Text>
+              <Text style={styles.metricLabel}>Rating</Text>
+              <View style={styles.metricChange}>
+                <Text style={styles.metricChangeTextNeutral}>23 reviews</Text>
+              </View>
+            </View>
+
+            <View style={styles.metricItem}>
+              <View style={styles.metricIconContainer}>
+                <Ionicons name="people-outline" size={20} color="#7B61FF" />
+              </View>
+              <Text style={styles.metricValue}>{newApplications}</Text>
+              <Text style={styles.metricLabel}>New Apps</Text>
+              <View style={styles.metricChange}>
+                <View style={styles.newBadge}>
+                  <Text style={styles.newBadgeText}>NEW</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Quick Actions */}
+        <View style={styles.quickActionsContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickActionsContent}
           >
-            <View style={styles.badgeContainer}>
-              <Ionicons name="document-text-outline" size={32} color={colors.primary[500]} />
+            <TouchableOpacity
+              style={[styles.quickActionCard, styles.quickActionPrimary]}
+              onPress={() => navigation.navigate("ListingWizard")}
+            >
+              <View style={styles.quickActionIcon}>
+                <Ionicons name="add-circle" size={28} color="#FFF" />
+              </View>
+              <Text style={styles.quickActionTextPrimary}>Add Listing</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickActionCard}
+              onPress={() => navigation.navigate("AvailabilityUpdater")}
+            >
+              <View style={styles.quickActionIcon}>
+                <Ionicons name="calendar-outline" size={28} color="#FF5A5F" />
+              </View>
+              <Text style={styles.quickActionText}>Update Availability</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickActionCard}
+              onPress={() => showToast("Applications coming soon!", "info")}
+            >
+              <View style={styles.quickActionIcon}>
+                <Ionicons name="document-text-outline" size={28} color="#FF5A5F" />
+              </View>
+              <Text style={styles.quickActionText}>Applications</Text>
               {newApplications > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{newApplications}</Text>
+                <View style={styles.quickActionBadge}>
+                  <Text style={styles.quickActionBadgeText}>{newApplications}</Text>
                 </View>
               )}
-            </View>
-            <Text style={styles.tileNumber}>{newApplications}</Text>
-            <Text style={styles.tileLabel}>New Applications</Text>
-          </TouchableOpacity>
+            </TouchableOpacity>
 
-          {/* Add New Listing Tile */}
-          <TouchableOpacity
-            style={[styles.tile, styles.addListingTile]}
-            onPress={() => navigation.navigate("ListingWizard")}
-            accessibilityLabel="Add new listing"
-            accessibilityRole="button"
-          >
-            <Ionicons name="add-circle" size={32} color={colors.gray[900]} />
-            <Text style={styles.addListingText}>Add New Listing</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickActionCard}
+              onPress={() => showToast("Messages coming soon!", "info")}
+            >
+              <View style={styles.quickActionIcon}>
+                <Ionicons name="chatbubbles-outline" size={28} color="#FF5A5F" />
+              </View>
+              <Text style={styles.quickActionText}>Messages</Text>
+            </TouchableOpacity>
+          </ScrollView>
         </View>
 
-        {/* My Listings Section */}
+        {/* Listings Section */}
         <View style={styles.listingsSection}>
-          <Text style={styles.sectionTitle}>My Listings</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Your Listings</Text>
+            <TouchableOpacity onPress={() => navigation.navigate("ListingWizard")}>
+              <Text style={styles.seeAllText}>Add new</Text>
+            </TouchableOpacity>
+          </View>
 
           {isLoading && (
-            <View style={{ paddingVertical: spacing.xl, alignItems: "center" }}>
-              <ActivityIndicator size="large" color={colors.primary[500]} />
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#FF5A5F" />
             </View>
           )}
 
           {isError && (
-            <View style={styles.listingCard}>
-              <Text style={{ color: colors.red }}>Failed to load listings.</Text>
-              <TouchableOpacity onPress={() => refetch()} style={styles.viewButton}>
-                <Text style={styles.viewButtonText}>Retry</Text>
+            <View style={styles.emptyStateCard}>
+              <Ionicons name="alert-circle-outline" size={48} color="#717171" />
+              <Text style={styles.emptyStateTitle}>Failed to load listings</Text>
+              <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+                <Text style={styles.retryButtonText}>Retry</Text>
               </TouchableOpacity>
             </View>
           )}
 
-          {!isLoading && !isError && (listings?.length || 0) === 0 && (
-            <View style={styles.listingCard}>
-              <Text style={{ color: colors.gray[300] }}>No listings yet.</Text>
+          {!isLoading && !isError && (!listings || listings.length === 0) ? (
+            <View style={styles.emptyStateCard}>
+              <Ionicons name="home-outline" size={48} color="#717171" />
+              <Text style={styles.emptyStateTitle}>No listings yet</Text>
+              <Text style={styles.emptyStateSubtitle}>
+                Start hosting by adding your first property
+              </Text>
               <TouchableOpacity
-                style={[styles.viewButton, { marginTop: spacing.sm }]}
-                onPress={() => navigation.navigate("AddListing")}
+                style={styles.addFirstListingButton}
+                onPress={() => navigation.navigate("ListingWizard")}
               >
-                <Text style={styles.viewButtonText}>Add Your First Listing</Text>
+                <Text style={styles.addFirstListingButtonText}>Add your first listing</Text>
               </TouchableOpacity>
             </View>
-          )}
-
-          {(listings || []).map((listing) => (
-            <View key={listing.id} style={styles.listingCard}>
-              {/* Listing Image */}
-              <Image
-                source={{ uri: listing.image }}
-                style={styles.listingImage}
-                accessibilityLabel={`Photo of ${listing.title}`}
-              />
-
-              {/* Listing Info */}
-              <View style={styles.listingInfo}>
-                <Text style={styles.listingTitle}>{listing.title}</Text>
-                <Text style={styles.listingAddress} numberOfLines={1}>
-                  {listing.address}
-                </Text>
-                <View style={styles.listingStats}>
-                  <Ionicons name="bed-outline" size={14} color={colors.primary[500]} />
-                <Text style={styles.listingStatsText}>
-                  {listing.availableBeds}/{listing.totalBeds} available
-                </Text>
-              </View>
-                <Text style={styles.lastUpdatedText}>
-                  Updated {listing.lastUpdated}
-                </Text>
-              </View>
-
-              {/* Action Buttons */}
-              <View style={styles.listingActions}>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.listingsScrollContent}
+            >
+              {(listings || []).map((listing) => (
                 <TouchableOpacity
-                  style={styles.editButton}
-                  onPress={() => {
-                    navigation.navigate("EditListing", {
-                      listingId: listing.id,
-                      listingData: {
-                        id: listing.id,
-                        title: listing.title,
-                        address: listing.address,
-                        totalBeds: listing.totalBeds,
-                        availableBeds: listing.availableBeds,
-                        lastUpdated: listing.lastUpdated,
-                      },
-                    });
-                  }}
-                  accessibilityLabel="Edit listing"
-                  accessibilityRole="button"
+                  key={listing.id}
+                  style={styles.listingCard}
+                  onPress={() =>
+                    navigation.navigate("ProviderListingDetails", { listingId: listing.id })
+                  }
+                  activeOpacity={0.9}
                 >
-                  <Text style={styles.editButtonText}>Edit</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.viewButton}
-                  onPress={() => {
-                    navigation.navigate("ProviderListingDetails", { listingId: listing.id });
-                  }}
-                  accessibilityLabel="View listing"
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.viewButtonText}>View</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
-
-          {/* Recent Activity (simple) */}
-          {(listings || []).length > 0 && (
-            <View style={{ marginTop: spacing.lg }}>
-              <Text style={styles.sectionTitle}>Recent Activity</Text>
-              {(listings || [])
-                .slice(0, 3)
-                .map((l) => (
-                  <View key={`activity-${l.id}`} style={styles.activityItem}>
-                    <Ionicons name="refresh-outline" size={16} color={colors.gray[400]} />
-                    <Text style={styles.activityText}>Updated availability on {l.title}</Text>
+                  <Image
+                    source={{ uri: listing.image || "https://via.placeholder.com/300x200" }}
+                    style={styles.listingImage}
+                  />
+                  <View style={styles.listingContent}>
+                    <View style={styles.listingHeader}>
+                      <View style={styles.listingBadge}>
+                        <Text style={styles.listingBadgeText}>
+                          {listing.availableBeds} beds available
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.listingMenuButton}
+                        onPress={() =>
+                          navigation.navigate("EditListing", {
+                            listingId: listing.id,
+                            listingData: {
+                              id: listing.id,
+                              title: listing.title,
+                              address: listing.address,
+                              totalBeds: listing.totalBeds,
+                              availableBeds: listing.availableBeds,
+                              lastUpdated: listing.lastUpdated,
+                            },
+                          })
+                        }
+                      >
+                        <Ionicons name="ellipsis-horizontal" size={20} color="#717171" />
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={styles.listingTitle} numberOfLines={1}>
+                      {listing.title}
+                    </Text>
+                    <Text style={styles.listingAddress} numberOfLines={1}>
+                      {listing.address}
+                    </Text>
+                    <View style={styles.listingFooter}>
+                      <View style={styles.listingStats}>
+                        <Ionicons name="bed-outline" size={14} color="#717171" />
+                        <Text style={styles.listingStatsText}>
+                          {listing.totalBeds} total beds
+                        </Text>
+                      </View>
+                      <Text style={styles.listingUpdated}>Updated {listing.lastUpdated}</Text>
+                    </View>
                   </View>
-                ))}
-            </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           )}
         </View>
 
-        {/* Quick Actions Section */}
-        <View style={styles.quickActionsSection}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
+        {/* Recent Activity */}
+        <View style={styles.activitySection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Recent Activity</Text>
+            <TouchableOpacity>
+              <Text style={styles.seeAllText}>See all</Text>
+            </TouchableOpacity>
+          </View>
 
-          <TouchableOpacity
-            style={styles.quickActionButton}
-            onPress={() => navigation.navigate("AvailabilityUpdater")}
-            accessibilityLabel="Update bed availability"
-            accessibilityRole="button"
-          >
-            <Ionicons name="refresh-outline" size={24} color={colors.primary[500]} />
-            <View style={styles.quickActionTextContainer}>
-              <Text style={styles.quickActionTitle}>Update Availability</Text>
-              <Text style={styles.quickActionSubtitle}>
-                Keep bed counts current for seekers
-              </Text>
+          <View style={styles.activityList}>
+            <View style={styles.activityItem}>
+              <View style={[styles.activityIcon, { backgroundColor: "#E6F7F6" }]}>
+                <Ionicons name="checkmark-circle" size={20} color="#00A699" />
+              </View>
+              <View style={styles.activityContent}>
+                <Text style={styles.activityTitle}>Application approved</Text>
+                <Text style={styles.activitySubtitle}>John Doe for Downtown Shelter</Text>
+                <Text style={styles.activityTime}>2 hours ago</Text>
+              </View>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.gray[400]} />
-          </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.quickActionButton}
-            onPress={() => {
-              // TODO: Will navigate to Applications Pipeline when it's built
-              console.log("Applications Pipeline - Coming soon!");
-            }}
-            accessibilityLabel="View all applications"
-            accessibilityRole="button"
-          >
-            <Ionicons name="people-outline" size={24} color={colors.primary[500]} />
-            <View style={styles.quickActionTextContainer}>
-              <Text style={styles.quickActionTitle}>Manage Applications</Text>
-              <Text style={styles.quickActionSubtitle}>
-                Review and process applications
-              </Text>
+            <View style={styles.activityItem}>
+              <View style={[styles.activityIcon, { backgroundColor: "#FFF0E6" }]}>
+                <Ionicons name="document-text" size={20} color="#FFB400" />
+              </View>
+              <View style={styles.activityContent}>
+                <Text style={styles.activityTitle}>New application received</Text>
+                <Text style={styles.activitySubtitle}>5 applications for Westside Haven</Text>
+                <Text style={styles.activityTime}>5 hours ago</Text>
+              </View>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.gray[400]} />
-          </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.quickActionButton}
-            onPress={() => {
-              // TODO: Will navigate to Analytics when it's built
-              console.log("Analytics - Coming soon!");
-            }}
-            accessibilityLabel="View analytics"
-            accessibilityRole="button"
-          >
-            <Ionicons name="analytics-outline" size={24} color={colors.primary[500]} />
-            <View style={styles.quickActionTextContainer}>
-              <Text style={styles.quickActionTitle}>Analytics</Text>
-              <Text style={styles.quickActionSubtitle}>
-                View performance metrics
-              </Text>
+            <View style={styles.activityItem}>
+              <View style={[styles.activityIcon, { backgroundColor: "#FFE8E8" }]}>
+                <Ionicons name="trending-up" size={20} color="#FF5A5F" />
+              </View>
+              <View style={styles.activityContent}>
+                <Text style={styles.activityTitle}>Occupancy increased</Text>
+                <Text style={styles.activitySubtitle}>Now at 85% capacity</Text>
+                <Text style={styles.activityTime}>1 day ago</Text>
+              </View>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.gray[400]} />
-          </TouchableOpacity>
+          </View>
         </View>
+
+        {/* Resources Section */}
+        <View style={styles.resourcesSection}>
+          <Text style={styles.sectionTitle}>Resources</Text>
+          <View style={styles.resourcesGrid}>
+            <TouchableOpacity style={styles.resourceCard}>
+              <Ionicons name="book-outline" size={24} color="#222" />
+              <Text style={styles.resourceTitle}>Provider Guide</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.resourceCard}>
+              <Ionicons name="shield-checkmark-outline" size={24} color="#222" />
+              <Text style={styles.resourceTitle}>Safety Center</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.resourceCard}>
+              <Ionicons name="help-circle-outline" size={24} color="#222" />
+              <Text style={styles.resourceTitle}>Get Help</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.resourceCard}>
+              <Ionicons name="stats-chart-outline" size={24} color="#222" />
+              <Text style={styles.resourceTitle}>Analytics</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Bottom spacing */}
+        <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -290,207 +386,405 @@ export default function ProviderDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.gray[900],
-  },
-  header: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xl,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[800],
-  },
-  welcomeText: {
-    fontSize: typography.sizes.md,
-    color: colors.gray[400],
-    marginBottom: spacing.xs,
-  },
-  providerName: {
-    fontSize: typography.sizes["3xl"],
-    fontWeight: "700",
-    color: colors.primary[500],
+    backgroundColor: "#FFFFFF",
   },
   scrollView: {
     flex: 1,
   },
-  scrollContent: {
-    paddingBottom: spacing["3xl"],
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === "android" ? 10 : 0,
+    paddingBottom: 20,
+    backgroundColor: "#FFFFFF",
   },
-  tilesContainer: {
+  headerTop: {
     flexDirection: "row",
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
-    gap: spacing.md,
-  },
-  tile: {
-    flex: 1,
+    justifyContent: "space-between",
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: spacing.lg,
-    borderRadius: radius.lg,
-    ...shadows.medium,
   },
-  bedsTile: {
-    backgroundColor: colors.gray[850],
-    borderWidth: 1,
-    borderColor: colors.primary[500],
+  greeting: {
+    fontSize: 14,
+    color: "#717171",
+    marginBottom: 4,
   },
-  applicationsTile: {
-    backgroundColor: colors.gray[850],
-    borderWidth: 1,
-    borderColor: colors.primary[500],
+  userName: {
+    fontSize: 24,
+    fontWeight: "600",
+    color: "#222222",
   },
-  addListingTile: {
-    backgroundColor: colors.primary[500],
+  notificationButton: {
+    padding: 8,
   },
-  badgeContainer: {
+  notificationIconContainer: {
     position: "relative",
   },
-  badge: {
+  notificationDot: {
     position: "absolute",
-    top: -4,
-    right: -8,
-    backgroundColor: colors.red,
-    borderRadius: radius.full,
+    top: 0,
+    right: 0,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#FF5A5F",
+  },
+  performanceCard: {
+    marginHorizontal: 20,
+    marginBottom: 24,
+    padding: 20,
+    backgroundColor: "#F7F7F7",
+    borderRadius: 12,
+  },
+  performanceHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  performanceTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#222222",
+  },
+  periodSelector: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    padding: 2,
+  },
+  periodButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  periodButtonActive: {
+    backgroundColor: "#222222",
+  },
+  periodButtonText: {
+    fontSize: 12,
+    color: "#717171",
+    fontWeight: "500",
+  },
+  periodButtonTextActive: {
+    color: "#FFFFFF",
+  },
+  metricsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginHorizontal: -8,
+  },
+  metricItem: {
+    width: "50%",
+    paddingHorizontal: 8,
+    marginBottom: 20,
+  },
+  metricIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  metricValue: {
+    fontSize: 24,
+    fontWeight: "600",
+    color: "#222222",
+    marginBottom: 4,
+  },
+  metricLabel: {
+    fontSize: 12,
+    color: "#717171",
+    marginBottom: 4,
+  },
+  metricChange: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  metricChangeText: {
+    fontSize: 12,
+    color: "#00A699",
+    marginLeft: 4,
+    fontWeight: "500",
+  },
+  metricChangeTextNeutral: {
+    fontSize: 12,
+    color: "#717171",
+  },
+  newBadge: {
+    backgroundColor: "#FF5A5F",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  newBadgeText: {
+    fontSize: 10,
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  quickActionsContainer: {
+    marginBottom: 24,
+  },
+  quickActionsContent: {
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  quickActionCard: {
+    width: 100,
+    height: 100,
+    backgroundColor: "#F7F7F7",
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+    position: "relative",
+  },
+  quickActionPrimary: {
+    backgroundColor: "#FF5A5F",
+  },
+  quickActionIcon: {
+    marginBottom: 8,
+  },
+  quickActionText: {
+    fontSize: 12,
+    color: "#222222",
+    fontWeight: "500",
+    textAlign: "center",
+  },
+  quickActionTextPrimary: {
+    fontSize: 12,
+    color: "#FFFFFF",
+    fontWeight: "500",
+  },
+  quickActionBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: "#FF5A5F",
+    borderRadius: 10,
     minWidth: 20,
     height: 20,
-    alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: spacing.xs,
+    alignItems: "center",
+    paddingHorizontal: 6,
   },
-  badgeText: {
-    fontSize: typography.sizes.xs,
-    fontWeight: "700",
-    color: colors.white,
-  },
-  tileNumber: {
-    fontSize: typography.sizes["3xl"],
-    fontWeight: "700",
-    color: colors.primary[500],
-    marginTop: spacing.sm,
-  },
-  tileLabel: {
-    fontSize: typography.sizes.xs,
-    color: colors.gray[400],
-    textAlign: "center",
-    marginTop: spacing.xs,
-  },
-  addListingText: {
-    fontSize: typography.sizes.sm,
+  quickActionBadgeText: {
+    fontSize: 10,
+    color: "#FFFFFF",
     fontWeight: "600",
-    color: colors.gray[900],
-    marginTop: spacing.sm,
   },
   listingsSection: {
-    paddingHorizontal: spacing.lg,
-    marginTop: spacing.lg,
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+    paddingHorizontal: 20,
   },
   sectionTitle: {
-    fontSize: typography.sizes.xl,
+    fontSize: 20,
     fontWeight: "600",
-    color: colors.gray[50],
-    marginBottom: spacing.md,
+    color: "#222222",
+  },
+  seeAllText: {
+    fontSize: 14,
+    color: "#FF5A5F",
+    fontWeight: "500",
+  },
+  loadingContainer: {
+    padding: 40,
+    alignItems: "center",
+  },
+  emptyStateCard: {
+    marginHorizontal: 20,
+    padding: 40,
+    backgroundColor: "#F7F7F7",
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  emptyStateTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#222222",
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateSubtitle: {
+    fontSize: 14,
+    color: "#717171",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  addFirstListingButton: {
+    backgroundColor: "#FF5A5F",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  addFirstListingButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#DDD",
+  },
+  retryButtonText: {
+    color: "#222",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  listingsScrollContent: {
+    paddingHorizontal: 20,
+    gap: 16,
   },
   listingCard: {
-    flexDirection: "row",
-    backgroundColor: colors.gray[850],
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.gray[800],
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    ...shadows.subtle,
+    width: screenWidth * 0.75,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    overflow: "hidden",
+    marginRight: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   listingImage: {
-    width: 80,
-    height: 80,
-    borderRadius: radius.md,
-    backgroundColor: colors.gray[700],
+    width: "100%",
+    height: 160,
+    backgroundColor: "#F7F7F7",
   },
-  listingInfo: {
-    flex: 1,
-    marginLeft: spacing.md,
-    justifyContent: "center",
+  listingContent: {
+    padding: 16,
+  },
+  listingHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 8,
+  },
+  listingBadge: {
+    backgroundColor: "#E6F7F6",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  listingBadgeText: {
+    fontSize: 12,
+    color: "#00A699",
+    fontWeight: "500",
+  },
+  listingMenuButton: {
+    padding: 4,
   },
   listingTitle: {
-    fontSize: typography.sizes.md,
+    fontSize: 16,
     fontWeight: "600",
-    color: colors.gray[50],
-    marginBottom: spacing.xs,
+    color: "#222222",
+    marginBottom: 4,
   },
   listingAddress: {
-    fontSize: typography.sizes.sm,
-    color: colors.gray[400],
-    marginBottom: spacing.xs,
+    fontSize: 14,
+    color: "#717171",
+    marginBottom: 12,
+  },
+  listingFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   listingStats: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.xs,
-    marginBottom: spacing.xs,
+    gap: 4,
   },
   listingStatsText: {
-    fontSize: typography.sizes.sm,
-    color: colors.primary[500],
+    fontSize: 12,
+    color: "#717171",
+  },
+  listingUpdated: {
+    fontSize: 12,
+    color: "#B0B0B0",
+  },
+  activitySection: {
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  activityList: {
+    backgroundColor: "#F7F7F7",
+    borderRadius: 12,
+    padding: 16,
+  },
+  activityItem: {
+    flexDirection: "row",
+    marginBottom: 16,
+  },
+  activityIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  activityContent: {
+    flex: 1,
+  },
+  activityTitle: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#222222",
+    marginBottom: 2,
+  },
+  activitySubtitle: {
+    fontSize: 13,
+    color: "#717171",
+    marginBottom: 2,
+  },
+  activityTime: {
+    fontSize: 12,
+    color: "#B0B0B0",
+  },
+  resourcesSection: {
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  resourcesGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 16,
+    marginHorizontal: -8,
+  },
+  resourceCard: {
+    width: "50%",
+    paddingHorizontal: 8,
+    marginBottom: 16,
+  },
+  resourceTitle: {
+    fontSize: 14,
+    color: "#222222",
+    marginTop: 8,
     fontWeight: "500",
   },
-  lastUpdatedText: {
-    fontSize: typography.sizes.xs,
-    color: colors.gray[500],
-  },
-  listingActions: {
-    justifyContent: "center",
-    gap: spacing.sm,
-  },
-  editButton: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.primary[500],
-    alignItems: "center",
-  },
-  editButtonText: {
-    fontSize: typography.sizes.sm,
-    fontWeight: "600",
-    color: colors.primary[500],
-  },
-  viewButton: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.sm,
-    backgroundColor: colors.primary[500],
-    alignItems: "center",
-  },
-  viewButtonText: {
-    fontSize: typography.sizes.sm,
-    fontWeight: "600",
-    color: colors.gray[900],
-  },
-  quickActionsSection: {
-    paddingHorizontal: spacing.lg,
-    marginTop: spacing.xl,
-  },
-  quickActionButton: {
+  metricsRow: {
     flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.gray[850],
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.gray[800],
-    padding: spacing.md,
-    marginBottom: spacing.md,
+    paddingHorizontal: 20,
+    marginBottom: 20,
+    gap: 12,
   },
-  quickActionTextContainer: {
+  metricCard: {
     flex: 1,
-    marginLeft: spacing.md,
-  },
-  quickActionTitle: {
-    fontSize: typography.sizes.md,
-    fontWeight: "600",
-    color: colors.gray[50],
-    marginBottom: spacing.xs,
-  },
-  quickActionSubtitle: {
-    fontSize: typography.sizes.sm,
-    color: colors.gray[400],
+    backgroundColor: "#F7F7F7",
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
   },
 });
