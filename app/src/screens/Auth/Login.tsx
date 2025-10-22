@@ -177,11 +177,20 @@ export default function Login() {
         resetAttempts(); // Reset rate limiting on success
         setUser(result.user);
 
-        // Navigate to main app
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "Tabs" }],
-        });
+        // Route based on user role
+        if (result.user.role === "provider") {
+          // Providers go to Provider Dashboard
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "ProviderDashboard" }],
+          });
+        } else {
+          // Seekers go to main tabs
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "Tabs" }],
+          });
+        }
       } else {
         incrementAttempts(); // Increment failed attempts
 
@@ -278,11 +287,7 @@ export default function Login() {
           {/* Rate limit warning */}
           {isLocked && (
             <View style={styles.rateLimitWarning} accessibilityRole="alert">
-              <Ionicons
-                name="lock-closed"
-                size={20}
-                color={"#EF4444"}
-              />
+              <Ionicons name="lock-closed" size={20} color={"#EF4444"} />
               <Text style={styles.rateLimitText}>
                 Too many attempts. Try again in {timeUntilUnlock} seconds.
               </Text>
@@ -357,11 +362,7 @@ export default function Login() {
               }
               testID="login-button"
             >
-              {isLoading ? (
-                <ActivityIndicator color={"#000000"} />
-              ) : (
-                "Log In"
-              )}
+              {isLoading ? <ActivityIndicator color={"#000000"} /> : "Log In"}
             </Button>
 
             {/* Sign Up Link */}

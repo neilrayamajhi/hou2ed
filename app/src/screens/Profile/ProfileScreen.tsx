@@ -146,33 +146,89 @@ export default function ProfileScreen() {
       {
         text: "Sign Out",
         style: "destructive",
-        onPress: async () => {
-          try {
-            // First logout completely
-            await logout();
-
-            // Small delay to ensure state is cleared
-            await new Promise(resolve => setTimeout(resolve, 100));
-
-            // Navigate to RoleSelection (the entry point for auth flow)
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "RoleSelection" }],
-            });
-          } catch (error) {
-            console.error("Logout error:", error);
-            // Even if logout fails, still navigate to auth screen
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "RoleSelection" }],
-            });
-          }
+        onPress: () => {
+          logout();
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "Login" }],
+          });
         },
       },
     ]);
   }, [logout, navigation]);
 
+  const handleSwitchRole = useCallback(async () => {
+    const newRole = user?.role === "provider" ? "seeker" : "provider";
+    Alert.alert(
+      "Switch Role",
+      `Switch to ${newRole === "provider" ? "Housing Provider" : "Housing Seeker"}?`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Switch",
+          onPress: async () => {
+            try {
+              const { supabase } = await import("../../lib/supabase");
+              const {
+                data: { user: authUser },
+              } = await supabase.auth.getUser();
+
+              if (!authUser) {
+                Alert.alert("Error", "Not logged in");
+                return;
+              }
+
+              const { error } = await supabase
+                .from("profiles")
+                .update({ role: newRole })
+                .eq("id", authUser.id);
+
+              if (error) {
+                Alert.alert("Error", "Failed to switch role");
+                return;
+              }
+
+              Alert.alert(
+                "Success",
+                `Switched to ${newRole}. Please sign out and back in to see changes.`,
+                [
+                  {
+                    text: "OK",
+                    onPress: () => {
+                      logout();
+                      navigation.reset({
+                        index: 0,
+                        routes: [{ name: "Login" }],
+                      });
+                    },
+                  },
+                ],
+              );
+            } catch (err) {
+              Alert.alert("Error", "Failed to switch role");
+            }
+          },
+        },
+      ],
+    );
+  }, [user?.role, logout, navigation]);
+
   const profileSections: ProfileSection[] = [
+    // Provider Dashboard - only show if user is a provider
+    ...(user?.role === "provider"
+      ? [
+          {
+            id: "provider-dashboard",
+            title: "Provider Dashboard",
+            icon: "home-outline" as keyof typeof Ionicons.glyphMap,
+            onPress: () => navigation.navigate("ProviderDashboard"),
+            showArrow: true,
+          },
+        ]
+      : []),
     {
       id: "applications",
       title: "My Applications",
@@ -441,6 +497,41 @@ export default function ProfileScreen() {
           {profileSections.map(renderSection)}
         </View>
 
+        {/* Dev Tools Section */}
+        <View style={styles.devToolsSection}>
+          <Text style={styles.devToolsTitle}>Developer Tools</Text>
+
+          <TouchableOpacity
+            style={styles.devButton}
+            onPress={() => navigation.navigate("DevMenu")}
+            accessibilityLabel="Open dev menu"
+            accessibilityRole="button"
+          >
+            <Ionicons
+              name="code-outline"
+              size={20}
+              color={colors.primary[500]}
+            />
+            <Text style={styles.devButtonText}>Dev Menu</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.devButton}
+            onPress={handleSwitchRole}
+            accessibilityLabel="Switch role"
+            accessibilityRole="button"
+          >
+            <Ionicons
+              name="swap-horizontal-outline"
+              size={20}
+              color={colors.primary[500]}
+            />
+            <Text style={styles.devButtonText}>
+              Switch to {user?.role === "provider" ? "Seeker" : "Provider"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Sign Out Button */}
         <TouchableOpacity
           style={styles.signOutButton}
@@ -685,6 +776,36 @@ const styles = StyleSheet.create({
   },
   dangerText: {
     color: colors.red,
+  },
+  devToolsSection: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.xl,
+    marginBottom: spacing.md,
+  },
+  devToolsTitle: {
+    fontSize: typography.sizes.xs,
+    fontWeight: "600",
+    color: colors.gray[500],
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: spacing.md,
+  },
+  devButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.gray[850],
+    borderWidth: 1,
+    borderColor: colors.primary[500],
+    marginBottom: spacing.sm,
+  },
+  devButtonText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: "500",
+    color: colors.primary[500],
+    marginLeft: spacing.sm,
   },
   signOutButton: {
     flexDirection: "row",
