@@ -15,7 +15,12 @@
       "Bash(del nul)",
       "Bash(dir hou2ed /a)",
       "Bash(rm nul)",
-      "Bash(rm -rf hou2ed/.git)"
+      "Bash(rm -rf hou2ed/.git)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd hou2ed project files and Claude Code configuration\n\nAdded the complete hou2ed housing application project including:\n- React Native mobile app with authentication and listing features\n- Supabase backend configuration and migrations\n- Documentation and setup guides\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push -u origin arav-rawat)",
+      "Bash(git ls-tree -r --name-only origin/arav-rawat)",
+      "Bash(cat hou2ed/app/.gitignore)",
+      "Bash(git add -A)"
     ],
     "deny": [],
     "ask": []
