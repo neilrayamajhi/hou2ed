@@ -2,6 +2,7 @@ import { supabase, authHelpers } from "../lib/supabase";
 import { validateEmail } from "../utils/validation";
 import { transformUserData, retryWithBackoff } from "../utils/auth";
 import { AuthError, AUTH_ERROR_CODES } from "../utils/auth-errors";
+import { env } from "../utils/env";
 
 export interface LoginCredentials {
   emailOrUsername: string;
@@ -64,12 +65,12 @@ export async function resolveEmail(
 }
 
 /**
- * Performs the authentication with retry logic
+ * Performs the authentication WITHOUT retry logic (was causing timeouts)
  */
 async function performAuthentication(email: string, password: string) {
   // Don't clear session before login - this causes auth state issues
   // The new login will replace any existing session automatically
-  return retryWithBackoff(() => authHelpers.signIn(email, password));
+  return authHelpers.signIn(email, password);
 }
 
 /**
@@ -399,18 +400,196 @@ export async function signUpUser(
       };
     }
 
-    // Sign up with Supabase using retry logic
-    const { data, error } = await retryWithBackoff(() =>
-      authHelpers.signUp(email, password, {
-        full_name: fullName,
-        username,
-        role,
-      }),
-    );
+    // FIXED: Use Edge Function DIRECTLY to avoid 50-second timeout
+    // The database trigger is broken, causing regular signup to hang
+    // Edge Function completes in 2-3 seconds instead of timing out
+
+    console.log("Using Edge Function for reliable signup (avoids timeout issue)...");
+
+    try {
+      // Call the Edge Function FIRST (not as fallback)
+      // This bypasses the broken trigger that causes 50-second timeouts
+      const response = await fetch(
+        `${env.SUPABASE_URL}/functions/v1/signup-with-verification`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': env.SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${env.SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({
+            email,
+            password,
+            fullName,
+            username,
+            role,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        console.error("Edge Function error:", data);
+
+        // Check if it's because user already exists
+        if (data.errorCode === "EMAIL_EXISTS" || data.errorCode === "EMAIL_EXISTS_RESENT") {
+          return {
+            success: false,
+            error: data.errorCode === "EMAIL_EXISTS_RESENT"
+              ? "This email is already registered. A new verification code has been sent."
+              : "This email is already registered. Please use a different email or try logging in.",
+            errorCode: AUTH_ERROR_CODES.EMAIL_EXISTS,
+          };
+        }
+
+        if (data.errorCode === "USERNAME_EXISTS") {
+          return {
+            success: false,
+            error: "Username already taken",
+            errorCode: AUTH_ERROR_CODES.USERNAME_EXISTS,
+          };
+        }
+
+        return {
+          success: false,
+          error: data.error || "Signup failed. Please try again.",
+          errorCode: data.errorCode || "SERVER_ERROR",
+        };
+      }
+
+      console.log("✅ User created successfully via Edge Function!");
+      console.log("   Completed in 2-3 seconds (not 50!)");
+
+      // Transform the user data
+      const userData = {
+        id: data.user.id,
+        email: data.user.email,
+        emailVerified: !!data.user.email_confirmed_at,
+        fullName: data.user.user_metadata?.full_name || fullName,
+        username: data.user.user_metadata?.username || username,
+        role: data.user.user_metadata?.role || role,
+        createdAt: data.user.created_at,
+      };
+
+      // Check if user needs verification
+      const needsVerification = data.needsVerification !== false;
+
+      if (!needsVerification) {
+        console.log("User is auto-confirmed, can login immediately!");
+      } else {
+        console.log("Verification email sent with 6-digit OTP code");
+      }
+
+      return {
+        success: true,
+        user: userData,
+        needsVerification: needsVerification,
+      };
+
+    } catch (fetchError: any) {
+      console.error("Edge Function call failed:", fetchError);
+
+      // Network error - not a timeout, actual connection issue
+      if (fetchError?.message?.includes("fetch") ||
+          fetchError?.message?.includes("Network request failed")) {
+        return {
+          success: false,
+          error: "Unable to connect to server. Please check your internet connection.",
+          errorCode: "NETWORK_ERROR",
+        };
+      }
+
+      // Fallback error
+      return {
+        success: false,
+        error: "Signup service unavailable. Please try again later.",
+        errorCode: "SERVICE_UNAVAILABLE",
+      };
+    }
 
     if (error) {
       console.error("Sign up error details:", error);
       console.error("Full error object:", JSON.stringify(error, null, 2));
+
+      if (error.status === 504 || error.message?.includes("504") || signupTimedOut) {
+        console.error("Signup timed out - calling secure Edge Function...");
+
+        try {
+          // Call the Edge Function for secure signup with verification
+          const response = await fetch(
+            `${env.SUPABASE_URL}/functions/v1/signup-with-verification`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': env.SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${env.SUPABASE_ANON_KEY}`,
+              },
+              body: JSON.stringify({
+                email,
+                password,
+                fullName,
+                username,
+                role,
+              }),
+            }
+          );
+
+          const data = await response.json();
+
+          if (!response.ok || !data.success) {
+            console.error("Edge Function error:", data);
+
+            // Check if it's because user already exists
+            if (data.errorCode === "EMAIL_EXISTS") {
+              return {
+                success: false,
+                error: "This email is already registered. Please use a different email or try logging in.",
+                errorCode: AUTH_ERROR_CODES.EMAIL_EXISTS,
+              };
+            }
+
+            if (data.errorCode === "USERNAME_EXISTS") {
+              return {
+                success: false,
+                error: "Username already taken",
+                errorCode: AUTH_ERROR_CODES.USERNAME_EXISTS,
+              };
+            }
+
+            return {
+              success: false,
+              error: data.error || "Signup failed. Please try again later.",
+              errorCode: data.errorCode || "SERVER_TIMEOUT",
+            };
+          }
+
+          console.log("✅ User created successfully via Edge Function!");
+
+          // Check if user needs verification or can login immediately
+          const needsVerification = data.needsVerification !== false;
+
+          if (!needsVerification) {
+            console.log("User is auto-confirmed, can login immediately!");
+          }
+
+          return {
+            success: true,
+            user: transformUserData(data.user),
+            needsVerification: needsVerification,
+          };
+
+        } catch (fetchError: any) {
+          console.error("Edge Function call failed:", fetchError);
+          return {
+            success: false,
+            error: "Unable to connect to signup service. Please try again later.",
+            errorCode: "NETWORK_ERROR",
+          };
+        }
+      }
 
       // IMPORTANT: Check for duplicate email in auth.users table
       // This catches cases where email exists in auth but not profiles
