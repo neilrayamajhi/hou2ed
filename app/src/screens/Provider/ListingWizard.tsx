@@ -1,17 +1,37 @@
 import React, { useMemo, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, TextInput, Alert, Image } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  SafeAreaView,
+  ScrollView,
+  TextInput,
+  Alert,
+  Image,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
 import { RootStackNavigationProp } from "../../navigation/types";
 import { useToast } from "../../components/ui/Toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createListing, getCurrentProviderId } from "../../services/listing.service";
+import {
+  createListing,
+  getCurrentProviderId,
+} from "../../services/listing.service";
 import * as ImagePicker from "expo-image-picker";
 import { uploadListingImage } from "../../services/storage.service";
 import { useRequireProvider } from "../../hooks/useRequireProvider";
 
-type StepKey = "Basics" | "Location" | "Photos" | "AmenitiesRules" | "Pricing" | "Availability" | "Review";
+type StepKey =
+  | "Basics"
+  | "Location"
+  | "Photos"
+  | "AmenitiesRules"
+  | "Pricing"
+  | "Availability"
+  | "Review";
 
 export default function ListingWizard() {
   const navigation = useNavigation<RootStackNavigationProp>();
@@ -28,6 +48,17 @@ export default function ListingWizard() {
     "Availability",
     "Review",
   ];
+
+  // Map step keys to display titles
+  const stepTitles: Record<StepKey, string> = {
+    Basics: "Basics",
+    Location: "Location",
+    Photos: "Photos",
+    AmenitiesRules: "Amenities & Rules",
+    Pricing: "Pricing",
+    Availability: "Availability",
+    Review: "Review",
+  };
   const [stepIndex, setStepIndex] = useState(0);
 
   // Form state (MVP subset)
@@ -37,14 +68,36 @@ export default function ListingWizard() {
   const [availableBeds, setAvailableBeds] = useState("");
   const [price, setPrice] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
-  const [availabilityDays, setAvailabilityDays] = useState<Record<string, number>>({});
+  const [availabilityDays, setAvailabilityDays] = useState<
+    Record<string, number>
+  >({});
+
+  // Amenities state
+  const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
+
+  // Services state
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+
+  // Rules state
+  const [curfew, setCurfew] = useState("");
+  const [visitorsPolicy, setVisitorsPolicy] = useState("");
+  const [petsPolicy, setPetsPolicy] = useState<
+    "allowed" | "not_allowed" | "service_only"
+  >("not_allowed");
+
+  // Eligibility state
+  const [minAge, setMinAge] = useState("");
+  const [maxAge, setMaxAge] = useState("");
+  const [selectedEligibility, setSelectedEligibility] = useState<string[]>([]);
 
   const { mutate: submit, isPending } = useMutation({
     mutationFn: async () => {
       const providerId = await getCurrentProviderId();
       if (!providerId) throw new Error("You must be logged in as a provider");
       const totalBedsNum = Number(totalBeds);
-      const availableBedsNum = availableBeds ? Number(availableBeds) : undefined;
+      const availableBedsNum = availableBeds
+        ? Number(availableBeds)
+        : undefined;
       const priceNum = price ? Number(price) : undefined;
       const created = await createListing(providerId, {
         title: title.trim(),
@@ -52,6 +105,15 @@ export default function ListingWizard() {
         totalBeds: totalBedsNum,
         availableBeds: availableBedsNum,
         price: priceNum,
+        amenities: selectedAmenities.length > 0 ? selectedAmenities : undefined,
+        services: selectedServices.length > 0 ? selectedServices : undefined,
+        curfew: curfew.trim() || undefined,
+        visitorsPolicy: visitorsPolicy.trim() || undefined,
+        petsPolicy: petsPolicy !== "not_allowed" ? petsPolicy : undefined,
+        minAge: minAge ? Number(minAge) : undefined,
+        maxAge: maxAge ? Number(maxAge) : undefined,
+        eligibility:
+          selectedEligibility.length > 0 ? selectedEligibility : undefined,
       });
       // If photos selected and created successfully, upload and attach
       if (created.success && created.listingId) {
@@ -59,17 +121,23 @@ export default function ListingWizard() {
         if (photos.length > 0) {
           const urls: string[] = [];
           for (const uri of photos) {
-            const res = await uploadListingImage(uri, created.listingId, { resize: 'full' });
+            const res = await uploadListingImage(uri, created.listingId, {
+              resize: "full",
+            });
             if (res.success && res.url) urls.push(res.url);
           }
           if (urls.length > 0) {
-            const { updateListing } = await import("../../services/listing.service");
+            const { updateListing } = await import(
+              "../../services/listing.service"
+            );
             await updateListing(created.listingId, { images: urls });
           }
         }
         // Persist per-day availability (calendar) if provided
         if (Object.keys(availabilityDays).length > 0) {
-          const { updateListing } = await import("../../services/listing.service");
+          const { updateListing } = await import(
+            "../../services/listing.service"
+          );
           await updateListing(created.listingId, { availabilityDays });
         }
       }
@@ -80,20 +148,29 @@ export default function ListingWizard() {
         showToast(res.error || "Failed to create listing", "error");
         return;
       }
-      showToast("Listing published", "success");
-      await queryClient.invalidateQueries({ queryKey: ["providerListings"] });
-      navigation.navigate("ProviderDashboard");
+      showToast("Listing published successfully!", "success");
+      // Invalidate cache so dashboard will refetch listings
+      queryClient.invalidateQueries({ queryKey: ["providerListings"] });
+      // Navigate back to the tabs and select the Dashboard tab
+      navigation.navigate("Tabs", { screen: "Dashboard" });
     },
-    onError: (e: any) => showToast(e?.message || "Failed to create listing", "error"),
+    onError: (e: any) =>
+      showToast(e?.message || "Failed to create listing", "error"),
   });
 
   const currentStep = steps[stepIndex];
-  const progress = useMemo(() => (stepIndex + 1) / steps.length, [stepIndex, steps.length]);
+  const progress = useMemo(
+    () => (stepIndex + 1) / steps.length,
+    [stepIndex, steps.length],
+  );
 
   const next = () => {
     if (currentStep === "Basics") {
       if (!title.trim() || !address.trim() || !totalBeds) {
-        Alert.alert("Missing info", "Title, address and total beds are required");
+        Alert.alert(
+          "Missing info",
+          "Title, address and total beds are required",
+        );
         return;
       }
     }
@@ -104,22 +181,57 @@ export default function ListingWizard() {
   const renderBasics = () => (
     <View>
       <Text style={styles.label}>Property name *</Text>
-      <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="e.g. Haven House" placeholderTextColor={colors.gray[500]} />
+      <TextInput
+        style={styles.input}
+        value={title}
+        onChangeText={setTitle}
+        placeholder="e.g. Haven House"
+        placeholderTextColor={colors.gray[500]}
+      />
 
       <Text style={styles.label}>Address *</Text>
-      <TextInput style={styles.input} value={address} onChangeText={setAddress} placeholder="e.g. 123 Main St, City" placeholderTextColor={colors.gray[500]} />
+      <TextInput
+        style={styles.input}
+        value={address}
+        onChangeText={setAddress}
+        placeholder="e.g. 123 Main St, City"
+        placeholderTextColor={colors.gray[500]}
+      />
 
       <Text style={styles.label}>Total beds *</Text>
-      <TextInput style={styles.input} value={totalBeds} onChangeText={setTotalBeds} keyboardType="number-pad" placeholder="e.g. 12" placeholderTextColor={colors.gray[500]} />
+      <TextInput
+        style={styles.input}
+        value={totalBeds}
+        onChangeText={setTotalBeds}
+        keyboardType="number-pad"
+        placeholder="e.g. 12"
+        placeholderTextColor={colors.gray[500]}
+      />
+      <Text style={styles.helper}>Maximum capacity of your shelter</Text>
 
-      <Text style={styles.label}>Available beds (today)</Text>
-      <TextInput style={styles.input} value={availableBeds} onChangeText={setAvailableBeds} keyboardType="number-pad" placeholder="e.g. 3" placeholderTextColor={colors.gray[500]} />
+      <Text style={[styles.label, { marginTop: spacing.md }]}>
+        Available beds (today)
+      </Text>
+      <TextInput
+        style={styles.input}
+        value={availableBeds}
+        onChangeText={setAvailableBeds}
+        keyboardType="number-pad"
+        placeholder="e.g. 3"
+        placeholderTextColor={colors.gray[500]}
+      />
+      <Text style={styles.helper}>
+        How many beds are open right now? You can update this anytime from your
+        dashboard.
+      </Text>
     </View>
   );
 
   const renderLocation = () => (
     <View>
-      <Text style={styles.helper}>We’ll geocode address server-side later.</Text>
+      <Text style={styles.helper}>
+        We’ll geocode address server-side later.
+      </Text>
     </View>
   );
   const renderPhotos = () => (
@@ -140,12 +252,20 @@ export default function ListingWizard() {
         <TouchableOpacity
           style={[styles.photoItem, styles.addPhoto]}
           onPress={async () => {
-            const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (perm.status !== 'granted') {
-              Alert.alert('Permission needed', 'Please allow photo library access');
+            const perm =
+              await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (perm.status !== "granted") {
+              Alert.alert(
+                "Permission needed",
+                "Please allow photo library access",
+              );
               return;
             }
-            const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: false, quality: 0.9 });
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: false,
+              quality: 0.9,
+            });
             if (!result.canceled) {
               const uri = result.assets?.[0]?.uri;
               if (uri) setPhotos((prev) => [...prev, uri]);
@@ -154,34 +274,305 @@ export default function ListingWizard() {
           accessibilityLabel="Add photo"
         >
           <Ionicons name="add" size={24} color={colors.gray[500]} />
-          <Text style={{ color: colors.gray[400], marginTop: 4 }}>Add photo</Text>
+          <Text style={{ color: colors.gray[400], marginTop: 4 }}>
+            Add photo
+          </Text>
         </TouchableOpacity>
       </View>
-      <Text style={[styles.helper, { marginTop: spacing.sm }]}>Add a few photos to make your listing stand out.</Text>
+      <Text style={[styles.helper, { marginTop: spacing.sm }]}>
+        Add a few photos to make your listing stand out.
+      </Text>
     </View>
   );
-  const renderAmenities = () => (
-    <View>
-      <Text style={styles.helper}>Amenities/Rules form coming next.</Text>
-    </View>
-  );
+  const toggleArrayItem = (
+    array: string[],
+    setArray: React.Dispatch<React.SetStateAction<string[]>>,
+    item: string,
+  ) => {
+    if (array.includes(item)) {
+      setArray(array.filter((i) => i !== item));
+    } else {
+      setArray([...array, item]);
+    }
+  };
+
+  const renderAmenities = () => {
+    const amenitiesOptions = [
+      { label: "Wi-Fi", value: "wifi" },
+      { label: "Laundry", value: "laundry" },
+      { label: "Kitchen", value: "kitchen" },
+      { label: "Meals Provided", value: "meals" },
+      { label: "Showers", value: "showers" },
+      { label: "Storage Lockers", value: "storage" },
+      { label: "Common Area", value: "common_area" },
+      { label: "Air Conditioning", value: "ac" },
+      { label: "Heating", value: "heating" },
+    ];
+
+    const servicesOptions = [
+      { label: "Case Management", value: "case_management" },
+      { label: "Medical Services", value: "medical" },
+      { label: "Mental Health Services", value: "mental_health" },
+      { label: "Substance Abuse Services", value: "substance_abuse" },
+      { label: "Job Training", value: "job_training" },
+      { label: "Education Support", value: "education" },
+      { label: "Transportation Assistance", value: "transportation" },
+      { label: "Legal Aid", value: "legal" },
+    ];
+
+    const eligibilityOptions = [
+      { label: "All Genders Welcome", value: "all_genders" },
+      { label: "Men Only", value: "men_only" },
+      { label: "Women Only", value: "women_only" },
+      { label: "Families Welcome", value: "families" },
+      { label: "Veterans Welcome", value: "veterans" },
+      { label: "LGBTQ+ Friendly", value: "lgbtq" },
+      { label: "Youth (18-24)", value: "youth" },
+      { label: "Seniors (55+)", value: "seniors" },
+    ];
+
+    return (
+      <ScrollView>
+        {/* Amenities Section */}
+        <Text style={styles.sectionTitle}>Amenities</Text>
+        <Text style={styles.sectionDescription}>
+          Select the amenities available at your facility
+        </Text>
+        <View style={styles.chipGrid}>
+          {amenitiesOptions.map((option) => (
+            <TouchableOpacity
+              key={option.value}
+              style={[
+                styles.chip,
+                selectedAmenities.includes(option.value) && styles.chipSelected,
+              ]}
+              onPress={() =>
+                toggleArrayItem(
+                  selectedAmenities,
+                  setSelectedAmenities,
+                  option.value,
+                )
+              }
+            >
+              <Text
+                style={[
+                  styles.chipText,
+                  selectedAmenities.includes(option.value) &&
+                    styles.chipTextSelected,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Services Section */}
+        <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>
+          Services
+        </Text>
+        <Text style={styles.sectionDescription}>
+          Select the services you provide
+        </Text>
+        <View style={styles.chipGrid}>
+          {servicesOptions.map((option) => (
+            <TouchableOpacity
+              key={option.value}
+              style={[
+                styles.chip,
+                selectedServices.includes(option.value) && styles.chipSelected,
+              ]}
+              onPress={() =>
+                toggleArrayItem(
+                  selectedServices,
+                  setSelectedServices,
+                  option.value,
+                )
+              }
+            >
+              <Text
+                style={[
+                  styles.chipText,
+                  selectedServices.includes(option.value) &&
+                    styles.chipTextSelected,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Rules Section */}
+        <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>
+          Rules & Policies
+        </Text>
+
+        <Text style={styles.label}>Curfew</Text>
+        <TextInput
+          style={styles.input}
+          value={curfew}
+          onChangeText={setCurfew}
+          placeholder="e.g. 10:00 PM or None"
+          placeholderTextColor={colors.gray[500]}
+        />
+
+        <Text style={styles.label}>Visitor Policy</Text>
+        <TextInput
+          style={styles.input}
+          value={visitorsPolicy}
+          onChangeText={setVisitorsPolicy}
+          placeholder="e.g. Visitors allowed 9AM-5PM or No visitors"
+          placeholderTextColor={colors.gray[500]}
+        />
+
+        <Text style={styles.label}>Pet Policy</Text>
+        <View style={styles.chipGrid}>
+          <TouchableOpacity
+            style={[
+              styles.chip,
+              petsPolicy === "allowed" && styles.chipSelected,
+            ]}
+            onPress={() => setPetsPolicy("allowed")}
+          >
+            <Text
+              style={[
+                styles.chipText,
+                petsPolicy === "allowed" && styles.chipTextSelected,
+              ]}
+            >
+              Pets Allowed
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.chip,
+              petsPolicy === "service_only" && styles.chipSelected,
+            ]}
+            onPress={() => setPetsPolicy("service_only")}
+          >
+            <Text
+              style={[
+                styles.chipText,
+                petsPolicy === "service_only" && styles.chipTextSelected,
+              ]}
+            >
+              Service Animals Only
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.chip,
+              petsPolicy === "not_allowed" && styles.chipSelected,
+            ]}
+            onPress={() => setPetsPolicy("not_allowed")}
+          >
+            <Text
+              style={[
+                styles.chipText,
+                petsPolicy === "not_allowed" && styles.chipTextSelected,
+              ]}
+            >
+              No Pets
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Eligibility Section */}
+        <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>
+          Who Can Apply
+        </Text>
+        <Text style={styles.sectionDescription}>
+          Select who is eligible for your facility
+        </Text>
+
+        <Text style={styles.label}>Age Range (Optional)</Text>
+        <View
+          style={{
+            flexDirection: "row",
+            gap: spacing.md,
+            marginBottom: spacing.lg,
+          }}
+        >
+          <View style={{ flex: 1 }}>
+            <TextInput
+              style={styles.input}
+              value={minAge}
+              onChangeText={setMinAge}
+              placeholder="Min age"
+              keyboardType="number-pad"
+              placeholderTextColor={colors.gray[500]}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <TextInput
+              style={styles.input}
+              value={maxAge}
+              onChangeText={setMaxAge}
+              placeholder="Max age"
+              keyboardType="number-pad"
+              placeholderTextColor={colors.gray[500]}
+            />
+          </View>
+        </View>
+
+        <View style={styles.chipGrid}>
+          {eligibilityOptions.map((option) => (
+            <TouchableOpacity
+              key={option.value}
+              style={[
+                styles.chip,
+                selectedEligibility.includes(option.value) &&
+                  styles.chipSelected,
+              ]}
+              onPress={() =>
+                toggleArrayItem(
+                  selectedEligibility,
+                  setSelectedEligibility,
+                  option.value,
+                )
+              }
+            >
+              <Text
+                style={[
+                  styles.chipText,
+                  selectedEligibility.includes(option.value) &&
+                    styles.chipTextSelected,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
+    );
+  };
   const renderPricing = () => (
     <View>
       <Text style={styles.label}>Price per month ($)</Text>
-      <TextInput style={styles.input} value={price} onChangeText={setPrice} keyboardType="number-pad" placeholder="e.g. 500 (leave empty if free)" placeholderTextColor={colors.gray[500]} />
+      <TextInput
+        style={styles.input}
+        value={price}
+        onChangeText={setPrice}
+        keyboardType="number-pad"
+        placeholder="e.g. 500 (leave empty if free)"
+        placeholderTextColor={colors.gray[500]}
+      />
     </View>
   );
   // Helpers for calendar
-  const pad = (n: number) => String(n).padStart(2, '0');
+  const pad = (n: number) => String(n).padStart(2, "0");
   const today = new Date();
   const [calYear, setCalYear] = useState(today.getFullYear());
   const [calMonth, setCalMonth] = useState(today.getMonth()); // 0-11
   const firstOfMonth = new Date(calYear, calMonth, 1);
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
   const startWeekday = firstOfMonth.getDay(); // 0 Sun - 6 Sat
-  const weeks: (number | null)[] = Array.from({ length: startWeekday }, () => null).concat(
-    Array.from({ length: daysInMonth }, (_, i) => i + 1)
-  );
+  const weeks: (number | null)[] = Array.from(
+    { length: startWeekday },
+    () => null,
+  ).concat(Array.from({ length: daysInMonth }, (_, i) => i + 1));
   while (weeks.length % 7 !== 0) weeks.push(null);
 
   const changeDay = (day: number, delta: number) => {
@@ -196,31 +587,60 @@ export default function ListingWizard() {
 
   const renderAvailability = () => (
     <View>
+      <Text style={styles.sectionDescription}>
+        Optional: Set specific bed availability for future dates. This helps
+        seekers plan ahead and see when beds will open up. You can skip this and
+        update availability daily from your dashboard instead.
+      </Text>
       <View style={styles.calHeader}>
-        <TouchableOpacity onPress={() => {
-          let m = calMonth - 1; let y = calYear;
-          if (m < 0) { m = 11; y -= 1; }
-          setCalMonth(m); setCalYear(y);
-        }} accessibilityLabel="Previous month">
+        <TouchableOpacity
+          onPress={() => {
+            let m = calMonth - 1;
+            let y = calYear;
+            if (m < 0) {
+              m = 11;
+              y -= 1;
+            }
+            setCalMonth(m);
+            setCalYear(y);
+          }}
+          accessibilityLabel="Previous month"
+        >
           <Ionicons name="chevron-back" size={20} color={colors.gray[200]} />
         </TouchableOpacity>
-        <Text style={styles.calTitle}>{new Date(calYear, calMonth).toLocaleString(undefined, { month: 'long', year: 'numeric' })}</Text>
-        <TouchableOpacity onPress={() => {
-          let m = calMonth + 1; let y = calYear;
-          if (m > 11) { m = 0; y += 1; }
-          setCalMonth(m); setCalYear(y);
-        }} accessibilityLabel="Next month">
+        <Text style={styles.calTitle}>
+          {new Date(calYear, calMonth).toLocaleString(undefined, {
+            month: "long",
+            year: "numeric",
+          })}
+        </Text>
+        <TouchableOpacity
+          onPress={() => {
+            let m = calMonth + 1;
+            let y = calYear;
+            if (m > 11) {
+              m = 0;
+              y += 1;
+            }
+            setCalMonth(m);
+            setCalYear(y);
+          }}
+          accessibilityLabel="Next month"
+        >
           <Ionicons name="chevron-forward" size={20} color={colors.gray[200]} />
         </TouchableOpacity>
       </View>
       <View style={styles.weekRow}>
-        {['S','M','T','W','T','F','S'].map((d) => (
-          <Text key={d} style={styles.weekday}>{d}</Text>
+        {["S", "M", "T", "W", "T", "F", "S"].map((d, idx) => (
+          <Text key={`weekday-${idx}`} style={styles.weekday}>
+            {d}
+          </Text>
         ))}
       </View>
       <View style={styles.grid}>
         {weeks.map((day, idx) => {
-          if (day === null) return <View key={`pad-${idx}`} style={styles.cellPad} />;
+          if (day === null)
+            return <View key={`pad-${idx}`} style={styles.cellPad} />;
           const key = `${calYear}-${pad(calMonth + 1)}-${pad(day)}`;
           const val = availabilityDays[key] ?? 0;
           const max = Number(totalBeds) || 0;
@@ -229,29 +649,128 @@ export default function ListingWizard() {
               <Text style={styles.cellDay}>{day}</Text>
               <Text style={styles.cellVal}>{val}</Text>
               <View style={styles.cellBtns}>
-                <TouchableOpacity accessibilityLabel="Decrement value" onPress={() => changeDay(day, -1)} disabled={val <= 0}>
-                  <Ionicons name="remove-circle" size={18} color={val > 0 ? colors.primary[500] : colors.gray[700]} />
+                <TouchableOpacity
+                  accessibilityLabel="Decrement value"
+                  onPress={() => changeDay(day, -1)}
+                  disabled={val <= 0}
+                >
+                  <Ionicons
+                    name="remove-circle"
+                    size={18}
+                    color={val > 0 ? colors.primary[500] : colors.gray[700]}
+                  />
                 </TouchableOpacity>
-                <TouchableOpacity accessibilityLabel="Increment value" onPress={() => changeDay(day, +1)} disabled={val >= max}>
-                  <Ionicons name="add-circle" size={18} color={val < max ? colors.primary[500] : colors.gray[700]} />
+                <TouchableOpacity
+                  accessibilityLabel="Increment value"
+                  onPress={() => changeDay(day, +1)}
+                  disabled={val >= max}
+                >
+                  <Ionicons
+                    name="add-circle"
+                    size={18}
+                    color={val < max ? colors.primary[500] : colors.gray[700]}
+                  />
                 </TouchableOpacity>
               </View>
             </View>
           );
         })}
       </View>
-      <Text style={[styles.helper, { marginTop: spacing.sm }]}>Set per-day available beds. Max equals Total beds.</Text>
+      <Text style={[styles.helper, { marginTop: spacing.sm }]}>
+        Set per-day available beds. Max equals Total beds.
+      </Text>
     </View>
   );
-  const renderReview = () => (
-    <View>
-      <Text style={styles.reviewItem}><Text style={styles.reviewKey}>Name:</Text> {title || "-"}</Text>
-      <Text style={styles.reviewItem}><Text style={styles.reviewKey}>Address:</Text> {address || "-"}</Text>
-      <Text style={styles.reviewItem}><Text style={styles.reviewKey}>Total beds:</Text> {totalBeds || "-"}</Text>
-      <Text style={styles.reviewItem}><Text style={styles.reviewKey}>Available today:</Text> {availableBeds || "-"}</Text>
-      <Text style={styles.reviewItem}><Text style={styles.reviewKey}>Price:</Text> {price || "Free"}</Text>
-    </View>
-  );
+  const renderReview = () => {
+    const calendarDaysSet = Object.keys(availabilityDays).length;
+    return (
+      <ScrollView>
+        <Text style={styles.sectionTitle}>Basic Information</Text>
+        <Text style={styles.reviewItem}>
+          <Text style={styles.reviewKey}>Name:</Text> {title || "-"}
+        </Text>
+        <Text style={styles.reviewItem}>
+          <Text style={styles.reviewKey}>Address:</Text> {address || "-"}
+        </Text>
+        <Text style={styles.reviewItem}>
+          <Text style={styles.reviewKey}>Total beds:</Text> {totalBeds || "-"}
+        </Text>
+        <Text style={styles.reviewItem}>
+          <Text style={styles.reviewKey}>Available today:</Text>{" "}
+          {availableBeds || totalBeds || "-"}
+        </Text>
+        <Text style={styles.reviewItem}>
+          <Text style={styles.reviewKey}>Price:</Text>{" "}
+          {price ? `$${price}/month` : "Free"}
+        </Text>
+
+        <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>
+          Media
+        </Text>
+        <Text style={styles.reviewItem}>
+          <Text style={styles.reviewKey}>Photos:</Text> {photos.length} uploaded
+        </Text>
+        <Text style={styles.reviewItem}>
+          <Text style={styles.reviewKey}>Calendar:</Text>{" "}
+          {calendarDaysSet > 0
+            ? `${calendarDaysSet} days scheduled`
+            : "Not set (using daily updates)"}
+        </Text>
+
+        <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>
+          Amenities & Services
+        </Text>
+        <Text style={styles.reviewItem}>
+          <Text style={styles.reviewKey}>Amenities:</Text>{" "}
+          {selectedAmenities.length > 0
+            ? selectedAmenities.length
+            : "None selected"}
+        </Text>
+        <Text style={styles.reviewItem}>
+          <Text style={styles.reviewKey}>Services:</Text>{" "}
+          {selectedServices.length > 0
+            ? selectedServices.length
+            : "None selected"}
+        </Text>
+
+        <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>
+          Rules & Policies
+        </Text>
+        <Text style={styles.reviewItem}>
+          <Text style={styles.reviewKey}>Curfew:</Text>{" "}
+          {curfew || "Not specified"}
+        </Text>
+        <Text style={styles.reviewItem}>
+          <Text style={styles.reviewKey}>Visitors:</Text>{" "}
+          {visitorsPolicy || "Not specified"}
+        </Text>
+        <Text style={styles.reviewItem}>
+          <Text style={styles.reviewKey}>Pets:</Text>{" "}
+          {petsPolicy === "allowed"
+            ? "Allowed"
+            : petsPolicy === "service_only"
+              ? "Service Animals Only"
+              : "Not Allowed"}
+        </Text>
+
+        <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>
+          Eligibility
+        </Text>
+        <Text style={styles.reviewItem}>
+          <Text style={styles.reviewKey}>Age Range:</Text>{" "}
+          {minAge || maxAge
+            ? `${minAge || "Any"} - ${maxAge || "Any"}`
+            : "Any age"}
+        </Text>
+        <Text style={styles.reviewItem}>
+          <Text style={styles.reviewKey}>Who Can Apply:</Text>{" "}
+          {selectedEligibility.length > 0
+            ? selectedEligibility.length + " criteria selected"
+            : "Open to all"}
+        </Text>
+      </ScrollView>
+    );
+  };
 
   const body = () => {
     switch (currentStep) {
@@ -277,7 +796,10 @@ export default function ListingWizard() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => (stepIndex === 0 ? navigation.goBack() : back())}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => (stepIndex === 0 ? navigation.goBack() : back())}
+        >
           <Ionicons name="arrow-back" size={24} color={colors.gray[50]} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Create a listing</Text>
@@ -285,11 +807,16 @@ export default function ListingWizard() {
       </View>
 
       <View style={styles.progressBarWrapper}>
-        <View style={[styles.progressBarFill, { width: `${progress * 100}%` }]} />
+        <View
+          style={[styles.progressBarFill, { width: `${progress * 100}%` }]}
+        />
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.stepTitle}>{currentStep}</Text>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <Text style={styles.stepTitle}>{stepTitles[currentStep]}</Text>
         {body()}
       </ScrollView>
 
@@ -303,14 +830,34 @@ export default function ListingWizard() {
         )}
 
         {currentStep === "Review" ? (
-          <TouchableOpacity style={styles.primaryBtn} onPress={() => submit()} disabled={isPending}>
-            <Ionicons name={isPending ? "sync" : "checkmark-circle"} size={20} color={colors.gray[900]} />
-            <Text style={styles.primaryText}>{isPending ? "Publishing..." : "Publish"}</Text>
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={() => submit()}
+            disabled={isPending}
+          >
+            <Ionicons
+              name={isPending ? "sync" : "checkmark-circle"}
+              size={20}
+              color={colors.gray[900]}
+            />
+            <Text style={styles.primaryText}>
+              {isPending ? "Publishing..." : "Publish"}
+            </Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity style={styles.primaryBtn} onPress={next}>
-            <Text style={styles.primaryText}>Next</Text>
-          </TouchableOpacity>
+          <>
+            {currentStep === "Availability" && (
+              <TouchableOpacity
+                style={[styles.secondaryBtn, { marginLeft: spacing.sm }]}
+                onPress={next}
+              >
+                <Text style={styles.secondaryText}>Skip Calendar</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.primaryBtn} onPress={next}>
+              <Text style={styles.primaryText}>Next</Text>
+            </TouchableOpacity>
+          </>
         )}
       </View>
     </SafeAreaView>
@@ -328,14 +875,36 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.gray[800],
   },
   backButton: { padding: spacing.xs },
-  headerTitle: { flex: 1, fontSize: typography.sizes.lg, fontWeight: "600", color: colors.gray[50], textAlign: "center" },
+  headerTitle: {
+    flex: 1,
+    fontSize: typography.sizes.lg,
+    fontWeight: "600",
+    color: colors.gray[50],
+    textAlign: "center",
+  },
   headerSpacer: { width: 32 },
   progressBarWrapper: { height: 4, backgroundColor: colors.gray[800] },
   progressBarFill: { height: 4, backgroundColor: colors.primary[500] },
   scroll: { flex: 1 },
   scrollContent: { padding: spacing.lg, paddingBottom: 120 },
-  stepTitle: { fontSize: typography.sizes.xl, fontWeight: "600", color: colors.gray[50], marginBottom: spacing.lg },
-  label: { fontSize: typography.sizes.md, fontWeight: "600", color: colors.gray[50], marginBottom: spacing.sm },
+  stepTitle: {
+    fontSize: typography.sizes.xl,
+    fontWeight: "600",
+    color: colors.gray[50],
+    marginBottom: spacing.lg,
+  },
+  sectionDescription: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray[400],
+    marginBottom: spacing.lg,
+    lineHeight: 20,
+  },
+  label: {
+    fontSize: typography.sizes.md,
+    fontWeight: "600",
+    color: colors.gray[50],
+    marginBottom: spacing.sm,
+  },
   input: {
     backgroundColor: colors.gray[850],
     borderWidth: 1,
@@ -364,23 +933,113 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: spacing.md,
   },
-  calHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
-  calTitle: { color: colors.gray[50], fontSize: typography.sizes.md, fontWeight: '600' },
-  weekRow: { flexDirection: 'row', marginBottom: spacing.sm },
-  weekday: { flex: 1, textAlign: 'center', color: colors.gray[400], fontSize: typography.sizes.xs },
-  grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  cellPad: { width: `${100/7}%`, height: 64 },
-  cell: { width: `${100/7}%`, height: 64, padding: 4, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.gray[800] },
+  calHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.md,
+  },
+  calTitle: {
+    color: colors.gray[50],
+    fontSize: typography.sizes.md,
+    fontWeight: "600",
+  },
+  weekRow: { flexDirection: "row", marginBottom: spacing.sm },
+  weekday: {
+    flex: 1,
+    textAlign: "center",
+    color: colors.gray[400],
+    fontSize: typography.sizes.xs,
+  },
+  grid: { flexDirection: "row", flexWrap: "wrap" },
+  cellPad: { width: `${100 / 7}%`, height: 64 },
+  cell: {
+    width: `${100 / 7}%`,
+    height: 64,
+    padding: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.gray[800],
+  },
   cellDay: { color: colors.gray[300], fontSize: typography.sizes.xs },
-  cellVal: { color: colors.primary[500], fontWeight: '700', marginTop: 2 },
-  cellBtns: { flexDirection: 'row', gap: 6, marginTop: 2 },
-  photosRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  photoItem: { width: 96, height: 96, borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.gray[800], alignItems: 'center', justifyContent: 'center' },
-  photo: { width: '100%', height: '100%' },
+  cellVal: { color: colors.primary[500], fontWeight: "700", marginTop: 2 },
+  cellBtns: { flexDirection: "row", gap: 6, marginTop: 2 },
+  photosRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
+  photoItem: {
+    width: 96,
+    height: 96,
+    borderRadius: radius.md,
+    overflow: "hidden",
+    backgroundColor: colors.gray[800],
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  photo: { width: "100%", height: "100%" },
   addPhoto: { borderWidth: 1, borderColor: colors.gray[700] },
-  removeBadge: { position: 'absolute', top: 4, right: 4, backgroundColor: colors.primary[500], borderRadius: radius.full, paddingHorizontal: 6, paddingVertical: 2 },
-  secondaryBtn: { flex: 1, borderWidth: 1, borderColor: colors.gray[700], borderRadius: radius.md, alignItems: "center", justifyContent: "center", paddingVertical: spacing.md },
-  secondaryText: { color: colors.gray[300], fontSize: typography.sizes.md, fontWeight: "600" },
-  primaryBtn: { flex: 1, backgroundColor: colors.primary[500], borderRadius: radius.md, alignItems: "center", justifyContent: "center", paddingVertical: spacing.md, flexDirection: "row", gap: spacing.sm },
-  primaryText: { color: colors.gray[900], fontSize: typography.sizes.md, fontWeight: "600" },
+  removeBadge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    backgroundColor: colors.primary[500],
+    borderRadius: radius.full,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  secondaryBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.gray[700],
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: spacing.md,
+  },
+  secondaryText: {
+    color: colors.gray[300],
+    fontSize: typography.sizes.md,
+    fontWeight: "600",
+  },
+  primaryBtn: {
+    flex: 1,
+    backgroundColor: colors.primary[500],
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: spacing.md,
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  primaryText: {
+    color: colors.gray[900],
+    fontSize: typography.sizes.md,
+    fontWeight: "600",
+  },
+  sectionTitle: {
+    fontSize: typography.sizes.lg,
+    fontWeight: "600",
+    color: colors.gray[50],
+    marginBottom: spacing.sm,
+  },
+  chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  chip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.gray[700],
+    backgroundColor: colors.gray[850],
+  },
+  chipSelected: {
+    backgroundColor: colors.primary[500],
+    borderColor: colors.primary[500],
+  },
+  chipText: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray[300],
+  },
+  chipTextSelected: {
+    color: colors.gray[900],
+    fontWeight: "600",
+  },
 });

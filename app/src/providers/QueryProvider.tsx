@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // Create a QueryClient - this manages all data fetching and caching
 // It's like a smart system that remembers data you've already fetched
-const queryClient = new QueryClient({
+export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       // Don't refetch data when window regains focus (mobile app behavior)

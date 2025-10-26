@@ -262,6 +262,54 @@ export async function getApplication(id: string): Promise<Application | null> {
 }
 
 /**
+ * Get all applications for a provider (across all their listings)
+ */
+export async function getProviderApplications(providerId: string): Promise<Application[]> {
+  try {
+    console.log('📋 Fetching applications for provider:', providerId);
+
+    const { data, error} = await supabase
+      .from('applications')
+      .select(`
+        *,
+        listing:listings!inner (
+          id,
+          title,
+          address,
+          city,
+          state,
+          provider_id
+        ),
+        seeker:profiles!applications_seeker_id_fkey (
+          full_name,
+          email,
+          phone
+        )
+      `)
+      .eq('listing.provider_id', providerId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ Error fetching provider applications:', error);
+      return [];
+    }
+
+    console.log(`✅ Found ${data?.length || 0} applications for provider`);
+
+    // Type the response properly
+    const typedApplications: Application[] = data.map((app: any) => ({
+      ...app,
+      documents: app.documents || [],
+    }));
+
+    return typedApplications;
+  } catch (error) {
+    console.error('Failed to fetch provider applications:', error);
+    return [];
+  }
+}
+
+/**
  * Get user's applications
  */
 export async function getUserApplications(): Promise<Application[]> {
