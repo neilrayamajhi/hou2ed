@@ -27,6 +27,7 @@ import {
   filterListingsByQuick,
 } from "../../data/mockListings";
 import { fetchRealShelters } from "../../services/shelterService";
+import { getMarketplaceListings, type MarketplaceListing } from "../../services/marketplace.service";
 import { usePerformance } from "../../utils/perf";
 import type { Listing } from "../../types/listing";
 import type { RootStackNavigationProp } from "../../navigation/types";
@@ -98,49 +99,49 @@ export default function HomeScreen() {
   const mapPerf = usePerformance("mapUpdate");
   const listingLoadPerf = usePerformance("listingLoad");
 
-  // Load real shelter data or fall back to mock data
+  // Load real listings from database or fall back to mock data
   useEffect(() => {
-    async function loadShelters() {
-      if (!location) return;
-
+    async function loadListings() {
       setLoadingData(true);
       listingLoadPerf.start();
       try {
-        // Try to fetch real shelters from OpenStreetMap
-        const realShelters = await fetchRealShelters(
-          location.latitude,
-          location.longitude,
-          15 // 15km radius (~10 miles)
+        // Fetch real listings from Supabase database
+        const dbListings = await getMarketplaceListings(
+          location?.latitude,
+          location?.longitude,
+          50 // 50 mile radius
         );
 
         let allListings: Listing[];
 
-        if (realShelters && realShelters.length > 0) {
-          // Use real shelter data
-          allListings = realShelters as any;
-          console.log(`Found ${realShelters.length} real shelters nearby`);
+        if (dbListings && dbListings.length > 0) {
+          // Use database listings
+          allListings = dbListings as any;
+          console.log(`✅ Found ${dbListings.length} real listings from database`);
           setIsRealData(true);
-          setDataSource('OpenStreetMap Data');
+          setDataSource('Live Database');
         } else {
-          // Fall back to mock data if no real shelters found
-          console.log('No real shelters found, using mock data');
-          allListings = generateListingsAroundLocation(
-            location.latitude,
-            location.longitude,
-            20
-          );
+          // Fall back to mock data if no database listings
+          console.log('No database listings found, using mock data');
+          if (location) {
+            allListings = generateListingsAroundLocation(
+              location.latitude,
+              location.longitude,
+              20
+            );
+          } else {
+            allListings = generateMockListings(20);
+          }
         }
 
         const filtered = filterListingsByQuick(allListings, quickFilters);
         setListings(filtered);
       } catch (error) {
-        console.error('Error loading shelters:', error);
+        console.error('Error loading listings:', error);
         // Fall back to mock data on error
-        const mockData = generateListingsAroundLocation(
-          location.latitude,
-          location.longitude,
-          20
-        );
+        const mockData = location
+          ? generateListingsAroundLocation(location.latitude, location.longitude, 20)
+          : generateMockListings(20);
         const filtered = filterListingsByQuick(mockData, quickFilters);
         setListings(filtered);
       } finally {
@@ -149,14 +150,7 @@ export default function HomeScreen() {
       }
     }
 
-    if (location) {
-      loadShelters();
-    } else {
-      // Use default mock data if no location
-      const allListings = generateMockListings(20);
-      const filtered = filterListingsByQuick(allListings, quickFilters);
-      setListings(filtered);
-    }
+    loadListings();
   }, [quickFilters, location]);
 
   // Update map region when user location is loaded

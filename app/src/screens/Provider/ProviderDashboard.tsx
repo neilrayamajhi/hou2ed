@@ -19,9 +19,11 @@ import {
 } from "../../theme/tokens";
 import { RootStackNavigationProp } from "../../navigation/types";
 import { useProviderListings } from "../../hooks/useProviderListings";
-import { ActivityIndicator, RefreshControl } from "react-native";
+import { useProviderApplications } from "../../hooks/useProviderApplications";
+import { ActivityIndicator, RefreshControl, Alert } from "react-native";
 import { useToast } from "../../components/ui/Toast";
 import { useRequireProvider } from "../../hooks/useRequireProvider";
+import { useAuthStore } from "../../state/useAuthStore";
 
 // Dashboard now uses live data via useProviderListings
 
@@ -36,7 +38,35 @@ export default function ProviderDashboard() {
     refetch,
     isRefetching,
   } = useProviderListings();
+  const { data: applications } = useProviderApplications();
   const { showToast } = useToast();
+  const { user, logout } = useAuthStore();
+
+  const handleLogout = async () => {
+    Alert.alert(
+      "Log Out",
+      "Are you sure you want to log out?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Log Out",
+          style: "destructive",
+          onPress: () => {
+            console.log("Logging out...");
+            logout();
+            navigation.reset({
+              index: 0,
+              routes: [{ name: "Login" }],
+            });
+          },
+        },
+      ],
+      { cancelable: true },
+    );
+  };
 
   const totalBeds = (listings || []).reduce(
     (sum, l) => sum + (l.totalBeds || 0),
@@ -46,14 +76,34 @@ export default function ProviderDashboard() {
     (sum, l) => sum + (l.availableBeds || 0),
     0,
   );
-  const newApplications = 0; // Placeholder until applications are wired
+  const newApplications = (applications || []).filter(
+    (app) => app.status === "new",
+  ).length;
 
   return (
     <SafeAreaView style={styles.container}>
       {/* Header with welcome message */}
       <View style={styles.header}>
-        <Text style={styles.welcomeText}>Provider Dashboard</Text>
-        <Text style={styles.providerName}>Your Properties</Text>
+        <View style={styles.headerContent}>
+          <View>
+            <Text style={styles.welcomeText}>Provider Dashboard</Text>
+            <Text style={styles.providerName}>
+              {user?.user_metadata?.full_name || "Your Properties"}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={handleLogout}
+            style={styles.logoutButton}
+            accessibilityLabel="Log out"
+            accessibilityRole="button"
+          >
+            <Ionicons
+              name="log-out-outline"
+              size={24}
+              color={colors.primary[500]}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -103,10 +153,7 @@ export default function ProviderDashboard() {
           {/* New Applications Tile */}
           <TouchableOpacity
             style={[styles.tile, styles.applicationsTile]}
-            onPress={() => {
-              // TODO: Navigate to Applications screen when it's built
-              console.log("Navigate to Applications");
-            }}
+            onPress={() => navigation.navigate("ApplicationsInbox")}
             accessibilityLabel="View new applications"
             accessibilityRole="button"
           >
@@ -163,11 +210,21 @@ export default function ProviderDashboard() {
           )}
 
           {!isLoading && !isError && (listings?.length || 0) === 0 && (
-            <View style={styles.listingCard}>
-              <Text style={{ color: colors.gray[300] }}>No listings yet.</Text>
+            <View style={styles.emptyState}>
+              <Ionicons
+                name="home-outline"
+                size={48}
+                color={colors.gray[600]}
+              />
+              <Text style={styles.emptyStateTitle}>No listings yet</Text>
+              <Text style={styles.emptyStateSubtitle}>
+                Create your first listing to start accepting applications
+              </Text>
               <TouchableOpacity
-                style={[styles.viewButton, { marginTop: spacing.sm }]}
-                onPress={() => navigation.navigate("AddListing")}
+                style={styles.viewButton}
+                onPress={() => navigation.navigate("ListingWizard")}
+                accessibilityLabel="Add your first listing"
+                accessibilityRole="button"
               >
                 <Text style={styles.viewButtonText}>
                   Add Your First Listing
@@ -295,10 +352,7 @@ export default function ProviderDashboard() {
 
           <TouchableOpacity
             style={styles.quickActionButton}
-            onPress={() => {
-              // TODO: Will navigate to Applications Pipeline when it's built
-              console.log("Applications Pipeline - Coming soon!");
-            }}
+            onPress={() => navigation.navigate("ApplicationsInbox")}
             accessibilityLabel="View all applications"
             accessibilityRole="button"
           >
@@ -363,13 +417,25 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.gray[800],
   },
+  headerContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  logoutButton: {
+    padding: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.gray[850],
+    borderWidth: 1,
+    borderColor: colors.gray[800],
+  },
   welcomeText: {
     fontSize: typography.sizes.md,
     color: colors.gray[400],
     marginBottom: spacing.xs,
   },
   providerName: {
-    fontSize: typography.sizes["3xl"],
+    fontSize: typography.sizes["2xl"],
     fontWeight: "700",
     color: colors.primary[500],
   },
@@ -378,6 +444,33 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: spacing["3xl"],
+  },
+  metricsRow: {
+    flexDirection: "row",
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    gap: spacing.sm,
+  },
+  metricCard: {
+    flex: 1,
+    backgroundColor: colors.gray[850],
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.gray[800],
+    padding: spacing.md,
+    alignItems: "center",
+    ...shadows.subtle,
+  },
+  metricLabel: {
+    fontSize: typography.sizes.xs,
+    color: colors.gray[400],
+    textAlign: "center",
+    marginBottom: spacing.xs,
+  },
+  metricValue: {
+    fontSize: typography.sizes["2xl"],
+    fontWeight: "700",
+    color: colors.primary[500],
   },
   tilesContainer: {
     flexDirection: "row",
@@ -454,6 +547,31 @@ const styles = StyleSheet.create({
     color: colors.gray[50],
     marginBottom: spacing.md,
   },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: spacing["3xl"],
+    paddingHorizontal: spacing.xl,
+    backgroundColor: colors.gray[850],
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.gray[800],
+    marginBottom: spacing.md,
+  },
+  emptyStateTitle: {
+    fontSize: typography.sizes.xl,
+    fontWeight: "600",
+    color: colors.gray[300],
+    marginTop: spacing.lg,
+    marginBottom: spacing.xs,
+    textAlign: "center",
+  },
+  emptyStateSubtitle: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray[500],
+    textAlign: "center",
+    marginBottom: spacing.lg,
+  },
   listingCard: {
     flexDirection: "row",
     backgroundColor: colors.gray[850],
@@ -504,6 +622,15 @@ const styles = StyleSheet.create({
   listingActions: {
     justifyContent: "center",
     gap: spacing.sm,
+  },
+  deleteIconButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.red,
+    alignItems: "center",
+    backgroundColor: `${colors.red}10`,
   },
   editButton: {
     paddingHorizontal: spacing.md,
@@ -557,5 +684,22 @@ const styles = StyleSheet.create({
   quickActionSubtitle: {
     fontSize: typography.sizes.sm,
     color: colors.gray[400],
+  },
+  activityItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.gray[850],
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.gray[800],
+    marginBottom: spacing.sm,
+  },
+  activityText: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray[300],
+    flex: 1,
   },
 });

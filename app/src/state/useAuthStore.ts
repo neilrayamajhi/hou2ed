@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import * as SecureStore from "expo-secure-store";
 import { supabase } from "../lib/supabase";
+import { queryClient } from "../providers/QueryProvider";
 
 export type UserRole = "seeker" | "provider";
 
@@ -60,8 +61,14 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async () => {
         try {
+          console.log("🔴 Logging out - clearing all data...");
+
           // Sign out from Supabase first
           await supabase.auth.signOut();
+
+          // Clear React Query cache (this fixes the stale data issue!)
+          queryClient.clear();
+          console.log("✅ React Query cache cleared");
 
           // Clear all auth-related storage
           await secureStorage.removeItem("auth-storage");
@@ -72,9 +79,12 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: false,
             selectedRole: null,
           });
+
+          console.log("✅ Logout complete");
         } catch (error) {
           console.error("Logout error:", error);
           // Even if Supabase signOut fails, clear local state
+          queryClient.clear();
           set({
             user: null,
             isAuthenticated: false,

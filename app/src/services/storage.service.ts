@@ -45,10 +45,11 @@ interface ImageUploadOptions {
  * Ensure cache directory exists
  */
 async function ensureCacheDir() {
-  if (Platform.OS === 'web') return; // no-op on web
-  const dirInfo = await FileSystem.getInfoAsync(CACHE_DIR);
-  if (!dirInfo.exists) {
+  if (Platform.OS === 'web' || !FileSystem) return; // no-op on web
+  try {
     await FileSystem.makeDirectoryAsync(CACHE_DIR, { intermediates: true });
+  } catch (error) {
+    // Directory might already exist, that's fine
   }
 }
 
@@ -94,15 +95,55 @@ export async function uploadListingImage(
   options: ImageUploadOptions = {}
 ): Promise<UploadResult> {
   try {
+    console.log('📤 Starting image upload:', { uri, listingId, options });
+
     // Process image
     const processedUri = await processImage(uri, options);
+    console.log('✅ Image processed:', processedUri);
 
-    // Read file as blob (works on native and web)
-    const response = await fetch(processedUri);
-    const blob = await response.blob();
+    // Read file - different approach for React Native vs Web
+    let fileData: any;
+    let fileSize: number;
+
+    if (Platform.OS === 'web') {
+      // Web: use blob
+      const response = await fetch(processedUri);
+      const blob = await response.blob();
+      fileData = blob;
+      fileSize = blob.size;
+    } else {
+      // React Native: Read file as ArrayBuffer
+      if (!FileSystem) {
+        throw new Error('Cannot read image file - FileSystem not available');
+      }
+
+      console.log('📱 Reading file for React Native upload...');
+
+      // Read file as base64 (no need for getInfoAsync - deprecated)
+      const base64String = await FileSystem.readAsStringAsync(processedUri, {
+        encoding: 'base64',
+      });
+
+      console.log('✅ File read as base64, length:', base64String.length);
+
+      // Convert base64 to ArrayBuffer
+      const binaryString = atob(base64String);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // Use the ArrayBuffer directly
+      fileData = bytes.buffer;
+      fileSize = bytes.length;
+
+      console.log('✅ Converted to ArrayBuffer, size:', fileSize);
+    }
+
+    console.log('✅ File loaded, size:', fileSize);
 
     // Check file size
-    if (blob.size > MAX_IMAGE_SIZE) {
+    if (fileSize > MAX_IMAGE_SIZE) {
       return {
         success: false,
         error: `Image size exceeds ${MAX_IMAGE_SIZE / 1024 / 1024}MB limit`,
@@ -113,27 +154,33 @@ export async function uploadListingImage(
     const fileName = generateFileName(`listing_${listingId}`, 'jpg');
     const filePath = `${listingId}/${fileName}`;
 
+    console.log('📁 Uploading to:', filePath);
+
     // Upload to Supabase
     const { data, error } = await supabase.storage
       .from(LISTING_IMAGES_BUCKET)
-      .upload(filePath, blob, {
+      .upload(filePath, fileData, {
         contentType: 'image/jpeg',
         cacheControl: '3600',
         upsert: false,
       });
 
     if (error) {
-      console.error('Upload error:', error);
+      console.error('❌ Upload error:', error);
       return {
         success: false,
         error: error.message,
       };
     }
 
+    console.log('✅ Upload successful:', data);
+
     // Get public URL
     const { data: { publicUrl } } = supabase.storage
       .from(LISTING_IMAGES_BUCKET)
       .getPublicUrl(filePath);
+
+    console.log('✅ Public URL:', publicUrl);
 
     return {
       success: true,
@@ -141,7 +188,7 @@ export async function uploadListingImage(
       path: filePath,
     };
   } catch (error) {
-    console.error('Upload listing image error:', error);
+    console.error('❌ Upload listing image error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Upload failed',
@@ -280,21 +327,26 @@ export async function deleteListingImage(path: string): Promise<boolean> {
  */
 export async function cacheImage(url: string): Promise<string | null> {
   try {
+    if (Platform.OS === 'web' || !FileSystem) {
+      // Caching not needed on web
+      return url;
+    }
+
     await ensureCacheDir();
 
     // Generate cache file path
     const filename = url.split('/').pop() || 'image.jpg';
     const fileUri = CACHE_DIR + filename;
 
-    // Check if already cached
-    const fileInfo = await FileSystem.getInfoAsync(fileUri);
-    if (fileInfo.exists) {
-      return fileUri;
+    // Try to download (will skip if file exists)
+    try {
+      const downloadResult = await FileSystem.downloadAsync(url, fileUri);
+      return downloadResult.uri;
+    } catch (downloadError) {
+      // File might already exist or download failed
+      console.log('Cache download info:', downloadError);
+      return fileUri; // Return the path anyway
     }
-
-    // Download and cache
-    const downloadResult = await FileSystem.downloadAsync(url, fileUri);
-    return downloadResult.uri;
   } catch (error) {
     console.error('Cache image error:', error);
     return null;

@@ -22,6 +22,15 @@ export interface CreateListingInput {
   availableBeds?: number;
   price?: number;
   description?: string;
+  // New fields for amenities, services, rules, eligibility
+  amenities?: string[];
+  services?: string[];
+  curfew?: string;
+  visitorsPolicy?: string;
+  petsPolicy?: "allowed" | "not_allowed" | "service_only";
+  minAge?: number;
+  maxAge?: number;
+  eligibility?: string[];
 }
 
 // Type for updating a listing
@@ -34,6 +43,15 @@ export interface UpdateListingInput {
   description?: string;
   images?: string[];
   availabilityDays?: Record<string, number>; // YYYY-MM-DD -> beds
+  // Amenities, services, rules, eligibility
+  amenities?: string[];
+  services?: string[];
+  curfew?: string;
+  visitorsPolicy?: string;
+  petsPolicy?: "allowed" | "not_allowed" | "service_only";
+  minAge?: number;
+  maxAge?: number;
+  eligibility?: string[];
 }
 
 /**
@@ -41,10 +59,19 @@ export interface UpdateListingInput {
  * This gets the listings from the database for the logged-in provider
  */
 export async function getProviderListings(
-  providerId: string
+  providerId: string,
 ): Promise<ProviderListing[]> {
+  console.log("🔵 START getProviderListings for:", providerId);
   try {
-    const { data, error } = await supabase
+    console.log("📋 Fetching listings for provider:", providerId);
+
+    // Create a timeout promise
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Query timeout after 10s")), 10000),
+    );
+
+    // Race between the query and timeout
+    const queryPromise = supabase
       .from("listings")
       .select(
         `
@@ -55,37 +82,56 @@ export async function getProviderListings(
         availability,
         updated_at,
         images
-      `
+      `,
       )
       .eq("provider_id", providerId)
       .eq("is_active", true)
-      .order("created_at", { ascending: false })
-      .abortSignal(AbortSignal.timeout(20000)); // 20 second timeout for this specific query
+      .order("created_at", { ascending: false });
+
+    const { data, error } = (await Promise.race([
+      queryPromise,
+      timeoutPromise,
+    ])) as any;
+
+    console.log(
+      "🟢 Query completed. Error?",
+      !!error,
+      "Data count:",
+      data?.length || 0,
+    );
 
     if (error) {
-      console.error("Error fetching provider listings:", error);
-      // Provide more helpful error message
-      if (error.message?.includes('aborted') || error.message?.includes('timeout')) {
-        throw new Error("Request timed out. Please check your internet connection and try again.");
-      }
+      console.error("❌ Error fetching provider listings:", error);
+      console.error("Error details:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      });
       throw error;
     }
+
+    console.log(
+      `✅ Found ${data?.length || 0} listings for provider ${providerId}`,
+    );
+    console.log("Raw listing data:", data);
 
     // Transform the database format to our app format
     return (
       data?.map((listing) => {
         // Calculate total beds from unit_beds JSON
-        const unitBeds = listing.unit_beds as Record<string, number> || {};
+        const unitBeds = (listing.unit_beds as Record<string, number>) || {};
         const totalBeds = Object.values(unitBeds).reduce(
           (sum, count) => sum + count,
-          0
+          0,
         );
 
         // Get available beds from availability JSON
-        const availability = listing.availability as {
-          beds_today?: number;
-          last_updated_at?: string;
-        } || {};
+        const availability =
+          (listing.availability as {
+            beds_today?: number;
+            last_updated_at?: string;
+          }) || {};
 
         return {
           id: listing.id,
@@ -115,10 +161,19 @@ export async function getListingById(listingId: string): Promise<{
   images: string[];
   price?: number;
   availabilityDays?: Record<string, number>;
+  amenities?: string[];
+  services?: string[];
+  curfew?: string;
+  visitorsPolicy?: string;
+  petsPolicy?: "allowed" | "not_allowed" | "service_only";
+  minAge?: number;
+  maxAge?: number;
+  eligibility?: string[];
 }> {
   const { data, error } = await supabase
     .from("listings")
-    .select(`
+    .select(
+      `
       id,
       title,
       address,
@@ -126,8 +181,13 @@ export async function getListingById(listingId: string): Promise<{
       availability,
       images,
       cost,
-      updated_at
-    `)
+      updated_at,
+      amenities,
+      services,
+      rules,
+      eligibility
+    `,
+    )
     .eq("id", listingId)
     .single();
 
@@ -140,6 +200,47 @@ export async function getListingById(listingId: string): Promise<{
   const availability = (data.availability as any) || {};
   const price = (data.cost as any)?.monthly as number | undefined;
 
+  // Parse amenities from database format
+  const amenitiesObj = (data.amenities as any) || {};
+  const amenities = amenitiesObj.basic || [];
+
+  // Parse services from database format (reverse of createListing mapping)
+  const servicesObj = (data.services as any) || {};
+  const services: string[] = [];
+  if (servicesObj.case_management) services.push("case_management");
+  if (servicesObj.medical) services.push("medical");
+  if (servicesObj.mental_health) services.push("mental_health");
+  if (servicesObj.substance) services.push("substance_abuse");
+  if (servicesObj.employment) services.push("job_training");
+  if (servicesObj.education) services.push("education");
+  if (servicesObj.transportation) services.push("transportation");
+  if (servicesObj.legal) services.push("legal");
+
+  // Parse rules from database format
+  const rulesObj = (data.rules as any) || {};
+  const curfew = rulesObj.curfew || "";
+  const visitorsPolicy = rulesObj.visitors || "";
+  const petsPolicy = rulesObj.pets || "not_allowed";
+
+  // Parse eligibility from database format (reverse of createListing mapping)
+  const eligibilityObj = (data.eligibility as any) || {};
+  const eligibility: string[] = [];
+  const minAge = eligibilityObj.age_range?.[0];
+  const maxAge = eligibilityObj.age_range?.[1];
+
+  if (eligibilityObj.gender) {
+    if (eligibilityObj.gender.includes("male")) eligibility.push("men_only");
+    if (eligibilityObj.gender.includes("female"))
+      eligibility.push("women_only");
+    if (eligibilityObj.gender.includes("all")) eligibility.push("all_genders");
+  }
+  if (eligibilityObj.family_status?.includes("families")) {
+    eligibility.push("families");
+  }
+  if (eligibilityObj.veterans) {
+    eligibility.push("veterans");
+  }
+
   return {
     id: data.id,
     title: data.title,
@@ -150,6 +251,14 @@ export async function getListingById(listingId: string): Promise<{
     images: Array.isArray(data.images) ? (data.images as string[]) : [],
     price,
     availabilityDays: availability.days || {},
+    amenities,
+    services,
+    curfew,
+    visitorsPolicy,
+    petsPolicy,
+    minAge,
+    maxAge,
+    eligibility,
   };
 }
 
@@ -159,9 +268,68 @@ export async function getListingById(listingId: string): Promise<{
  */
 export async function createListing(
   providerId: string,
-  listingData: CreateListingInput
+  listingData: CreateListingInput,
 ): Promise<{ success: boolean; listingId?: string; error?: string }> {
   try {
+    // Build amenities object from array
+    const amenitiesObj: any = {};
+    if (listingData.amenities && listingData.amenities.length > 0) {
+      amenitiesObj.basic = listingData.amenities;
+    }
+
+    // Build services object from array
+    const servicesObj: any = {};
+    if (listingData.services && listingData.services.length > 0) {
+      if (listingData.services.includes("case_management"))
+        servicesObj.case_management = true;
+      if (listingData.services.includes("medical"))
+        servicesObj.medical = ["general_medical"];
+      if (listingData.services.includes("mental_health"))
+        servicesObj.mental_health = ["counseling"];
+      if (listingData.services.includes("substance_abuse"))
+        servicesObj.substance = ["treatment"];
+      if (listingData.services.includes("job_training"))
+        servicesObj.employment = ["job_training"];
+      if (listingData.services.includes("education"))
+        servicesObj.education = ["ged_prep"];
+      if (listingData.services.includes("transportation"))
+        servicesObj.transportation = ["assistance"];
+      if (listingData.services.includes("legal")) servicesObj.legal = true;
+    }
+
+    // Build rules object
+    const rulesObj: any = {};
+    if (listingData.curfew) rulesObj.curfew = listingData.curfew;
+    if (listingData.visitorsPolicy)
+      rulesObj.visitors = listingData.visitorsPolicy;
+    if (listingData.petsPolicy) rulesObj.pets = listingData.petsPolicy;
+
+    // Build eligibility object
+    const eligibilityObj: any = {};
+    if (listingData.minAge !== undefined || listingData.maxAge !== undefined) {
+      eligibilityObj.age_range = [
+        listingData.minAge || 18,
+        listingData.maxAge || 999,
+      ];
+    }
+    if (listingData.eligibility && listingData.eligibility.length > 0) {
+      const genderOptions = [];
+      if (listingData.eligibility.includes("men_only"))
+        genderOptions.push("male");
+      if (listingData.eligibility.includes("women_only"))
+        genderOptions.push("female");
+      if (listingData.eligibility.includes("all_genders"))
+        genderOptions.push("all");
+      if (genderOptions.length > 0) eligibilityObj.gender = genderOptions;
+
+      if (listingData.eligibility.includes("families")) {
+        eligibilityObj.family_status = ["families"];
+      }
+      if (listingData.eligibility.includes("veterans")) {
+        eligibilityObj.veterans = true;
+      }
+    }
+
     // Prepare the data for Supabase
     const insertData = {
       provider_id: providerId,
@@ -179,11 +347,11 @@ export async function createListing(
       },
       ada_beds: 0,
       gender_rooming: "co_ed",
-      amenities: {},
+      amenities: amenitiesObj,
       accessibility: {},
-      eligibility: {},
-      services: {},
-      rules: {},
+      eligibility: eligibilityObj,
+      services: servicesObj,
+      rules: rulesObj,
       cost: listingData.price
         ? { monthly: listingData.price }
         : { is_free: true },
@@ -199,6 +367,13 @@ export async function createListing(
       is_active: true,
     };
 
+    console.log("Creating listing with data:", {
+      title: insertData.title,
+      address: insertData.address,
+      totalBeds: insertData.unit_beds,
+      provider_id: insertData.provider_id,
+    });
+
     const { data, error } = await supabase
       .from("listings")
       .insert(insertData)
@@ -207,11 +382,21 @@ export async function createListing(
 
     if (error) {
       console.error("Error creating listing:", error);
+      console.error("Error details:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+      });
       return {
         success: false,
         error: error.message || "Failed to create listing",
       };
     }
+
+    console.log("✅ Listing created successfully:", {
+      listingId: data.id,
+      title: insertData.title,
+    });
 
     return {
       success: true,
@@ -232,7 +417,7 @@ export async function createListing(
  */
 export async function updateListing(
   listingId: string,
-  updates: UpdateListingInput
+  updates: UpdateListingInput,
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // Build the update object
@@ -252,7 +437,10 @@ export async function updateListing(
     }
 
     // Update availability if availableBeds or availabilityDays changed
-    if (updates.availableBeds !== undefined || updates.availabilityDays !== undefined) {
+    if (
+      updates.availableBeds !== undefined ||
+      updates.availabilityDays !== undefined
+    ) {
       // First, get the current availability
       const { data: currentListing } = await supabase
         .from("listings")
@@ -269,7 +457,9 @@ export async function updateListing(
 
       updateData.availability = {
         ...currentAvailability,
-        ...(updates.availableBeds !== undefined ? { beds_today: updates.availableBeds } : {}),
+        ...(updates.availableBeds !== undefined
+          ? { beds_today: updates.availableBeds }
+          : {}),
         ...(Object.keys(mergedDays).length ? { days: mergedDays } : {}),
         last_updated_at: new Date().toISOString(),
       };
@@ -284,6 +474,79 @@ export async function updateListing(
     if (updates.price !== undefined) {
       updateData.cost =
         updates.price > 0 ? { monthly: updates.price } : { is_free: true };
+    }
+
+    // Update amenities if provided
+    if (updates.amenities !== undefined) {
+      updateData.amenities =
+        updates.amenities.length > 0 ? { basic: updates.amenities } : {};
+    }
+
+    // Update services if provided
+    if (updates.services !== undefined) {
+      const servicesObj: any = {};
+      if (updates.services.includes("case_management"))
+        servicesObj.case_management = true;
+      if (updates.services.includes("medical"))
+        servicesObj.medical = ["general_medical"];
+      if (updates.services.includes("mental_health"))
+        servicesObj.mental_health = ["counseling"];
+      if (updates.services.includes("substance_abuse"))
+        servicesObj.substance = ["treatment"];
+      if (updates.services.includes("job_training"))
+        servicesObj.employment = ["job_training"];
+      if (updates.services.includes("education"))
+        servicesObj.education = ["ged_prep"];
+      if (updates.services.includes("transportation"))
+        servicesObj.transportation = ["assistance"];
+      if (updates.services.includes("legal")) servicesObj.legal = true;
+      updateData.services = servicesObj;
+    }
+
+    // Update rules if provided
+    if (
+      updates.curfew !== undefined ||
+      updates.visitorsPolicy !== undefined ||
+      updates.petsPolicy !== undefined
+    ) {
+      const rulesObj: any = {};
+      if (updates.curfew) rulesObj.curfew = updates.curfew;
+      if (updates.visitorsPolicy) rulesObj.visitors = updates.visitorsPolicy;
+      if (updates.petsPolicy) rulesObj.pets = updates.petsPolicy;
+      updateData.rules = rulesObj;
+    }
+
+    // Update eligibility if provided
+    if (
+      updates.minAge !== undefined ||
+      updates.maxAge !== undefined ||
+      updates.eligibility !== undefined
+    ) {
+      const eligibilityObj: any = {};
+      if (updates.minAge !== undefined || updates.maxAge !== undefined) {
+        eligibilityObj.age_range = [
+          updates.minAge || 18,
+          updates.maxAge || 999,
+        ];
+      }
+      if (updates.eligibility && updates.eligibility.length > 0) {
+        const genderOptions = [];
+        if (updates.eligibility.includes("men_only"))
+          genderOptions.push("male");
+        if (updates.eligibility.includes("women_only"))
+          genderOptions.push("female");
+        if (updates.eligibility.includes("all_genders"))
+          genderOptions.push("all");
+        if (genderOptions.length > 0) eligibilityObj.gender = genderOptions;
+
+        if (updates.eligibility.includes("families")) {
+          eligibilityObj.family_status = ["families"];
+        }
+        if (updates.eligibility.includes("veterans")) {
+          eligibilityObj.veterans = true;
+        }
+      }
+      updateData.eligibility = eligibilityObj;
     }
 
     const { error } = await supabase
@@ -314,25 +577,92 @@ export async function updateListing(
  * This marks a listing as inactive in the database
  */
 export async function deleteListing(
-  listingId: string
+  listingId: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { error } = await supabase
-      .from("listings")
-      .update({ is_active: false, updated_at: new Date().toISOString() })
-      .eq("id", listingId);
+    console.log("🗑️ Attempting to delete (soft) listing:", listingId);
 
-    if (error) {
-      console.error("Error deleting listing:", error);
+    // First, verify the user owns this listing
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      console.error("❌ No authenticated user");
       return {
         success: false,
-        error: error.message || "Failed to delete listing",
+        error: "You must be logged in to delete a listing",
       };
     }
 
+    // Verify ownership before attempting delete
+    const { data: listing, error: fetchError } = await supabase
+      .from("listings")
+      .select("provider_id, title")
+      .eq("id", listingId)
+      .single();
+
+    if (fetchError || !listing) {
+      console.error("❌ Listing not found:", fetchError);
+      return {
+        success: false,
+        error: "Listing not found",
+      };
+    }
+
+    if (listing.provider_id !== user.id) {
+      console.error("❌ User does not own this listing");
+      return {
+        success: false,
+        error: "You can only delete your own listings",
+      };
+    }
+
+    console.log("✅ Verified ownership, proceeding with delete");
+
+    // Now perform the soft delete
+    // IMPORTANT: We only update is_active and updated_at
+    // We do NOT change provider_id or any other fields that might trigger RLS
+    const { error, data } = await supabase
+      .from("listings")
+      .update({
+        is_active: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", listingId)
+      .eq("provider_id", user.id) // Extra safety check
+      .select(); // Return the updated row for debugging
+
+    console.log("Update result:", { error, data });
+
+    if (error) {
+      console.error("❌ Error deleting listing:", error);
+      console.error("Error details:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      });
+
+      // Provide user-friendly error message
+      if (error.code === "42501") {
+        return {
+          success: false,
+          error:
+            "Permission denied. Please make sure you have the right to delete this listing.",
+        };
+      }
+
+      return {
+        success: false,
+        error: `Failed to delete: ${error.message}`,
+      };
+    }
+
+    console.log("✅ Listing soft-deleted successfully:", listingId);
     return { success: true };
   } catch (error: any) {
-    console.error("Failed to delete listing:", error);
+    console.error("❌ Failed to delete listing:", error);
     return {
       success: false,
       error: error.message || "An unexpected error occurred",
