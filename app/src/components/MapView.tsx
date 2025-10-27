@@ -1,14 +1,14 @@
-import React from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import React from "react";
+import { View, Text, StyleSheet, Platform } from "react-native";
 // Avoid importing react-native-maps on web (no web support)
 let RNMapView: any = null;
 let RNMarker: any = null;
 let RN_PROVIDER_GOOGLE: any = null;
 type RNMapViewProps = any;
 type RNRegion = any;
-if (Platform.OS !== 'web') {
+if (Platform.OS !== "web") {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const Maps = require('react-native-maps');
+  const Maps = require("react-native-maps");
   RNMapView = Maps.default;
   RNMarker = Maps.Marker;
   RN_PROVIDER_GOOGLE = Maps.PROVIDER_GOOGLE;
@@ -37,18 +37,15 @@ const MapViewComponent = Platform.select({
         <View style={styles.mapPlaceholder}>
           <Text style={styles.mapText}>Map View</Text>
           <Text style={styles.mapSubtext}>Not available on Web</Text>
-          <Text style={styles.mapSubtext}>Please use Expo Go or native app for map functionality</Text>
+          <Text style={styles.mapSubtext}>
+            Please use Expo Go or native app for map functionality
+          </Text>
         </View>
       </View>
     );
   }),
-  default: React.forwardRef<RNMapView, MapViewProps>((props, ref) => {
-    return (
-      <RNMapView
-        ref={ref}
-        {...props}
-      />
-    );
+  default: React.forwardRef<any, MapViewProps>((props, ref) => {
+    return <RNMapView ref={ref} {...props} />;
   }),
 });
 
@@ -67,24 +64,24 @@ export const PROVIDER_GOOGLE = Platform.select({
 
 const styles = StyleSheet.create({
   mapContainer: {
-    backgroundColor: '#1a1a1a',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#1a1a1a",
+    justifyContent: "center",
+    alignItems: "center",
   },
   mapPlaceholder: {
     padding: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
   mapText: {
-    color: '#D4AF37',
+    color: "#D4AF37",
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 8,
   },
   mapSubtext: {
-    color: '#999',
+    color: "#999",
     fontSize: 14,
-    textAlign: 'center',
+    textAlign: "center",
   },
 });
 

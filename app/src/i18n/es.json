@@ -26,13 +26,268 @@
     "home": "Inicio",
     "search": "Buscar",
     "messages": "Mensajes",
-    "saved": "Guardado",
-    "profile": "Perfil"
+    "saved": "Guardados",
+    "profile": "Perfil",
+    "dashboard": "Panel"
   },
   "onboarding": {
     "splash": {
       "tagline": "Vivienda para Acabar con la Disparidad"
+    },
+    "slides": {
+      "togetherness": {
+        "title": "Unión",
+        "description": "HOU2ED une a las comunidades para asegurar que todos tengan un lugar seguro para llamar hogar. Nadie debe enfrentar desafíos de vivienda solo."
+      },
+      "secondChances": {
+        "title": "Segundas Oportunidades",
+        "description": "Todos merecen una oportunidad para reconstruir. Conectamos a quienes lo necesitan con proveedores de vivienda que creen en nuevos comienzos."
+      },
+      "noOneStandsAlone": {
+        "title": "Nadie Está Solo",
+        "description": "Nuestra red de apoyo asegura que tengas defensores, recursos y una comunidad a tu lado en cada paso del camino."
+      }
     }
   },
-  "_note": "Spanish translations placeholder - to be completed"
+  "auth": {
+    "roleSelection": {
+      "title": "Soy un...",
+      "seeker": "Buscador de Vivienda",
+      "seekerDesc": "Buscando vivienda segura y asequible",
+      "provider": "Proveedor de Vivienda",
+      "providerDesc": "Ofreciendo oportunidades de vivienda"
+    },
+    "login": {
+      "title": "Bienvenido de Nuevo",
+      "email": "Correo Electrónico",
+      "password": "Contraseña",
+      "forgotPassword": "¿Olvidaste tu contraseña?",
+      "noAccount": "¿No tienes una cuenta?",
+      "errors": {
+        "invalidEmail": "Por favor ingresa un correo electrónico válido",
+        "passwordRequired": "La contraseña es requerida"
+      }
+    },
+    "signUp": {
+      "title": "Crear Cuenta",
+      "fullName": "Nombre Completo",
+      "email": "Correo Electrónico",
+      "password": "Contraseña",
+      "confirmPassword": "Confirmar Contraseña",
+      "phone": "Número de Teléfono (opcional)",
+      "termsAgree": "Acepto los Términos de Servicio y la Política de Privacidad",
+      "hasAccount": "¿Ya tienes una cuenta?",
+      "errors": {
+        "nameRequired": "El nombre completo es requerido",
+        "emailInvalid": "Por favor ingresa un correo electrónico válido",
+        "passwordMin": "La contraseña debe tener al menos 8 caracteres",
+        "passwordMatch": "Las contraseñas no coinciden",
+        "termsRequired": "Debes aceptar los términos"
+      }
+    }
+  },
+  "home": {
+    "nearYou": "Cerca de Ti",
+    "viewAll": "Ver Todo",
+    "recommended": "Recomendado",
+    "recentlyAdded": "Agregado Recientemente",
+    "unitsAvailable": "{{count}} unidades disponibles",
+    "liveUpdates": "Actualizaciones en Vivo",
+    "searchPlaceholder": "Buscar por ubicación o nombre",
+    "availableNow": "Disponible Ahora",
+    "free": "Gratis",
+    "veterans": "Veteranos",
+    "families": "Familias",
+    "nearMe": "Cerca de Mí",
+    "beds": "camas",
+    "bed": "cama",
+    "full": "Lleno",
+    "mi": "mi",
+    "places": "lugares",
+    "inThisArea": "en esta área",
+    "map": "Mapa",
+    "list": "Lista"
+  },
+  "search": {
+    "title": "Buscar",
+    "placeholder": "Buscar ubicación o refugio...",
+    "searchButton": "Buscar",
+    "filtersButton": "Filtros",
+    "map": "Mapa",
+    "list": "Lista",
+    "sort": "Ordenar",
+    "sortBy": "Ordenar Por",
+    "place": "lugar",
+    "places": "lugares",
+    "found": "encontrado",
+    "foundPlural": "encontrados",
+    "noMatches": "No se encontraron coincidencias",
+    "tryAdjusting": "Intenta ajustar tus filtros o expandir tu área de búsqueda",
+    "sortOptions": {
+      "relevance": "Relevancia",
+      "priceAsc": "Precio: Menor a Mayor",
+      "priceDesc": "Precio: Mayor a Menor",
+      "distance": "Distancia: Más Cercano",
+      "newest": "Actualizado Recientemente",
+      "rating": "Mejor Calificado",
+      "availability": "Disponible Primero"
+    },
+    "filters": {
+      "title": "Filtros",
+      "priceRange": "Rango de Precio",
+      "bedrooms": "Habitaciones",
+      "propertyType": "Tipo de Propiedad",
+      "neighborhoods": "Vecindarios",
+      "monthlyIncome": "Ingreso Mensual",
+      "acceptsVouchers": "Acepta Vales",
+      "immediateAvailability": "Disponibilidad Inmediata",
+      "applyFilters": "Aplicar Filtros",
+      "clearAll": "Limpiar Todo"
+    },
+    "results": {
+      "showing": "Mostrando {{count}} resultados",
+      "noResults": "No se encontraron resultados",
+      "tryAdjusting": "Intenta ajustar tus filtros"
+    }
+  },
+  "listing": {
+    "details": {
+      "rent": "${{amount}}/mes",
+      "beds": "{{count}} hab",
+      "baths": "{{count}} baño",
+      "sqft": "{{count}} ft²",
+      "available": "Disponible",
+      "notAvailable": "No Disponible",
+      "apply": "Aplicar Ahora",
+      "save": "Guardar",
+      "saved": "Guardado",
+      "share": "Compartir"
+    },
+    "sections": {
+      "overview": "Resumen",
+      "amenities": "Comodidades",
+      "eligibility": "Elegibilidad",
+      "location": "Ubicación",
+      "contact": "Contacto"
+    }
+  },
+  "messages": {
+    "inbox": {
+      "title": "Mensajes",
+      "empty": "Sin Mensajes Aún",
+      "emptyDesc": "Tus conversaciones con proveedores de vivienda aparecerán aquí"
+    },
+    "thread": {
+      "typeMessage": "Escribe un mensaje...",
+      "send": "Enviar",
+      "attachment": "Agregar archivo",
+      "reportAbuse": "Reportar Abuso",
+      "reportModal": {
+        "title": "Reportar Abuso",
+        "subtitle": "Por favor describe el problema que estás experimentando",
+        "placeholder": "Describe el comportamiento inapropiado...",
+        "submit": "Enviar Reporte"
+      }
+    },
+    "setup": {
+      "required": "Configuración Requerida",
+      "instructions": "El sistema de mensajería necesita ser configurado en tu base de datos. La migración SQL ha sido copiada a tu portapapeles.\n\n1. Haz clic en OK para abrir Supabase\n2. Pega el SQL en el editor\n3. Haz clic en Ejecutar\n4. Regresa y actualiza",
+      "title": "Configuración de Base de Datos Requerida",
+      "subtitle": "Las tablas de mensajería necesitan ser creadas en tu base de datos Supabase.",
+      "stepsHeader": "Pasos de Configuración Rápida:",
+      "step1": "Haz clic en el botón de abajo para abrir Supabase",
+      "step2": "Pega el SQL (ya está en tu portapapeles)",
+      "step3": "Haz clic en \"Ejecutar\" para crear las tablas",
+      "step4": "Regresa y desliza para actualizar",
+      "openButton": "Abrir Panel de Supabase",
+      "retry": "Reintentar"
+    }
+  },
+  "saved": {
+    "title": "Listados Guardados",
+    "count": "{{count}} listado{{plural}} guardado",
+    "empty": "Sin Listados Guardados",
+    "emptyDesc": "Los listados que guardes aparecerán aquí para fácil acceso",
+    "browse": "Explorar Listados",
+    "remove": "¿Eliminar de Guardados?",
+    "removeConfirm": "¿Eliminar \"{{title}}\" de tus listados guardados?",
+    "removed": "Eliminado",
+    "removedSuccess": "El listado ha sido eliminado de tus artículos guardados",
+    "shareError": "No se puede compartir el listado",
+    "unit": "unidad",
+    "units": "unidades",
+    "available": "disponible",
+    "listing": "listado",
+    "listings": "listados",
+    "saved": "guardado"
+  },
+  "profile": {
+    "title": "Perfil",
+    "housingSeeker": "Buscador de Vivienda",
+    "housingProvider": "Proveedor de Vivienda",
+    "sections": {
+      "applications": "Mis Solicitudes",
+      "savedSearches": "Búsquedas Guardadas",
+      "accountSettings": "Configuración de Cuenta"
+    },
+    "settings": {
+      "changePassword": "Cambiar Contraseña",
+      "notifications": "Notificaciones",
+      "pushNotifications": "Notificaciones Push",
+      "emailNotifications": "Notificaciones por Email",
+      "language": "Idioma",
+      "deleteAccount": "Eliminar Cuenta",
+      "deleteConfirm": "¿Estás seguro de que quieres eliminar tu cuenta? Esta acción no se puede deshacer.",
+      "selectLanguage": "Seleccionar Idioma",
+      "chooseLanguage": "Elige tu idioma preferido"
+    },
+    "changePassword": {
+      "title": "Cambiar Contraseña",
+      "current": "Contraseña Actual",
+      "new": "Nueva Contraseña",
+      "confirm": "Confirmar Nueva Contraseña",
+      "submit": "Cambiar Contraseña"
+    }
+  },
+  "provider": {
+    "availability": {
+      "title": "Actualizar Disponibilidad",
+      "yourProperties": "Tus Propiedades",
+      "availableBeds": "Camas disponibles",
+      "ofTotal": "de {{total}} total",
+      "updated": "Actualizado {{time}}",
+      "saveAll": "Guardar Todo",
+      "saving": "Guardando...",
+      "noChanges": "Sin Cambios",
+      "noChangesDesc": "No hay actualizaciones para guardar",
+      "stale": {
+        "banner": "Los datos pueden estar desactualizados",
+        "description": "Algunas propiedades no se han actualizado en más de 48 horas",
+        "confirmNoChange": "Confirmar sin cambios"
+      },
+      "tip": "Consejo rápido: Actualiza la disponibilidad diariamente para ayudar a los buscadores a encontrar vivienda"
+    },
+    "dashboard": {
+      "title": "Panel de Proveedor"
+    }
+  },
+  "application": {
+    "wizard": {
+      "title": "Solicitar Vivienda",
+      "steps": {
+        "info": "Información de Contacto",
+        "eligibility": "Elegibilidad",
+        "documents": "Documentos",
+        "review": "Revisar"
+      },
+      "next": "Siguiente",
+      "back": "Atrás",
+      "submit": "Enviar Solicitud"
+    },
+    "success": {
+      "title": "¡Solicitud Enviada!",
+      "message": "Tu solicitud ha sido enviada al proveedor de vivienda. Recibirás un correo electrónico de confirmación en breve.",
+      "reference": "Número de Referencia: {{number}}"
+    }
+  }
 }

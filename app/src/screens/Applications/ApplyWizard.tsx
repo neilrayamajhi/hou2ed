@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -13,7 +13,11 @@ import { Ionicons } from "@expo/vector-icons";
 import * as SecureStore from "expo-secure-store";
 import { colors, spacing, radius } from "../../theme/tokens";
 import { RootStackParamList } from "../../navigation/types";
-import { DRAFT_STORAGE_KEY, TOTAL_STEPS, APPLICATION_STEPS } from "../../constants/application";
+import {
+  DRAFT_STORAGE_KEY,
+  TOTAL_STEPS,
+  APPLICATION_STEPS,
+} from "../../constants/application";
 import Step1Info from "./Step1Info";
 import Step2Eligibility from "./Step2Eligibility";
 import Step3Documents from "./Step3Documents";
@@ -40,8 +44,11 @@ export interface ApplicationDraft {
   agreedToTerms?: boolean;
 }
 
-type ApplyWizardRouteProp = RouteProp<RootStackParamList, 'ApplyWizard'>;
-type ApplyWizardNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ApplyWizard'>;
+type ApplyWizardRouteProp = RouteProp<RootStackParamList, "ApplyWizard">;
+type ApplyWizardNavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  "ApplyWizard"
+>;
 
 export default function ApplyWizard() {
   const navigation = useNavigation<ApplyWizardNavigationProp>();
@@ -97,9 +104,9 @@ export default function ApplyWizard() {
     }
   };
 
-  const updateDraft = (updates: Partial<ApplicationDraft>) => {
+  const updateDraft = useCallback((updates: Partial<ApplicationDraft>) => {
     setDraft((prev) => ({ ...prev, ...updates }));
-  };
+  }, []);
 
   const handleBack = () => {
     if (currentStep > 1) {
@@ -110,7 +117,7 @@ export default function ApplyWizard() {
         navigation.goBack();
       } else {
         // Fallback: navigate to home if can't go back
-        navigation.navigate('Tabs' as any);
+        navigation.navigate("Tabs" as any);
       }
     }
   };
@@ -121,7 +128,7 @@ export default function ApplyWizard() {
       navigation.goBack();
     } else {
       // Fallback: navigate to home if can't go back
-      navigation.navigate('Tabs' as any);
+      navigation.navigate("Tabs" as any);
     }
   };
 
@@ -136,25 +143,125 @@ export default function ApplyWizard() {
   };
 
   const handleSubmit = async () => {
-    // TODO: Submit application to backend
-    console.log("Submitting application:", draft);
+    try {
+      // Get current user
+      const { supabase } = await import("../../lib/supabase");
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
 
-    // Show success alert
-    Alert.alert(
-      "Application Submitted!",
-      "Your application has been successfully submitted. You can track its status in the Applications section.",
-      [
-        {
-          text: "View Status",
-          onPress: async () => {
-            await clearDraft();
-            // TODO: Navigate to Applications list
-            navigation.goBack();
+      if (userError || !user) {
+        Alert.alert("Error", "You must be logged in to submit an application");
+        return;
+      }
+
+      if (!draft.listingId) {
+        Alert.alert("Error", "Invalid listing. Please try again.");
+        return;
+      }
+
+      // Validate listing_id is a valid UUID format
+      const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(draft.listingId)) {
+        console.warn("Warning: listing_id is not a UUID:", draft.listingId);
+        console.warn("This may cause issues with database insertion");
+        // Show warning but allow for testing
+        Alert.alert(
+          "Warning",
+          `The listing ID "${draft.listingId}" is not in UUID format. This application may fail to submit.\n\nFor production, please use real listings with UUID IDs.`,
+          [
+            {
+              text: "Cancel",
+              style: "cancel",
+              onPress: () => {
+                throw new Error("User cancelled due to invalid listing ID");
+              },
+            },
+            { text: "Continue Anyway", style: "destructive" },
+          ],
+        );
+      }
+
+      // Parse eligibility tags to extract specific flags
+      const eligibilityTags = draft.eligibilityTags || [];
+      const veteranStatus = eligibilityTags.includes("veterans");
+      const disabilityStatus = eligibilityTags.includes("disabilities");
+
+      // First, let's check what columns exist by doing a test select
+      console.log("Testing applications table structure...");
+      const { data: testData, error: testError } = await supabase
+        .from("applications")
+        .select("*")
+        .limit(1);
+
+      if (testError) {
+        console.error("Error checking table structure:", testError);
+      } else {
+        console.log(
+          "Available columns:",
+          testData && testData[0] ? Object.keys(testData[0]) : "No data",
+        );
+      }
+
+      // Insert with only the absolutely required columns
+      const applicationData = {
+        listing_id: draft.listingId,
+        seeker_id: user.id,
+      };
+
+      console.log("Inserting application with data:", applicationData);
+
+      // Insert application into database
+      const { data, error } = await supabase
+        .from("applications")
+        .insert(applicationData)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Error submitting application:", error);
+        Alert.alert(
+          "Submission Failed",
+          "Failed to submit your application. Please try again.",
+        );
+        return;
+      }
+
+      console.log("Application submitted successfully:", data);
+
+      // Clear draft after successful submission
+      await clearDraft();
+
+      // Show success alert
+      Alert.alert(
+        "Application Submitted!",
+        "Your application has been successfully submitted. You can track its status in the Applications section.",
+        [
+          {
+            text: "View Applications",
+            onPress: () => {
+              navigation.goBack();
+              // Navigate to applications list after a short delay
+              setTimeout(() => {
+                navigation.navigate("ApplicationsList");
+              }, 100);
+            },
           },
-        },
-      ],
-      { cancelable: false }
-    );
+          {
+            text: "Done",
+            onPress: () => {
+              navigation.goBack();
+            },
+          },
+        ],
+        { cancelable: false },
+      );
+    } catch (error) {
+      console.error("Unexpected error during submission:", error);
+      Alert.alert("Error", "An unexpected error occurred. Please try again.");
+    }
   };
 
   const renderStepIndicator = () => (
@@ -194,11 +301,7 @@ export default function ApplyWizard() {
     switch (currentStep) {
       case 1:
         return (
-          <Step1Info
-            draft={draft}
-            onUpdate={updateDraft}
-            onNext={handleNext}
-          />
+          <Step1Info draft={draft} onUpdate={updateDraft} onNext={handleNext} />
         );
       case 2:
         return (
@@ -262,9 +365,14 @@ export default function ApplyWizard() {
       {/* Step Title */}
       <View style={styles.stepTitleContainer}>
         <Text style={styles.stepTitle}>
-          {APPLICATION_STEPS[currentStep as keyof typeof APPLICATION_STEPS]?.title}
+          {
+            APPLICATION_STEPS[currentStep as keyof typeof APPLICATION_STEPS]
+              ?.title
+          }
         </Text>
-        <Text style={styles.stepSubtitle}>Step {currentStep} of {TOTAL_STEPS}</Text>
+        <Text style={styles.stepSubtitle}>
+          Step {currentStep} of {TOTAL_STEPS}
+        </Text>
       </View>
 
       {/* Content */}

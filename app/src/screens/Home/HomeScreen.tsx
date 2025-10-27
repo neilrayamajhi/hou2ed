@@ -30,6 +30,7 @@ import { fetchRealShelters } from "../../services/shelterService";
 import { usePerformance } from "../../utils/perf";
 import type { Listing } from "../../types/listing";
 import type { RootStackNavigationProp } from "../../navigation/types";
+import { useI18n } from "../../i18n";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
@@ -70,6 +71,7 @@ export default function HomeScreen() {
   const mapRef = useRef<MapView>(null);
   const listRef = useRef<FlatList>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
+  const i18n = useI18n();
 
   // Get user location
   const { location, loading: locationLoading, refreshLocation } = useLocation();
@@ -85,7 +87,7 @@ export default function HomeScreen() {
   const [showListView, setShowListView] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
   const [isRealData, setIsRealData] = useState(false);
-  const [dataSource, setDataSource] = useState('Mock Data');
+  const [dataSource, setDataSource] = useState("Mock Data");
   const [mapRegion, setMapRegion] = useState<Region>({
     latitude: 37.7749,
     longitude: -122.4194,
@@ -110,7 +112,7 @@ export default function HomeScreen() {
         const realShelters = await fetchRealShelters(
           location.latitude,
           location.longitude,
-          15 // 15km radius (~10 miles)
+          15, // 15km radius (~10 miles)
         );
 
         let allListings: Listing[];
@@ -120,26 +122,26 @@ export default function HomeScreen() {
           allListings = realShelters as any;
           console.log(`Found ${realShelters.length} real shelters nearby`);
           setIsRealData(true);
-          setDataSource('OpenStreetMap Data');
+          setDataSource("OpenStreetMap Data");
         } else {
           // Fall back to mock data if no real shelters found
-          console.log('No real shelters found, using mock data');
+          console.log("No real shelters found, using mock data");
           allListings = generateListingsAroundLocation(
             location.latitude,
             location.longitude,
-            20
+            20,
           );
         }
 
         const filtered = filterListingsByQuick(allListings, quickFilters);
         setListings(filtered);
       } catch (error) {
-        console.error('Error loading shelters:', error);
+        console.error("Error loading shelters:", error);
         // Fall back to mock data on error
         const mockData = generateListingsAroundLocation(
           location.latitude,
           location.longitude,
-          20
+          20,
         );
         const filtered = filterListingsByQuick(mockData, quickFilters);
         setListings(filtered);
@@ -239,7 +241,13 @@ export default function HomeScreen() {
   }, [location, refreshLocation]);
 
   // Render listing item for list view
-  const renderListItem = ({ item, index }: { item: Listing; index: number }) => (
+  const renderListItem = ({
+    item,
+    index,
+  }: {
+    item: Listing;
+    index: number;
+  }) => (
     <TouchableOpacity
       style={styles.listItem}
       onPress={() => openDetails(item)}
@@ -248,27 +256,38 @@ export default function HomeScreen() {
       <View style={styles.listItemContent}>
         <View style={styles.listItemHeader}>
           <Text style={styles.listItemTitle}>{item.name}</Text>
-          <View style={[styles.availabilityBadge,
-            item.availability === 'available' ? styles.availableBadge : styles.fullBadge
-          ]}>
+          <View
+            style={[
+              styles.availabilityBadge,
+              item.availability === "available"
+                ? styles.availableBadge
+                : styles.fullBadge,
+            ]}
+          >
             <Text style={styles.badgeText}>
-              {item.availability === 'available' ? `${item.bedsAvailable} beds` : 'Full'}
+              {item.availability === "available"
+                ? `${item.bedsAvailable} ${item.bedsAvailable === 1 ? i18n.t("home.bed") : i18n.t("home.beds")}`
+                : i18n.t("home.full")}
             </Text>
           </View>
         </View>
 
         <Text style={styles.listItemAddress}>
-          <Ionicons name="location" size={14} color="#8a8a8a" />
-          {' '}{item.address.street}, {item.address.city}
+          <Ionicons name="location" size={14} color="#8a8a8a" />{" "}
+          {item.address.street}, {item.address.city}
         </Text>
 
         <View style={styles.listItemFooter}>
           <Text style={styles.listItemPrice}>
-            {item.price.isFree ? 'FREE' : `$${item.price.min}/mo`}
+            {item.price.isFree
+              ? i18n.t("home.free").toUpperCase()
+              : `$${item.price.min}/mo`}
           </Text>
           <View style={styles.listItemDistance}>
             <Ionicons name="navigate" size={14} color="#D4AF37" />
-            <Text style={styles.distanceText}>{item.distance || 0.5} mi</Text>
+            <Text style={styles.distanceText}>
+              {item.distance || 0.5} {i18n.t("home.mi")}
+            </Text>
           </View>
         </View>
       </View>
@@ -278,12 +297,15 @@ export default function HomeScreen() {
 
   const renderQuickFilter = (
     key: keyof typeof quickFilters,
-    label: string,
+    translationKey: string,
     icon: string,
   ) => (
     <TouchableOpacity
       key={key}
-      style={[styles.quickFilter, quickFilters[key] && styles.quickFilterActive]}
+      style={[
+        styles.quickFilter,
+        quickFilters[key] && styles.quickFilterActive,
+      ]}
       onPress={() => toggleQuickFilter(key)}
       activeOpacity={0.7}
     >
@@ -298,7 +320,7 @@ export default function HomeScreen() {
           quickFilters[key] && styles.quickFilterTextActive,
         ]}
       >
-        {label}
+        {i18n.t(translationKey)}
       </Text>
     </TouchableOpacity>
   );
@@ -310,7 +332,9 @@ export default function HomeScreen() {
         <View style={styles.realDataBanner}>
           <Ionicons name="checkmark-circle" size={16} color="#21C55D" />
           <Text style={styles.realDataText}>{dataSource}</Text>
-          <Text style={styles.realDataSubtext}>Live Updates</Text>
+          <Text style={styles.realDataSubtext}>
+            {i18n.t("home.liveUpdates")}
+          </Text>
         </View>
       )}
 
@@ -320,7 +344,7 @@ export default function HomeScreen() {
           <Ionicons name="search" size={20} color="#8a8a8a" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search by location or name"
+            placeholder={i18n.t("home.searchPlaceholder")}
             placeholderTextColor="#6a6a6a"
             value={searchText}
             onChangeText={setSearchText}
@@ -345,11 +369,11 @@ export default function HomeScreen() {
           style={styles.quickFiltersScroll}
           contentContainerStyle={styles.quickFiltersContent}
         >
-          {renderQuickFilter("immediate", "Available Now", "flash")}
-          {renderQuickFilter("free", "Free", "gift")}
-          {renderQuickFilter("veterans", "Veterans", "shield-checkmark")}
-          {renderQuickFilter("families", "Families", "people")}
-          {renderQuickFilter("nearMe", "Near Me", "location")}
+          {renderQuickFilter("immediate", "home.availableNow", "flash")}
+          {renderQuickFilter("free", "home.free", "gift")}
+          {renderQuickFilter("veterans", "home.veterans", "shield-checkmark")}
+          {renderQuickFilter("families", "home.families", "people")}
+          {renderQuickFilter("nearMe", "home.nearMe", "location")}
         </ScrollView>
       </View>
 
@@ -386,7 +410,9 @@ export default function HomeScreen() {
                   ]}
                 >
                   <Text style={styles.markerText}>
-                    {listing.price.isFree ? "FREE" : `$${listing.price.min}`}
+                    {listing.price.isFree
+                      ? i18n.t("home.free").toUpperCase()
+                      : `$${listing.price.min}`}
                   </Text>
                 </View>
               </Marker>
@@ -415,12 +441,14 @@ export default function HomeScreen() {
             styles.listViewContainer,
             {
               opacity: slideAnim,
-              transform: [{
-                translateY: slideAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [50, 0],
-                }),
-              }],
+              transform: [
+                {
+                  translateY: slideAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [50, 0],
+                  }),
+                },
+              ],
             },
           ]}
         >
@@ -444,8 +472,12 @@ export default function HomeScreen() {
               <ActivityIndicator size="small" color="#D4AF37" />
             ) : (
               <>
-                <Text style={styles.resultsCount}>{listings.length} places</Text>
-                <Text style={styles.resultsSubtext}>in this area</Text>
+                <Text style={styles.resultsCount}>
+                  {listings.length} {i18n.t("home.places")}
+                </Text>
+                <Text style={styles.resultsSubtext}>
+                  {i18n.t("home.inThisArea")}
+                </Text>
               </>
             )}
           </View>
@@ -461,7 +493,7 @@ export default function HomeScreen() {
               color="#000"
             />
             <Text style={styles.viewToggleText}>
-              {showListView ? "Map" : "List"}
+              {showListView ? i18n.t("home.map") : i18n.t("home.list")}
             </Text>
           </TouchableOpacity>
         </View>
@@ -478,17 +510,20 @@ export default function HomeScreen() {
                 {listings[activeIndex].name}
               </Text>
               <Text style={styles.miniCardAddress} numberOfLines={1}>
-                {listings[activeIndex].address.street}, {listings[activeIndex].address.city}
+                {listings[activeIndex].address.street},{" "}
+                {listings[activeIndex].address.city}
               </Text>
               <View style={styles.miniCardFooter}>
                 <Text style={styles.miniCardPrice}>
-                  {listings[activeIndex].price.isFree ? 'FREE' : `$${listings[activeIndex].price.min}/mo`}
+                  {listings[activeIndex].price.isFree
+                    ? i18n.t("home.free").toUpperCase()
+                    : `$${listings[activeIndex].price.min}/mo`}
                 </Text>
                 <View style={styles.miniCardBadge}>
                   <Text style={styles.miniCardBadgeText}>
-                    {listings[activeIndex].availability === 'available'
-                      ? `${listings[activeIndex].bedsAvailable} beds`
-                      : 'Full'}
+                    {listings[activeIndex].availability === "available"
+                      ? `${listings[activeIndex].bedsAvailable} ${listings[activeIndex].bedsAvailable === 1 ? i18n.t("home.bed") : i18n.t("home.beds")}`
+                      : i18n.t("home.full")}
                   </Text>
                 </View>
               </View>
@@ -499,7 +534,10 @@ export default function HomeScreen() {
       </View>
 
       {/* Filters Sheet */}
-      <FiltersSheet visible={showFilters} onClose={() => setShowFilters(false)} />
+      <FiltersSheet
+        visible={showFilters}
+        onClose={() => setShowFilters(false)}
+      />
     </SafeAreaView>
   );
 }

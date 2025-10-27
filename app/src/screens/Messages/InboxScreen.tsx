@@ -15,11 +15,15 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { RootStackNavigationProp } from "../../navigation/types";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
-import { messageService, ThreadWithDetails } from "../../services/messageService";
+import {
+  messageService,
+  ThreadWithDetails,
+} from "../../services/messageService";
 import { supabase } from "../../lib/supabase";
+import { useI18n } from "../../i18n";
 
 function formatTimestamp(date: Date | string): string {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  const dateObj = typeof date === "string" ? new Date(date) : date;
   const now = new Date();
   const diff = now.getTime() - dateObj.getTime();
   const hours = Math.floor(diff / 3600000);
@@ -35,7 +39,7 @@ function formatTimestamp(date: Date | string): string {
   } else {
     return dateObj.toLocaleDateString("en-US", {
       month: "short",
-      day: "numeric"
+      day: "numeric",
     });
   }
 }
@@ -56,6 +60,7 @@ export default function InboxScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [tablesMissing, setTablesMissing] = useState(false);
+  const i18n = useI18n();
 
   // Initialize and fetch threads
   const loadThreads = useCallback(async () => {
@@ -69,9 +74,9 @@ export default function InboxScreen() {
       setThreads(fetchedThreads);
       setTablesMissing(false);
     } catch (error) {
-      console.error('Error loading threads:', error);
+      console.error("Error loading threads:", error);
       // Check if this is a missing table error
-      if (error?.message?.includes('table') || error?.code === 'PGRST205') {
+      if (error?.message?.includes("table") || error?.code === "PGRST205") {
         setTablesMissing(true);
       }
     } finally {
@@ -94,7 +99,7 @@ export default function InboxScreen() {
       return () => {
         unsubscribe();
       };
-    }, [loadThreads])
+    }, [loadThreads]),
   );
 
   // Handle pull to refresh
@@ -103,163 +108,205 @@ export default function InboxScreen() {
     loadThreads();
   }, [loadThreads]);
 
-  const handleThreadPress = useCallback((thread: ThreadWithDetails) => {
-    // Mark messages as read when opening thread
-    messageService.markMessagesAsRead(thread.id);
+  const handleThreadPress = useCallback(
+    (thread: ThreadWithDetails) => {
+      // Mark messages as read when opening thread
+      messageService.markMessagesAsRead(thread.id);
 
-    // Get other participant for display
-    const otherParticipant = thread.participants?.find(
-      p => p.id !== currentUserId
-    );
+      // Get other participant for display
+      const otherParticipant = thread.participants?.find(
+        (p) => p.id !== currentUserId,
+      );
 
-    navigation.navigate("Thread", {
-      threadId: thread.id,
-      messageId: thread.id, // For backward compatibility
-      applicationId: thread.application_id || '',
-      propertyTitle: thread.subject || 'Conversation',
-      senderName: otherParticipant?.full_name || 'User',
-      participantId: otherParticipant?.id || '',
-    });
-  }, [navigation, currentUserId]);
+      navigation.navigate("Thread", {
+        threadId: thread.id,
+        messageId: thread.id, // For backward compatibility
+        applicationId: thread.application_id || "",
+        propertyTitle: thread.subject || "Conversation",
+        senderName: otherParticipant?.full_name || "User",
+        participantId: otherParticipant?.id || "",
+      });
+    },
+    [navigation, currentUserId],
+  );
 
-  const renderMessage = useCallback(({ item }: { item: ThreadWithDetails }) => {
-    // Get other participant (not the current user)
-    const otherParticipant = item.participants?.find(
-      p => p.id !== currentUserId
-    );
+  const renderMessage = useCallback(
+    ({ item }: { item: ThreadWithDetails }) => {
+      // Get other participant (not the current user)
+      const otherParticipant = item.participants?.find(
+        (p) => p.id !== currentUserId,
+      );
 
-    if (!otherParticipant) return null;
+      if (!otherParticipant) return null;
 
-    const avatarColors = [
-      "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FECA57",
-      "#48C9B0", "#9B59B6", "#E74C3C", "#3498DB", "#F39C12"
-    ];
+      const avatarColors = [
+        "#FF6B6B",
+        "#4ECDC4",
+        "#45B7D1",
+        "#96CEB4",
+        "#FECA57",
+        "#48C9B0",
+        "#9B59B6",
+        "#E74C3C",
+        "#3498DB",
+        "#F39C12",
+      ];
 
-    // Generate consistent color based on user ID
-    const colorIndex = otherParticipant.id.charCodeAt(0) % avatarColors.length;
-    const avatarColor = avatarColors[colorIndex];
+      // Generate consistent color based on user ID
+      const colorIndex =
+        otherParticipant.id.charCodeAt(0) % avatarColors.length;
+      const avatarColor = avatarColors[colorIndex];
 
-    return (
-      <TouchableOpacity
-        style={styles.messageCard}
-        onPress={() => handleThreadPress(item)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.messageContent}>
-          <View style={styles.avatarContainer}>
-            {otherParticipant.avatar_url ? (
-              <View style={styles.avatar}>
-                {/* In a real app, you'd use an Image component here */}
-                <Text style={styles.avatarText}>
-                  {getInitials(otherParticipant.full_name)}
+      return (
+        <TouchableOpacity
+          style={styles.messageCard}
+          onPress={() => handleThreadPress(item)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.messageContent}>
+            <View style={styles.avatarContainer}>
+              {otherParticipant.avatar_url ? (
+                <View style={styles.avatar}>
+                  {/* In a real app, you'd use an Image component here */}
+                  <Text style={styles.avatarText}>
+                    {getInitials(otherParticipant.full_name)}
+                  </Text>
+                </View>
+              ) : (
+                <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
+                  <Text style={styles.avatarText}>
+                    {getInitials(otherParticipant.full_name)}
+                  </Text>
+                </View>
+              )}
+              {item.unreadCount > 0 && (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadCount}>{item.unreadCount}</Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.messageDetails}>
+              <View style={styles.messageHeader}>
+                <Text style={styles.senderName} numberOfLines={1}>
+                  {otherParticipant.full_name}
+                </Text>
+                <Text style={styles.timestamp}>
+                  {item.last_message_at
+                    ? formatTimestamp(item.last_message_at)
+                    : ""}
                 </Text>
               </View>
-            ) : (
-              <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
-                <Text style={styles.avatarText}>
-                  {getInitials(otherParticipant.full_name)}
+              {item.subject && (
+                <Text style={styles.propertyTitle} numberOfLines={1}>
+                  {item.subject}
                 </Text>
-              </View>
-            )}
-            {item.unreadCount > 0 && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadCount}>{item.unreadCount}</Text>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.messageDetails}>
-            <View style={styles.messageHeader}>
-              <Text style={styles.senderName} numberOfLines={1}>
-                {otherParticipant.full_name}
-              </Text>
-              <Text style={styles.timestamp}>
-                {item.last_message_at ? formatTimestamp(item.last_message_at) : ''}
+              )}
+              <Text
+                style={[
+                  styles.lastMessage,
+                  item.unreadCount > 0 && styles.unreadMessage,
+                ]}
+                numberOfLines={2}
+              >
+                {item.lastMessage?.body ||
+                  i18n.t("messages.thread.typeMessage")}
               </Text>
             </View>
-            {item.subject && (
-              <Text style={styles.propertyTitle} numberOfLines={1}>
-                {item.subject}
-              </Text>
-            )}
-            <Text
-              style={[
-                styles.lastMessage,
-                item.unreadCount > 0 && styles.unreadMessage
-              ]}
-              numberOfLines={2}
-            >
-              {item.lastMessage?.body || 'Start a conversation...'}
-            </Text>
           </View>
-        </View>
-      </TouchableOpacity>
-    );
-  }, [handleThreadPress, currentUserId]);
+        </TouchableOpacity>
+      );
+    },
+    [handleThreadPress, currentUserId, i18n],
+  );
 
   const keyExtractor = useCallback((item: ThreadWithDetails) => item.id, []);
 
-  const ItemSeparator = useCallback(() => (
-    <View style={styles.separator} />
-  ), []);
+  const ItemSeparator = useCallback(
+    () => <View style={styles.separator} />,
+    [],
+  );
 
-  const EmptyComponent = useCallback(() => (
-    <View style={styles.emptyContainer}>
-      <Ionicons name="chatbubbles-outline" size={64} color={colors.gray[400]} />
-      <Text style={styles.emptyTitle}>No Messages Yet</Text>
-      <Text style={styles.emptySubtitle}>
-        Your conversations with housing providers will appear here
-      </Text>
-    </View>
-  ), []);
+  const EmptyComponent = useCallback(
+    () => (
+      <View style={styles.emptyContainer}>
+        <Ionicons
+          name="chatbubbles-outline"
+          size={64}
+          color={colors.gray[400]}
+        />
+        <Text style={styles.emptyTitle}>{i18n.t("messages.inbox.empty")}</Text>
+        <Text style={styles.emptySubtitle}>
+          {i18n.t("messages.inbox.emptyDesc")}
+        </Text>
+      </View>
+    ),
+    [i18n],
+  );
 
   const TablesMissingComponent = useCallback(() => {
     const handleOpenSupabase = () => {
       Alert.alert(
-        "Setup Required",
-        "The messaging system needs to be set up in your database. The SQL migration has been copied to your clipboard.\n\n1. Click OK to open Supabase\n2. Paste the SQL in the editor\n3. Click Run\n4. Come back and refresh",
+        i18n.t("messages.setup.required"),
+        i18n.t("messages.setup.instructions"),
         [
           {
-            text: "Cancel",
-            style: "cancel"
+            text: i18n.t("common.cancel"),
+            style: "cancel",
           },
           {
-            text: "Open Supabase",
+            text: i18n.t("messages.setup.openButton"),
             onPress: () => {
-              Linking.openURL("https://supabase.com/dashboard/project/rixiofltzptwaiwxhhlf/sql/new");
-            }
-          }
-        ]
+              Linking.openURL(
+                "https://supabase.com/dashboard/project/rixiofltzptwaiwxhhlf/sql/new",
+              );
+            },
+          },
+        ],
       );
     };
 
     return (
       <View style={styles.setupContainer}>
         <View style={styles.setupIconContainer}>
-          <Ionicons name="construct-outline" size={64} color={colors.primary[400]} />
+          <Ionicons
+            name="construct-outline"
+            size={64}
+            color={colors.primary[400]}
+          />
         </View>
-        <Text style={styles.setupTitle}>Database Setup Required</Text>
+        <Text style={styles.setupTitle}>{i18n.t("messages.setup.title")}</Text>
         <Text style={styles.setupSubtitle}>
-          The messaging tables need to be created in your Supabase database.
+          {i18n.t("messages.setup.subtitle")}
         </Text>
 
         <View style={styles.setupSteps}>
-          <Text style={styles.stepHeader}>Quick Setup Steps:</Text>
+          <Text style={styles.stepHeader}>
+            {i18n.t("messages.setup.stepsHeader")}
+          </Text>
           <View style={styles.step}>
             <Text style={styles.stepNumber}>1.</Text>
-            <Text style={styles.stepText}>Click the button below to open Supabase</Text>
+            <Text style={styles.stepText}>
+              {i18n.t("messages.setup.step1")}
+            </Text>
           </View>
           <View style={styles.step}>
             <Text style={styles.stepNumber}>2.</Text>
-            <Text style={styles.stepText}>Paste the SQL (already in your clipboard)</Text>
+            <Text style={styles.stepText}>
+              {i18n.t("messages.setup.step2")}
+            </Text>
           </View>
           <View style={styles.step}>
             <Text style={styles.stepNumber}>3.</Text>
-            <Text style={styles.stepText}>Click "Run" to create the tables</Text>
+            <Text style={styles.stepText}>
+              {i18n.t("messages.setup.step3")}
+            </Text>
           </View>
           <View style={styles.step}>
             <Text style={styles.stepNumber}>4.</Text>
-            <Text style={styles.stepText}>Come back and pull to refresh</Text>
+            <Text style={styles.stepText}>
+              {i18n.t("messages.setup.step4")}
+            </Text>
           </View>
         </View>
 
@@ -269,7 +316,9 @@ export default function InboxScreen() {
           activeOpacity={0.8}
         >
           <Ionicons name="open-outline" size={20} color={colors.gray[900]} />
-          <Text style={styles.setupButtonText}>Open Supabase Dashboard</Text>
+          <Text style={styles.setupButtonText}>
+            {i18n.t("messages.setup.openButton")}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -277,26 +326,31 @@ export default function InboxScreen() {
           onPress={loadThreads}
           activeOpacity={0.8}
         >
-          <Text style={styles.retryButtonText}>Retry</Text>
+          <Text style={styles.retryButtonText}>
+            {i18n.t("messages.setup.retry")}
+          </Text>
         </TouchableOpacity>
       </View>
     );
-  }, [loadThreads]);
+  }, [loadThreads, i18n]);
 
-  const sortedThreads = useMemo(() =>
-    [...threads].sort((a, b) => {
-      const aTime = new Date(a.last_message_at || 0).getTime();
-      const bTime = new Date(b.last_message_at || 0).getTime();
-      return bTime - aTime;
-    }),
-    [threads]
+  const sortedThreads = useMemo(
+    () =>
+      [...threads].sort((a, b) => {
+        const aTime = new Date(a.last_message_at || 0).getTime();
+        const bTime = new Date(b.last_message_at || 0).getTime();
+        return bTime - aTime;
+      }),
+    [threads],
   );
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Messages</Text>
+          <Text style={styles.headerTitle}>
+            {i18n.t("messages.inbox.title")}
+          </Text>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary[400]} />
@@ -310,7 +364,9 @@ export default function InboxScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Messages</Text>
+          <Text style={styles.headerTitle}>
+            {i18n.t("messages.inbox.title")}
+          </Text>
         </View>
         <TablesMissingComponent />
       </SafeAreaView>
@@ -320,7 +376,7 @@ export default function InboxScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Messages</Text>
+        <Text style={styles.headerTitle}>{i18n.t("messages.inbox.title")}</Text>
       </View>
 
       <FlatList

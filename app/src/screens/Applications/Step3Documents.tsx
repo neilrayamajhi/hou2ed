@@ -38,7 +38,7 @@ export default function Step3Documents({
   onBack,
 }: Step3DocumentsProps) {
   const [documents, setDocuments] = useState<UploadedDocument[]>(
-    draft.documents || []
+    draft.documents || [],
   );
   const [uploading, setUploading] = useState<Record<string, boolean>>({});
 
@@ -49,139 +49,211 @@ export default function Step3Documents({
 
   // Remove document function (declared before checkExistingDocument)
   const removeDocument = useCallback((docType: string) => {
-    setDocuments(prev => prev.filter(doc => doc.type !== docType));
-    setUploading(prev => ({ ...prev, [docType]: false }));
+    setDocuments((prev) => prev.filter((doc) => doc.type !== docType));
+    setUploading((prev) => ({ ...prev, [docType]: false }));
   }, []);
 
   // Check if document already exists and prompt for replacement
-  const checkExistingDocument = useCallback((docType: string): Promise<boolean> => {
-    return new Promise((resolve) => {
-      if (documents.some(doc => doc.type === docType)) {
-        Alert.alert(
-          "Document Already Uploaded",
-          "Would you like to replace the existing document?",
-          [
-            { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-            {
-              text: "Replace",
-              onPress: () => {
-                removeDocument(docType);
-                resolve(true);
+  const checkExistingDocument = useCallback(
+    (docType: string): Promise<boolean> => {
+      return new Promise((resolve) => {
+        if (documents.some((doc) => doc.type === docType)) {
+          Alert.alert(
+            "Document Already Uploaded",
+            "Would you like to replace the existing document?",
+            [
+              {
+                text: "Cancel",
+                style: "cancel",
+                onPress: () => resolve(false),
               },
-            },
-          ]
+              {
+                text: "Replace",
+                onPress: () => {
+                  removeDocument(docType);
+                  resolve(true);
+                },
+              },
+            ],
+          );
+        } else {
+          resolve(true);
+        }
+      });
+    },
+    [documents, removeDocument],
+  );
+
+  // Real upload to Supabase storage
+  const uploadDocument = useCallback(
+    async (docType: string, doc: UploadedDocument) => {
+      setUploading((prev) => ({ ...prev, [docType]: true }));
+
+      try {
+        // Import storage service
+        const { uploadApplicationDocument } = await import(
+          "../../services/storage.service"
         );
-      } else {
-        resolve(true);
+
+        // Use a temporary application ID (will be updated when application is submitted)
+        const tempAppId = `temp_${Date.now()}`;
+
+        // Update progress to show upload starting
+        setDocuments((prev) =>
+          prev.map((d) =>
+            d.type === docType ? { ...d, uploadProgress: 10 } : d,
+          ),
+        );
+
+        // Upload to Supabase
+        const result = await uploadApplicationDocument(
+          doc.uri,
+          tempAppId,
+          docType,
+        );
+
+        if (result.success && result.path) {
+          // Upload successful
+          setDocuments((prev) =>
+            prev.map((d) =>
+              d.type === docType
+                ? { ...d, uploadProgress: 100, uri: result.path || d.uri }
+                : d,
+            ),
+          );
+        } else {
+          // Upload failed
+          setDocuments((prev) =>
+            prev.map((d) =>
+              d.type === docType
+                ? { ...d, error: result.error || "Upload failed" }
+                : d,
+            ),
+          );
+        }
+      } catch (error) {
+        console.error("Upload error:", error);
+        setDocuments((prev) =>
+          prev.map((d) =>
+            d.type === docType
+              ? { ...d, error: "Upload failed. Please try again." }
+              : d,
+          ),
+        );
+      } finally {
+        setUploading((prev) => ({ ...prev, [docType]: false }));
       }
-    });
-  }, [documents, removeDocument]);
+    },
+    [],
+  );
 
   // Handle successful document selection
-  const handleDocumentSelected = useCallback((docType: string, uri: string, name: string, size: number) => {
-    // Validate file size
-    if (size > FILE_UPLOAD.MAX_SIZE_BYTES) {
-      Alert.alert("File Too Large", FILE_UPLOAD.ERROR_MESSAGES.SIZE);
-      return;
-    }
-
-    const newDoc: UploadedDocument = {
-      type: docType,
-      uri,
-      name,
-      size,
-      uploadProgress: 0,
-    };
-
-    setDocuments(prev => [...prev, newDoc]);
-    mockUploadProgress(docType, newDoc);
-  }, []);
-
-  const pickDocument = useCallback(async (docType: string) => {
-    try {
-      const shouldProceed = await checkExistingDocument(docType);
-      if (!shouldProceed) return;
-
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ["application/pdf", "image/*"],
-        copyToCacheDirectory: true,
-      });
-
-      if (!result.canceled && result.assets && result.assets[0]) {
-        const asset = result.assets[0];
-        handleDocumentSelected(docType, asset.uri, asset.name, asset.size || 0);
-      }
-    } catch (error) {
-      console.error("Document picker error:", error);
-      Alert.alert("Error", "Failed to pick document. Please try again.");
-    }
-  }, [checkExistingDocument, handleDocumentSelected]);
-
-  const pickImage = useCallback(async (docType: string) => {
-    try {
-      const shouldProceed = await checkExistingDocument(docType);
-      if (!shouldProceed) return;
-
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-      if (status !== "granted") {
-        Alert.alert(
-          "Permission Required",
-          "Please enable photo library access to upload documents."
-        );
+  const handleDocumentSelected = useCallback(
+    (docType: string, uri: string, name: string, size: number) => {
+      // Validate file size
+      if (size > FILE_UPLOAD.MAX_SIZE_BYTES) {
+        Alert.alert("File Too Large", FILE_UPLOAD.ERROR_MESSAGES.SIZE);
         return;
       }
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        quality: 0.8,
-      });
+      const newDoc: UploadedDocument = {
+        type: docType,
+        uri,
+        name,
+        size,
+        uploadProgress: 0,
+      };
 
-      if (!result.canceled && result.assets && result.assets[0]) {
-        const asset = result.assets[0];
-        // Mock file size (image picker doesn't provide size)
-        const mockSize = Math.floor(Math.random() * 2000000) + 500000; // 0.5-2.5MB
-        const fileName = `${docType}_${Date.now()}.jpg`;
+      setDocuments((prev) => [...prev, newDoc]);
+      uploadDocument(docType, newDoc);
+    },
+    [uploadDocument],
+  );
 
-        handleDocumentSelected(docType, asset.uri, fileName, mockSize);
+  const pickDocument = useCallback(
+    async (docType: string) => {
+      try {
+        const shouldProceed = await checkExistingDocument(docType);
+        if (!shouldProceed) return;
+
+        const result = await DocumentPicker.getDocumentAsync({
+          type: ["application/pdf", "image/*"],
+          copyToCacheDirectory: true,
+        });
+
+        if (!result.canceled && result.assets && result.assets[0]) {
+          const asset = result.assets[0];
+          handleDocumentSelected(
+            docType,
+            asset.uri,
+            asset.name,
+            asset.size || 0,
+          );
+        }
+      } catch (error) {
+        console.error("Document picker error:", error);
+        Alert.alert("Error", "Failed to pick document. Please try again.");
       }
-    } catch (error) {
-      console.error("Image picker error:", error);
-      Alert.alert("Error", "Failed to pick image. Please try again.");
-    }
-  }, [checkExistingDocument, handleDocumentSelected]);
+    },
+    [checkExistingDocument, handleDocumentSelected],
+  );
 
-  // Mock upload progress for demonstration (replace with actual upload in production)
-  const mockUploadProgress = useCallback((docType: string, doc: UploadedDocument) => {
-    setUploading(prev => ({ ...prev, [docType]: true }));
+  const pickImage = useCallback(
+    async (docType: string) => {
+      try {
+        const shouldProceed = await checkExistingDocument(docType);
+        if (!shouldProceed) return;
 
-    // Simulate upload progress
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 30;
-      if (progress >= 100) {
-        progress = 100;
-        clearInterval(interval);
-        setUploading(prev => ({ ...prev, [docType]: false }));
+        const { status } =
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+        if (status !== "granted") {
+          Alert.alert(
+            "Permission Required",
+            "Please enable photo library access to upload documents.",
+          );
+          return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: false,
+          quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets && result.assets[0]) {
+          const asset = result.assets[0];
+          // Mock file size (image picker doesn't provide size)
+          const mockSize = Math.floor(Math.random() * 2000000) + 500000; // 0.5-2.5MB
+          const fileName = `${docType}_${Date.now()}.jpg`;
+
+          handleDocumentSelected(docType, asset.uri, fileName, mockSize);
+        }
+      } catch (error) {
+        console.error("Image picker error:", error);
+        Alert.alert("Error", "Failed to pick image. Please try again.");
       }
+    },
+    [checkExistingDocument, handleDocumentSelected],
+  );
 
-      setDocuments(prev =>
-        prev.map(d =>
-          d.type === docType
-            ? { ...d, uploadProgress: Math.min(progress, 100) }
-            : d
-        )
-      );
-    }, 500);
-  }, []);
-
-  const retryUpload = useCallback((docType: string) => {
-    const doc = documents.find(d => d.type === docType);
-    if (doc) {
-      mockUploadProgress(docType, doc);
-    }
-  }, [documents, mockUploadProgress]);
+  const retryUpload = useCallback(
+    (docType: string) => {
+      const doc = documents.find((d) => d.type === docType);
+      if (doc) {
+        // Reset error state
+        setDocuments((prev) =>
+          prev.map((d) =>
+            d.type === docType
+              ? { ...d, error: undefined, uploadProgress: 0 }
+              : d,
+          ),
+        );
+        uploadDocument(docType, doc);
+      }
+    },
+    [documents, uploadDocument],
+  );
 
   const formatFileSize = useCallback((bytes: number) => {
     if (bytes < 1024) return bytes + " B";
@@ -189,13 +261,17 @@ export default function Step3Documents({
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   }, []);
 
-  const getDocumentForType = useCallback((docType: string) => {
-    return documents.find(doc => doc.type === docType);
-  }, [documents]);
+  const getDocumentForType = useCallback(
+    (docType: string) => {
+      return documents.find((doc) => doc.type === docType);
+    },
+    [documents],
+  );
 
   const allRequiredDocumentsUploaded = useMemo(() => {
-    return DOCUMENT_TYPES.filter(dt => dt.required)
-      .every(dt => documents.some(doc => doc.type === dt.id && doc.uploadProgress === 100));
+    return DOCUMENT_TYPES.filter((dt) => dt.required).every((dt) =>
+      documents.some((doc) => doc.type === dt.id && doc.uploadProgress === 100),
+    );
   }, [documents]);
 
   const handleDocumentPick = (docType: string) => {
@@ -206,7 +282,7 @@ export default function Step3Documents({
         { text: "Cancel", style: "cancel" },
         { text: "Photo Library", onPress: () => pickImage(docType) },
         { text: "Files", onPress: () => pickDocument(docType) },
-      ]
+      ],
     );
   };
 
@@ -278,21 +354,22 @@ export default function Step3Documents({
                   </View>
 
                   {/* Progress Bar */}
-                  {uploadedDoc.uploadProgress !== undefined && uploadedDoc.uploadProgress < 100 && (
-                    <View style={styles.progressContainer}>
-                      <View style={styles.progressBar}>
-                        <View
-                          style={[
-                            styles.progressFill,
-                            { width: `${uploadedDoc.uploadProgress}%` },
-                          ]}
-                        />
+                  {uploadedDoc.uploadProgress !== undefined &&
+                    uploadedDoc.uploadProgress < 100 && (
+                      <View style={styles.progressContainer}>
+                        <View style={styles.progressBar}>
+                          <View
+                            style={[
+                              styles.progressFill,
+                              { width: `${uploadedDoc.uploadProgress}%` },
+                            ]}
+                          />
+                        </View>
+                        <Text style={styles.progressText}>
+                          {Math.round(uploadedDoc.uploadProgress)}%
+                        </Text>
                       </View>
-                      <Text style={styles.progressText}>
-                        {Math.round(uploadedDoc.uploadProgress)}%
-                      </Text>
-                    </View>
-                  )}
+                    )}
 
                   {/* Actions */}
                   <View style={styles.fileActions}>
@@ -301,7 +378,11 @@ export default function Step3Documents({
                         style={styles.retryButton}
                         onPress={() => retryUpload(docType.id)}
                       >
-                        <Ionicons name="refresh" size={16} color={colors.gold} />
+                        <Ionicons
+                          name="refresh"
+                          size={16}
+                          color={colors.gold}
+                        />
                         <Text style={styles.retryText}>Retry</Text>
                       </TouchableOpacity>
                     ) : null}
