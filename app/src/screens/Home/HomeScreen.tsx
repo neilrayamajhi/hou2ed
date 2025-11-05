@@ -266,7 +266,7 @@ export default function HomeScreen() {
           >
             <Text style={styles.badgeText}>
               {item.availability === "available"
-                ? `${item.bedsAvailable} ${item.bedsAvailable === 1 ? i18n.t("home.bed") : i18n.t("home.beds")}`
+                ? `${item.unit_beds?.standard || 0} ${(item.unit_beds?.standard || 0) === 1 ? i18n.t("home.bed") : i18n.t("home.beds")}`
                 : i18n.t("home.full")}
             </Text>
           </View>
@@ -274,14 +274,18 @@ export default function HomeScreen() {
 
         <Text style={styles.listItemAddress}>
           <Ionicons name="location" size={14} color="#8a8a8a" />{" "}
-          {item.address.street}, {item.address.city}
+          {typeof item.address === 'string'
+            ? `${item.address}, ${item.city}`
+            : `${item.address?.street || item.address}, ${item.address?.city || item.city}`}
         </Text>
 
         <View style={styles.listItemFooter}>
           <Text style={styles.listItemPrice}>
-            {item.price.isFree
+            {item.cost?.free
               ? i18n.t("home.free").toUpperCase()
-              : `$${item.price.min}/mo`}
+              : item.cost?.monthly
+              ? `$${item.cost.monthly}/mo`
+              : "Contact for pricing"}
           </Text>
           <View style={styles.listItemDistance}>
             <Ionicons name="navigate" size={14} color="#D4AF37" />
@@ -410,9 +414,11 @@ export default function HomeScreen() {
                   ]}
                 >
                   <Text style={styles.markerText}>
-                    {listing.price.isFree
+                    {listing.cost?.free
                       ? i18n.t("home.free").toUpperCase()
-                      : `$${listing.price.min}`}
+                      : listing.cost?.monthly
+                      ? `$${listing.cost.monthly}`
+                      : "Contact"}
                   </Text>
                 </View>
               </Marker>
@@ -507,22 +513,25 @@ export default function HomeScreen() {
           >
             <View style={styles.miniCardContent}>
               <Text style={styles.miniCardTitle} numberOfLines={1}>
-                {listings[activeIndex].name}
+                {listings[activeIndex].title}
               </Text>
               <Text style={styles.miniCardAddress} numberOfLines={1}>
-                {listings[activeIndex].address.street},{" "}
-                {listings[activeIndex].address.city}
+                {typeof listings[activeIndex].address === 'string'
+                  ? `${listings[activeIndex].address}, ${listings[activeIndex].city}`
+                  : `${listings[activeIndex].address?.street || listings[activeIndex].address}, ${listings[activeIndex].address?.city || listings[activeIndex].city}`}
               </Text>
               <View style={styles.miniCardFooter}>
                 <Text style={styles.miniCardPrice}>
-                  {listings[activeIndex].price.isFree
+                  {listings[activeIndex].cost?.free
                     ? i18n.t("home.free").toUpperCase()
-                    : `$${listings[activeIndex].price.min}/mo`}
+                    : listings[activeIndex].cost?.monthly
+                    ? `$${listings[activeIndex].cost.monthly}/mo`
+                    : "Contact for pricing"}
                 </Text>
                 <View style={styles.miniCardBadge}>
                   <Text style={styles.miniCardBadgeText}>
                     {listings[activeIndex].availability === "available"
-                      ? `${listings[activeIndex].bedsAvailable} ${listings[activeIndex].bedsAvailable === 1 ? i18n.t("home.bed") : i18n.t("home.beds")}`
+                      ? `${listings[activeIndex].unit_beds?.standard || 0} ${(listings[activeIndex].unit_beds?.standard || 0) === 1 ? i18n.t("home.bed") : i18n.t("home.beds")}`
                       : i18n.t("home.full")}
                   </Text>
                 </View>
