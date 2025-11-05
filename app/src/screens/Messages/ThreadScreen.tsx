@@ -21,6 +21,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
 import { messageService, MessageWithSender, ThreadWithDetails } from "../../services/messageService";
+import { attachmentService } from "../../services/attachmentService";
 import { supabase } from "../../lib/supabase";
 
 interface Attachment {
@@ -80,8 +81,9 @@ export default function ThreadScreen() {
   useEffect(() => {
     async function loadThread() {
       try {
-        // Initialize message service
+        // Initialize message service and attachment service
         const userId = await messageService.initialize();
+        await attachmentService.initialize();
         setCurrentUserId(userId);
 
         // If we have a threadId, load the thread
@@ -164,10 +166,16 @@ export default function ThreadScreen() {
 
     setSending(true);
     try {
-      // Upload attachments if any (in a real app)
-      const attachmentUrls = selectedAttachments.length > 0
-        ? selectedAttachments.map(a => a.uri)
-        : undefined;
+      // Upload attachments if any
+      let attachmentUrls: string[] | undefined;
+      if (selectedAttachments.length > 0 && currentUserId) {
+        const uris = selectedAttachments.map(a => a.uri);
+        attachmentUrls = await attachmentService.uploadMultiple(
+          uris,
+          thread.id,
+          currentUserId
+        );
+      }
 
       // Send message
       const sentMessage = await messageService.sendMessage(

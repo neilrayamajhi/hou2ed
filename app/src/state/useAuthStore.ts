@@ -66,12 +66,16 @@ export const useAuthStore = create<AuthState>()(
           // Sign out from Supabase first
           await supabase.auth.signOut();
 
-          // Clear React Query cache (this fixes the stale data issue!)
-          queryClient.clear();
+          // Clear React Query cache completely
+          await queryClient.resetQueries();
+          await queryClient.clear();
           console.log("✅ React Query cache cleared");
 
           // Clear all auth-related storage
           await secureStorage.removeItem("auth-storage");
+
+          // Force a small delay to ensure everything is cleared
+          await new Promise((resolve) => setTimeout(resolve, 100));
 
           // Clear the zustand state
           set({
@@ -84,7 +88,8 @@ export const useAuthStore = create<AuthState>()(
         } catch (error) {
           console.error("Logout error:", error);
           // Even if Supabase signOut fails, clear local state
-          queryClient.clear();
+          await queryClient.resetQueries();
+          await queryClient.clear();
           set({
             user: null,
             isAuthenticated: false,

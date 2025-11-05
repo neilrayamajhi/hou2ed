@@ -88,19 +88,8 @@ export const supabase = createClient<Database>(
         // Add user agent for debugging
         "x-client-info": "hou2ed-app",
       },
-      // Set timeout to 30 seconds for all requests
-      // This prevents hanging on slow networks
-      fetch: (url, options = {}) => {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
-        return fetch(url, {
-          ...options,
-          signal: controller.signal,
-        }).finally(() => {
-          clearTimeout(timeoutId);
-        });
-      },
+      // Removed custom fetch timeout - let Supabase handle timeouts naturally
+      // The custom timeout was causing AbortError issues
     },
   },
 );

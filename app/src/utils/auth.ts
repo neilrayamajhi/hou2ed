@@ -43,28 +43,37 @@ export const extractEmailFromInput = (input: string): string | null => {
  */
 export const retryWithBackoff = async <T>(
   fn: () => Promise<T>,
-  maxRetries = 3,
-  initialDelay = 1000,
+  maxRetries = 2,  // Reduced from 3 to 2
+  initialDelay = 500,  // Reduced from 1000ms to 500ms
 ): Promise<T> => {
   let lastError: Error;
 
   for (let i = 0; i < maxRetries; i++) {
     try {
+      console.log(`Attempt ${i + 1} of ${maxRetries}...`);
       return await fn();
     } catch (error) {
       lastError = error as Error;
+      console.log(`Attempt ${i + 1} failed:`, lastError.message);
 
-      // Don't retry on auth errors (wrong password, etc)
+      // Don't retry on auth errors (wrong password, etc) or network errors
       if (
         lastError.message?.includes("Invalid login credentials") ||
-        lastError.message?.includes("Email not confirmed")
+        lastError.message?.includes("Email not confirmed") ||
+        lastError.message?.includes("User already registered") ||
+        lastError.message?.includes("Email already registered") ||
+        lastError.message?.includes("Username already taken") ||
+        lastError.message?.includes("fetch") ||
+        lastError.message?.includes("Network request failed") ||
+        lastError.message?.includes("aborted")
       ) {
         throw lastError;
       }
 
-      // Exponential backoff
+      // Shorter exponential backoff
       if (i < maxRetries - 1) {
-        const delay = initialDelay * Math.pow(2, i);
+        const delay = initialDelay * Math.pow(1.5, i);  // Less aggressive backoff (1.5x instead of 2x)
+        console.log(`Waiting ${delay}ms before retry...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }

@@ -1,7 +1,20 @@
 {
   "permissions": {
     "allow": [
-      "Read(//c/Users/samso/Documents/My Code, Projects, etc/**)"
+      "Bash(git merge:*)",
+      "Bash(npx prettier:*)",
+      "Bash(SUPABASE_SERVICE_KEY=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpeGlvZmx0enB0d2Fpd3hoaGxmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODM4OTg4NiwiZXhwIjoyMDczOTY1ODg2fQ.J9Oc77ZR1E435SqDsngt8ey4_WVOeTE6UASlYo17Gbc\" node:*)",
+      "Bash(psql:*)",
+      "Bash(/opt/homebrew/opt/postgresql@14/bin/psql:*)",
+      "Bash(PGPASSWORD=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpeGlvZmx0enB0d2Fpd3hoaGxmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODM4OTg4NiwiZXhwIjoyMDczOTY1ODg2fQ.J9Oc77ZR1E435SqDsngt8ey4_WVOeTE6UASlYo17Gbc\" /opt/homebrew/opt/postgresql@14/bin/psql -h db.rixiofltzptwaiwxhhlf.supabase.co -p 5432 -U postgres -d postgres -c \"ALTER TABLE public.messages ALTER COLUMN application_id DROP NOT NULL;\")",
+      "Bash(npx tsc:*)",
+      "Bash(npm run start:*)",
+      "Bash(npm start)",
+      "Bash(lsof:*)",
+      "Bash(kill:*)",
+      "Bash(npx expo start:*)",
+      "Bash(nc:*)",
+      "Bash(git fetch:*)"
     ],
     "deny": [],
     "ask": []

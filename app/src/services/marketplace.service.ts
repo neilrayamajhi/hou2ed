@@ -148,7 +148,8 @@ function transformToMarketplace(
 
   // Price info
   const monthlyPrice = dbListing.cost?.monthly || 0;
-  const isFree = dbListing.cost?.free || monthlyPrice === 0;
+  // Only mark as free if explicitly set to free, not if price is 0
+  const isFree = dbListing.cost?.free === true;
 
   return {
     id: dbListing.id,

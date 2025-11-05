@@ -28,6 +28,7 @@ import {
   signUpUser,
   resendVerificationCode,
 } from "../../services/auth.service";
+import { supabase } from "../../lib/supabase";
 import { AUTH_ERROR_CODES } from "../../utils/auth-errors";
 import { useRateLimit } from "../../hooks/useRateLimit";
 import {
@@ -184,12 +185,8 @@ export default function SignUp() {
         return;
       }
 
-      // Set a timeout for the signup attempt
-      loadingTimeout.current = setTimeout(() => {
-        if (mounted.current) {
-          Alert.alert("Error", AUTH_MESSAGES.ERROR.NETWORK_ERROR);
-        }
-      }, 30000); // 30 second timeout
+      // Removed timeout - it was causing abort errors
+      // Let Supabase handle its own timeouts
 
       try {
         console.log("=== SIGNUP ATTEMPT ===");
@@ -206,21 +203,52 @@ export default function SignUp() {
           role: selectedRole,
         });
 
-        // Clear timeout on successful response
-        if (loadingTimeout.current) {
-          clearTimeout(loadingTimeout.current);
-        }
+        // Timeout removed - no need to clear
 
         if (!mounted.current) return;
 
         if (result.success) {
           console.log("✅ Signup successful!");
-          console.log("Setting verification email to:", data.email);
-          console.log("Showing verification modal");
-
           resetAttempts();
-          setVerificationEmail(data.email);
-          setShowVerification(true);
+
+          // Check if user needs verification or is auto-confirmed
+          if (result.needsVerification === false) {
+            console.log("User is auto-confirmed! Logging in automatically...");
+
+            // Auto-login the user since they're already verified
+            try {
+              const { error } = await supabase.auth.signInWithPassword({
+                email: data.email,
+                password: data.password,
+              });
+
+              if (!error) {
+                console.log("✅ Auto-login successful!");
+                // User will be redirected automatically by AuthProvider
+                return;
+              } else {
+                console.log("Auto-login failed, user can login manually:", error);
+                Alert.alert(
+                  "Account Created!",
+                  "Your account has been created successfully. You can now login.",
+                  [{ text: "OK", onPress: () => navigation.navigate("Login") }]
+                );
+              }
+            } catch (loginError) {
+              console.log("Auto-login error:", loginError);
+              Alert.alert(
+                "Account Created!",
+                "Your account has been created successfully. You can now login.",
+                [{ text: "OK", onPress: () => navigation.navigate("Login") }]
+              );
+            }
+          } else {
+            // Show verification modal (old flow - only if email verification is needed)
+            console.log("Setting verification email to:", data.email);
+            console.log("Showing verification modal");
+            setVerificationEmail(data.email);
+            setShowVerification(true);
+          }
         } else {
           console.error("❌ Signup failed:", result.error);
           incrementAttempts();
@@ -292,9 +320,7 @@ export default function SignUp() {
           Alert.alert("Error", AUTH_MESSAGES.ERROR.SIGNUP_FAILED);
         }
       } finally {
-        if (loadingTimeout.current) {
-          clearTimeout(loadingTimeout.current);
-        }
+        // Timeout removed - no cleanup needed
       }
     },
     [

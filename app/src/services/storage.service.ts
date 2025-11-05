@@ -2,11 +2,12 @@ import { supabase } from '../lib/supabase';
 import { Platform } from 'react-native';
 // Avoid importing native-only modules at top-level so web bundler doesn't choke
 // We'll require them lazily only on native platforms
+// Using the legacy API as a quick fix for the deprecated methods
 let FileSystem: any = null;
 let ImageManipulator: any = null;
 if (Platform.OS !== 'web') {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  FileSystem = require('expo-file-system');
+  FileSystem = require('expo-file-system/legacy');
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   ImageManipulator = require('expo-image-manipulator');
 }
@@ -157,6 +158,12 @@ export async function uploadListingImage(
     console.log('📁 Uploading to:', filePath);
 
     // Upload to Supabase
+    console.log('🚀 Attempting Supabase storage upload...');
+    console.log('   Bucket:', LISTING_IMAGES_BUCKET);
+    console.log('   Path:', filePath);
+    console.log('   Data type:', typeof fileData);
+    console.log('   Data size:', fileSize, 'bytes');
+
     const { data, error } = await supabase.storage
       .from(LISTING_IMAGES_BUCKET)
       .upload(filePath, fileData, {
@@ -166,14 +173,17 @@ export async function uploadListingImage(
       });
 
     if (error) {
-      console.error('❌ Upload error:', error);
+      console.error('❌ Supabase upload error:', error);
+      console.error('   Error message:', error.message);
+      console.error('   Error name:', error.name);
+      console.error('   Full error:', JSON.stringify(error, null, 2));
       return {
         success: false,
         error: error.message,
       };
     }
 
-    console.log('✅ Upload successful:', data);
+    console.log('✅ Upload successful to Supabase:', data);
 
     // Get public URL
     const { data: { publicUrl } } = supabase.storage
@@ -189,6 +199,11 @@ export async function uploadListingImage(
     };
   } catch (error) {
     console.error('❌ Upload listing image error:', error);
+    console.error('Error details:', {
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Upload failed',

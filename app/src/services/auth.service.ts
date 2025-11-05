@@ -3,6 +3,7 @@ import { validateEmail } from "../utils/validation";
 import { transformUserData, retryWithBackoff } from "../utils/auth";
 import { AuthError, AUTH_ERROR_CODES } from "../utils/auth-errors";
 import { env } from "../utils/env";
+import { queryClient } from "../providers/QueryProvider";
 
 export interface LoginCredentials {
   emailOrUsername: string;
@@ -133,6 +134,15 @@ export async function loginUser(
     if (data?.user) {
       console.log("Login successful for user:", data.user.id);
       const userData = transformUserData(data.user);
+
+      // Clear ALL React Query cache to ensure fresh data for the new user
+      console.log("🔄 Clearing all React Query cache after login");
+      await queryClient.resetQueries(); // Use resetQueries instead of invalidateQueries
+      await queryClient.clear(); // Also clear the cache completely
+
+      // Force a small delay to ensure cache is cleared
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       return {
         success: true,
         user: userData,
@@ -157,7 +167,8 @@ export async function loginUser(
     ) {
       return {
         success: false,
-        error: "Unable to connect to server. Please check your internet connection.",
+        error:
+          "Unable to connect to server. Please check your internet connection.",
         errorCode: "NETWORK_ERROR",
       };
     }
@@ -360,7 +371,8 @@ export async function signUpUser(
       console.log("Email already registered:", email);
       return {
         success: false,
-        error: "This email is already registered. Please use a different email or try logging in.",
+        error:
+          "This email is already registered. Please use a different email or try logging in.",
         errorCode: AUTH_ERROR_CODES.EMAIL_EXISTS,
       };
     }
@@ -404,7 +416,9 @@ export async function signUpUser(
     // The database trigger is broken, causing regular signup to hang
     // Edge Function completes in 2-3 seconds instead of timing out
 
-    console.log("Using Edge Function for reliable signup (avoids timeout issue)...");
+    console.log(
+      "Using Edge Function for reliable signup (avoids timeout issue)...",
+    );
 
     try {
       // Call the Edge Function FIRST (not as fallback)
@@ -412,11 +426,11 @@ export async function signUpUser(
       const response = await fetch(
         `${env.SUPABASE_URL}/functions/v1/signup-with-verification`,
         {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            'apikey': env.SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${env.SUPABASE_ANON_KEY}`,
+            "Content-Type": "application/json",
+            apikey: env.SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
           },
           body: JSON.stringify({
             email,
@@ -425,7 +439,7 @@ export async function signUpUser(
             username,
             role,
           }),
-        }
+        },
       );
 
       const data = await response.json();
@@ -434,12 +448,16 @@ export async function signUpUser(
         console.error("Edge Function error:", data);
 
         // Check if it's because user already exists
-        if (data.errorCode === "EMAIL_EXISTS" || data.errorCode === "EMAIL_EXISTS_RESENT") {
+        if (
+          data.errorCode === "EMAIL_EXISTS" ||
+          data.errorCode === "EMAIL_EXISTS_RESENT"
+        ) {
           return {
             success: false,
-            error: data.errorCode === "EMAIL_EXISTS_RESENT"
-              ? "This email is already registered. A new verification code has been sent."
-              : "This email is already registered. Please use a different email or try logging in.",
+            error:
+              data.errorCode === "EMAIL_EXISTS_RESENT"
+                ? "This email is already registered. A new verification code has been sent."
+                : "This email is already registered. Please use a different email or try logging in.",
             errorCode: AUTH_ERROR_CODES.EMAIL_EXISTS,
           };
         }
@@ -487,16 +505,18 @@ export async function signUpUser(
         user: userData,
         needsVerification: needsVerification,
       };
-
     } catch (fetchError: any) {
       console.error("Edge Function call failed:", fetchError);
 
       // Network error - not a timeout, actual connection issue
-      if (fetchError?.message?.includes("fetch") ||
-          fetchError?.message?.includes("Network request failed")) {
+      if (
+        fetchError?.message?.includes("fetch") ||
+        fetchError?.message?.includes("Network request failed")
+      ) {
         return {
           success: false,
-          error: "Unable to connect to server. Please check your internet connection.",
+          error:
+            "Unable to connect to server. Please check your internet connection.",
           errorCode: "NETWORK_ERROR",
         };
       }
@@ -513,7 +533,11 @@ export async function signUpUser(
       console.error("Sign up error details:", error);
       console.error("Full error object:", JSON.stringify(error, null, 2));
 
-      if (error.status === 504 || error.message?.includes("504") || signupTimedOut) {
+      if (
+        error.status === 504 ||
+        error.message?.includes("504") ||
+        signupTimedOut
+      ) {
         console.error("Signup timed out - calling secure Edge Function...");
 
         try {
@@ -521,11 +545,11 @@ export async function signUpUser(
           const response = await fetch(
             `${env.SUPABASE_URL}/functions/v1/signup-with-verification`,
             {
-              method: 'POST',
+              method: "POST",
               headers: {
-                'Content-Type': 'application/json',
-                'apikey': env.SUPABASE_ANON_KEY,
-                'Authorization': `Bearer ${env.SUPABASE_ANON_KEY}`,
+                "Content-Type": "application/json",
+                apikey: env.SUPABASE_ANON_KEY,
+                Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
               },
               body: JSON.stringify({
                 email,
@@ -534,7 +558,7 @@ export async function signUpUser(
                 username,
                 role,
               }),
-            }
+            },
           );
 
           const data = await response.json();
@@ -546,7 +570,8 @@ export async function signUpUser(
             if (data.errorCode === "EMAIL_EXISTS") {
               return {
                 success: false,
-                error: "This email is already registered. Please use a different email or try logging in.",
+                error:
+                  "This email is already registered. Please use a different email or try logging in.",
                 errorCode: AUTH_ERROR_CODES.EMAIL_EXISTS,
               };
             }
@@ -580,12 +605,12 @@ export async function signUpUser(
             user: transformUserData(data.user),
             needsVerification: needsVerification,
           };
-
         } catch (fetchError: any) {
           console.error("Edge Function call failed:", fetchError);
           return {
             success: false,
-            error: "Unable to connect to signup service. Please try again later.",
+            error:
+              "Unable to connect to signup service. Please try again later.",
             errorCode: "NETWORK_ERROR",
           };
         }
@@ -603,7 +628,8 @@ export async function signUpUser(
         console.log("Signup failed: Email already exists in auth.users");
         return {
           success: false,
-          error: "This email is already registered. Please use a different email or try logging in.",
+          error:
+            "This email is already registered. Please use a different email or try logging in.",
           errorCode: AUTH_ERROR_CODES.EMAIL_EXISTS,
         };
       }
@@ -621,7 +647,8 @@ export async function signUpUser(
       if (error.message?.includes("weak_password")) {
         return {
           success: false,
-          error: "Password is too weak. Please use a stronger password with at least 8 characters.",
+          error:
+            "Password is too weak. Please use a stronger password with at least 8 characters.",
           errorCode: "WEAK_PASSWORD",
         };
       }
@@ -682,12 +709,17 @@ export async function signUpUser(
       console.log("  - Email:", data.user.email);
       console.log("  - Role:", userData.role);
       console.log("  - Username:", userData.username);
-      console.log("  - Email verified:", data.user.email_confirmed_at ? "Yes" : "No");
+      console.log(
+        "  - Email verified:",
+        data.user.email_confirmed_at ? "Yes" : "No",
+      );
       console.log("  - Session created:", data.session ? "Yes" : "No");
 
       // Warn if no session was created (might indicate password issue)
       if (!data.session) {
-        console.warn("⚠️ No session created during signup - user will need to verify email first");
+        console.warn(
+          "⚠️ No session created during signup - user will need to verify email first",
+        );
         console.log("  This is normal for email verification flow");
       }
 

@@ -15,19 +15,23 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MapView, Marker, PROVIDER_GOOGLE } from "../../components/MapView";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { theme } from "../../theme";
 import ListingCard from "../../components/ListingCard";
 import FiltersSheet from "../Search/FiltersSheet";
 import { useFilterStore } from "../../state/useFilterStore";
 import { useLocation } from "../../hooks/useLocation";
+import { useAuthStore } from "../../state/useAuthStore";
 import {
   generateMockListings,
   generateListingsAroundLocation,
   filterListingsByQuick,
 } from "../../data/mockListings";
 import { fetchRealShelters } from "../../services/shelterService";
-import { getMarketplaceListings, type MarketplaceListing } from "../../services/marketplace.service";
+import {
+  getMarketplaceListings,
+  type MarketplaceListing,
+} from "../../services/marketplace.service";
 import { usePerformance } from "../../utils/perf";
 import type { Listing } from "../../types/listing";
 import type { RootStackNavigationProp } from "../../navigation/types";
@@ -75,6 +79,9 @@ export default function HomeScreen() {
   // Get user location
   const { location, loading: locationLoading, refreshLocation } = useLocation();
 
+  // Get current user to detect account switches
+  const { user } = useAuthStore();
+
   // Store state
   const { quickFilters, toggleQuickFilter, searchQuery, setSearchQuery } =
     useFilterStore();
@@ -86,7 +93,7 @@ export default function HomeScreen() {
   const [showListView, setShowListView] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
   const [isRealData, setIsRealData] = useState(false);
-  const [dataSource, setDataSource] = useState('Mock Data');
+  const [dataSource, setDataSource] = useState("Mock Data");
   const [mapRegion, setMapRegion] = useState<Region>({
     latitude: 37.7749,
     longitude: -122.4194,
@@ -99,59 +106,118 @@ export default function HomeScreen() {
   const mapPerf = usePerformance("mapUpdate");
   const listingLoadPerf = usePerformance("listingLoad");
 
-  // Load real listings from database or fall back to mock data
-  useEffect(() => {
-    async function loadListings() {
-      setLoadingData(true);
-      listingLoadPerf.start();
-      try {
-        // Fetch real listings from Supabase database
-        const dbListings = await getMarketplaceListings(
-          location?.latitude,
-          location?.longitude,
-          50 // 50 mile radius
-        );
+  // Track if we're currently loading to prevent duplicate calls
+  const isLoadingRef = useRef(false);
 
-        let allListings: Listing[];
+  // Track the last user to detect actual switches
+  const lastUserRef = useRef(user?.id);
 
-        if (dbListings && dbListings.length > 0) {
-          // Use database listings
-          allListings = dbListings as any;
-          console.log(`✅ Found ${dbListings.length} real listings from database`);
-          setIsRealData(true);
-          setDataSource('Live Database');
-        } else {
-          // Fall back to mock data if no database listings
-          console.log('No database listings found, using mock data');
-          if (location) {
-            allListings = generateListingsAroundLocation(
-              location.latitude,
-              location.longitude,
-              20
-            );
-          } else {
-            allListings = generateMockListings(20);
-          }
-        }
-
-        const filtered = filterListingsByQuick(allListings, quickFilters);
-        setListings(filtered);
-      } catch (error) {
-        console.error('Error loading listings:', error);
-        // Fall back to mock data on error
-        const mockData = location
-          ? generateListingsAroundLocation(location.latitude, location.longitude, 20)
-          : generateMockListings(20);
-        const filtered = filterListingsByQuick(mockData, quickFilters);
-        setListings(filtered);
-      } finally {
-        listingLoadPerf.end();
-        setLoadingData(false);
-      }
+  // Function to load listings with proper dependencies
+  const loadListings = useCallback(async () => {
+    // Prevent duplicate simultaneous calls
+    if (isLoadingRef.current) {
+      console.log("⚠️ Already loading listings, skipping duplicate call");
+      return;
     }
 
+    console.log(`🔄 Loading listings for user: ${user?.email || "guest"}`);
+    console.log(`📍 Location: ${location?.latitude}, ${location?.longitude}`);
+    console.log(`🔍 Filters:`, quickFilters);
+
+    isLoadingRef.current = true;
+    setLoadingData(true);
+
+    try {
+      // Fetch real listings from Supabase database
+      const dbListings = await getMarketplaceListings(
+        location?.latitude,
+        location?.longitude,
+        50, // 50 mile radius
+      );
+
+      let allListings: Listing[];
+
+      if (dbListings && dbListings.length > 0) {
+        // Use database listings
+        allListings = dbListings as any;
+        console.log(
+          `✅ Found ${dbListings.length} real listings from database`,
+        );
+        setIsRealData(true);
+        setDataSource("Live Database");
+      } else {
+        // Fall back to mock data if no database listings
+        console.log("No database listings found, using mock data");
+        if (location) {
+          allListings = generateListingsAroundLocation(
+            location.latitude,
+            location.longitude,
+            20,
+          );
+        } else {
+          allListings = generateMockListings(20);
+        }
+        setIsRealData(false);
+        setDataSource("Mock Data");
+      }
+
+      // Debug the data before filtering
+      console.log(`🔍 Before filtering: ${allListings.length} total listings`);
+      console.log(`🔍 Active filters:`, Object.entries(quickFilters).filter(([k, v]) => v).map(([k]) => k));
+
+      const filtered = filterListingsByQuick(allListings, quickFilters);
+      console.log(`📍 After filtering: ${filtered.length} listings remain`);
+
+      if (filtered.length > 0) {
+        console.log(`📊 First listing:`, {
+          name: filtered[0]?.name,
+          id: filtered[0]?.id,
+          coordinates: filtered[0]?.coordinates,
+        });
+      } else {
+        console.log("⚠️ No listings after filtering!");
+      }
+
+      // Set the listings state with the filtered data
+      setListings(filtered);
+    } catch (error) {
+      console.error("Error loading listings:", error);
+      // Fall back to mock data on error
+      const mockData = location
+        ? generateListingsAroundLocation(
+            location.latitude,
+            location.longitude,
+            20,
+          )
+        : generateMockListings(20);
+      const filtered = filterListingsByQuick(mockData, quickFilters);
+      setListings(filtered);
+      setIsRealData(false);
+      setDataSource("Mock Data (Error Fallback)");
+    } finally {
+      setLoadingData(false);
+      isLoadingRef.current = false;
+      console.log("✅ Loading complete");
+    }
+  }, [location?.latitude, location?.longitude, quickFilters, user?.email]); // Proper dependencies
+
+  // Load listings when dependencies change
+  useEffect(() => {
+    console.log("📱 Dependencies changed, loading listings");
     loadListings();
-  }, [quickFilters, location]);
+  }, [loadListings]);
+
+  // Handle focus events for user switching
+  useFocusEffect(
+    useCallback(() => {
+      // Only reload if user actually changed
+      if (lastUserRef.current !== user?.id && user?.id) {
+        console.log("🔄 User switch detected on focus, reloading listings");
+        lastUserRef.current = user?.id;
+        loadListings();
+      }
+    }, [user?.id, loadListings]),
+  );
 
   // Update map region when user location is loaded
   useEffect(() => {
@@ -233,7 +299,13 @@ export default function HomeScreen() {
   }, [location, refreshLocation]);
 
   // Render listing item for list view
-  const renderListItem = ({ item, index }: { item: Listing; index: number }) => (
+  const renderListItem = ({
+    item,
+    index,
+  }: {
+    item: Listing;
+    index: number;
+  }) => (
     <TouchableOpacity
       style={styles.listItem}
       onPress={() => openDetails(item)}
@@ -242,23 +314,30 @@ export default function HomeScreen() {
       <View style={styles.listItemContent}>
         <View style={styles.listItemHeader}>
           <Text style={styles.listItemTitle}>{item.name}</Text>
-          <View style={[styles.availabilityBadge,
-            item.availability === 'available' ? styles.availableBadge : styles.fullBadge
-          ]}>
+          <View
+            style={[
+              styles.availabilityBadge,
+              item.availability === "available"
+                ? styles.availableBadge
+                : styles.fullBadge,
+            ]}
+          >
             <Text style={styles.badgeText}>
-              {item.availability === 'available' ? `${item.bedsAvailable} beds` : 'Full'}
+              {item.availability === "available"
+                ? `${item.bedsAvailable} beds`
+                : "Full"}
             </Text>
           </View>
         </View>
 
         <Text style={styles.listItemAddress}>
-          <Ionicons name="location" size={14} color="#8a8a8a" />
-          {' '}{item.address.street}, {item.address.city}
+          <Ionicons name="location" size={14} color="#8a8a8a" />{" "}
+          {item.address.street}, {item.address.city}
         </Text>
 
         <View style={styles.listItemFooter}>
           <Text style={styles.listItemPrice}>
-            {item.price.isFree ? 'FREE' : `$${item.price.min}/mo`}
+            {item.price.isFree ? "FREE" : `$${item.price.min}/mo`}
           </Text>
           <View style={styles.listItemDistance}>
             <Ionicons name="navigate" size={14} color="#D4AF37" />
@@ -277,7 +356,10 @@ export default function HomeScreen() {
   ) => (
     <TouchableOpacity
       key={key}
-      style={[styles.quickFilter, quickFilters[key] && styles.quickFilterActive]}
+      style={[
+        styles.quickFilter,
+        quickFilters[key] && styles.quickFilterActive,
+      ]}
       onPress={() => toggleQuickFilter(key)}
       activeOpacity={0.7}
     >
@@ -409,12 +491,14 @@ export default function HomeScreen() {
             styles.listViewContainer,
             {
               opacity: slideAnim,
-              transform: [{
-                translateY: slideAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [50, 0],
-                }),
-              }],
+              transform: [
+                {
+                  translateY: slideAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [50, 0],
+                  }),
+                },
+              ],
             },
           ]}
         >
@@ -438,7 +522,9 @@ export default function HomeScreen() {
               <ActivityIndicator size="small" color="#D4AF37" />
             ) : (
               <>
-                <Text style={styles.resultsCount}>{listings.length} places</Text>
+                <Text style={styles.resultsCount}>
+                  {listings.length} places
+                </Text>
                 <Text style={styles.resultsSubtext}>in this area</Text>
               </>
             )}
@@ -472,17 +558,20 @@ export default function HomeScreen() {
                 {listings[activeIndex].name}
               </Text>
               <Text style={styles.miniCardAddress} numberOfLines={1}>
-                {listings[activeIndex].address.street}, {listings[activeIndex].address.city}
+                {listings[activeIndex].address.street},{" "}
+                {listings[activeIndex].address.city}
               </Text>
               <View style={styles.miniCardFooter}>
                 <Text style={styles.miniCardPrice}>
-                  {listings[activeIndex].price.isFree ? 'FREE' : `$${listings[activeIndex].price.min}/mo`}
+                  {listings[activeIndex].price.isFree
+                    ? "FREE"
+                    : `$${listings[activeIndex].price.min}/mo`}
                 </Text>
                 <View style={styles.miniCardBadge}>
                   <Text style={styles.miniCardBadgeText}>
-                    {listings[activeIndex].availability === 'available'
+                    {listings[activeIndex].availability === "available"
                       ? `${listings[activeIndex].bedsAvailable} beds`
-                      : 'Full'}
+                      : "Full"}
                   </Text>
                 </View>
               </View>
@@ -493,7 +582,10 @@ export default function HomeScreen() {
       </View>
 
       {/* Filters Sheet */}
-      <FiltersSheet visible={showFilters} onClose={() => setShowFilters(false)} />
+      <FiltersSheet
+        visible={showFilters}
+        onClose={() => setShowFilters(false)}
+      />
     </SafeAreaView>
   );
 }

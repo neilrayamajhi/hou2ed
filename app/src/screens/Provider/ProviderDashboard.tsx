@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   SafeAreaView,
   Image,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import {
   colors,
@@ -41,6 +41,20 @@ export default function ProviderDashboard() {
   const { data: applications } = useProviderApplications();
   const { showToast } = useToast();
   const { user, logout } = useAuthStore();
+
+  // Only refresh listings when screen gains focus if user has changed
+  const lastUserRef = useRef(user?.id);
+  useFocusEffect(
+    useCallback(() => {
+      if (lastUserRef.current !== user?.id) {
+        console.log(
+          "🔄 User switch detected in ProviderDashboard - refreshing listings",
+        );
+        lastUserRef.current = user?.id;
+        refetch();
+      }
+    }, [user?.id, refetch]),
+  );
 
   const handleLogout = async () => {
     Alert.alert(
@@ -237,7 +251,11 @@ export default function ProviderDashboard() {
             <View key={listing.id} style={styles.listingCard}>
               {/* Listing Image */}
               <Image
-                source={{ uri: listing.image }}
+                source={{
+                  uri:
+                    listing.image ||
+                    "https://via.placeholder.com/100x100/cccccc/666666?text=No+Image",
+                }}
                 style={styles.listingImage}
                 accessibilityLabel={`Photo of ${listing.title}`}
               />

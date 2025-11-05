@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as en from "./en.json";
-import * as es from "./es.json";
+import { en, es } from "./translations";
 
 // Types
 export type Language = "en" | "es";
@@ -25,6 +24,7 @@ const I18nContext = createContext<I18nContextType | undefined>(undefined);
 
 // Helper function to get nested translation value
 function getNestedValue(obj: any, path: string): string | undefined {
+  if (!obj) return undefined;
   return path.split(".").reduce((current, key) => current?.[key], obj);
 }
 
@@ -69,6 +69,12 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   // Translation function with caching
   const translate = (key: string, params?: Record<string, any>): string => {
+    // Safety check for translations object
+    if (!translations || !translations[language]) {
+      console.warn(`Translations not loaded for language: ${language}`);
+      return key;
+    }
+
     // Check cache first
     const cacheKey = `${language}:${key}`;
     let translation = translationCache.get(cacheKey);
@@ -78,7 +84,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
       if (!translation) {
         // Fallback to English if translation not found
-        const fallback = getNestedValue(translations.en, key);
+        const fallback = translations.en ? getNestedValue(translations.en, key) : undefined;
         if (!fallback) {
           console.warn(`Translation missing for key: ${key}`);
           return key;

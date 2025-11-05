@@ -3,6 +3,7 @@
  */
 
 import type { Listing, HousingType } from "../types/listing";
+import { convertOldListingToNew } from "./fixMockListings";
 
 // Function to generate listings around a specific location
 export function generateListingsAroundLocation(
@@ -56,8 +57,9 @@ export function generateListingsAroundLocation(
     const bedsAvailable = isAvailable ? Math.floor(Math.random() * totalBeds * 0.5) + 1 : 0;
     const isFree = Math.random() > 0.6;
 
-    listings.push({
+    const oldFormatListing = {
       id: `loc-${i + 1}`,
+      provider_id: `provider-${Math.floor(Math.random() * 10) + 1}`,
       name: names[i % names.length],
       type: housingType,
       description: `24/7 ${housingType.replace(/_/g, ' ')} providing immediate housing and support services. Safe, clean environment with meals included.`,
@@ -103,15 +105,19 @@ export function generateListingsAroundLocation(
       lastUpdated: new Date().toISOString(),
       provider: "Local Housing Authority",
       verified: Math.random() > 0.3,
-    });
+    };
+
+    // Convert to new format
+    listings.push(convertOldListingToNew(oldFormatListing));
   }
 
   return listings.sort((a, b) => (a.distance || 0) - (b.distance || 0));
 }
 
-export const mockListings: Listing[] = [
+const oldFormatMockListings = [
   {
     id: "1",
+    provider_id: "provider-haven-1",
     name: "Haven Emergency Shelter",
     type: "emergency_shelter",
     description:
@@ -161,6 +167,7 @@ export const mockListings: Listing[] = [
   },
   {
     id: "2",
+    provider_id: "provider-bridge-2",
     name: "Bridge Transitional Housing",
     type: "transitional_housing",
     description:
@@ -215,6 +222,7 @@ export const mockListings: Listing[] = [
   },
   {
     id: "3",
+    provider_id: "provider-veterans-3",
     name: "Veterans First Housing",
     type: "veterans_housing",
     description:
@@ -270,6 +278,7 @@ export const mockListings: Listing[] = [
   },
   {
     id: "4",
+    provider_id: "provider-family-4",
     name: "Family Haven",
     type: "emergency_shelter",
     description:
@@ -324,6 +333,7 @@ export const mockListings: Listing[] = [
   },
   {
     id: "5",
+    provider_id: "provider-serenity-5",
     name: "Serenity Sober Living",
     type: "sober_living",
     description:
@@ -383,6 +393,7 @@ export const mockListings: Listing[] = [
   },
   {
     id: "6",
+    provider_id: "provider-youth-6",
     name: "Youth Forward Housing",
     type: "youth_housing",
     description:
@@ -438,6 +449,43 @@ export const mockListings: Listing[] = [
   },
 ];
 
+// Convert old format listings to new format
+export const mockListings: Listing[] = oldFormatMockListings.map((listing) => {
+  try {
+    return convertOldListingToNew(listing);
+  } catch (error) {
+    console.error("Failed to convert listing:", listing?.id, error);
+    // Return a minimal valid listing as fallback
+    return {
+      id: listing?.id || "unknown",
+      provider_id: listing?.provider_id || "unknown",
+      title: listing?.name || "Unknown Listing",
+      description: listing?.description || "",
+      address: "Unknown",
+      city: "San Francisco",
+      state: "CA",
+      zip_code: "94102",
+      lat: 37.7749,
+      lng: -122.4194,
+      housing_type: "emergency_shelter" as any,
+      unit_beds: { single_occupancy: 0 },
+      ada_beds: 0,
+      availability: {
+        beds_today: 0,
+        beds_week: 0,
+        waitlist: 0,
+        last_updated_at: null
+      },
+      verified: false,
+      images: [],
+      dv_sensitive: false,
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    } as Listing;
+  }
+});
+
 /**
  * Generate more mock listings with variations
  */
@@ -447,23 +495,27 @@ export function generateMockListings(count: number = 20): Listing[] {
 
   for (let i = 0; i < count; i++) {
     const base = baseListings[i % baseListings.length];
-    const variation = {
+
+    // Calculate total beds from unit_beds
+    const totalBeds = base.unit_beds
+      ? Object.values(base.unit_beds).reduce((sum, val) => sum + val, 0)
+      : 10;
+
+    const variation: Listing = {
       ...base,
       id: `gen-${i}`,
-      name: `${base.name} ${i + 1}`,
-      coordinates: {
-        latitude: base.coordinates.latitude + (Math.random() - 0.5) * 0.1,
-        longitude: base.coordinates.longitude + (Math.random() - 0.5) * 0.1,
-      },
+      provider_id: base.provider_id || `provider-gen-${i}`,
+      title: `${base.title} ${i + 1}`,
+      lat: base.lat + (Math.random() - 0.5) * 0.1,
+      lng: base.lng + (Math.random() - 0.5) * 0.1,
       distance: Math.random() * 10,
-      bedsAvailable: Math.floor(Math.random() * base.totalBeds),
-      availability:
-        Math.random() > 0.3
-          ? "available"
-          : Math.random() > 0.5
-          ? "waitlist"
-          : "full",
-    } as Listing;
+      availability: {
+        beds_today: Math.floor(Math.random() * totalBeds * 0.5),
+        beds_week: Math.floor(Math.random() * totalBeds * 0.7),
+        waitlist: Math.random() > 0.5 ? Math.floor(Math.random() * 10) : 0,
+        last_updated_at: new Date().toISOString()
+      }
+    };
     generated.push(variation);
   }
 
@@ -483,25 +535,43 @@ export function filterListingsByQuick(
     nearMe: boolean;
   },
 ): Listing[] {
+  // Guard against undefined inputs
+  if (!listings) return [];
+  if (!quickFilters) return listings;
+
+  // If no filters are active, return all listings
+  const activeFilters = Object.values(quickFilters).some(v => v);
+  if (!activeFilters) {
+    console.log("📝 No active filters, returning all listings");
+    return listings;
+  }
+
   let filtered = [...listings];
 
   if (quickFilters.immediate) {
-    filtered = filtered.filter((l) => l.availability === "available");
+    // Check if beds are available today
+    filtered = filtered.filter((l) => l.availability.beds_today > 0);
   }
 
   if (quickFilters.free) {
-    filtered = filtered.filter((l) => l.price.isFree);
+    // Check if cost is free
+    filtered = filtered.filter((l) => l.cost?.free === true);
   }
 
   if (quickFilters.veterans) {
-    filtered = filtered.filter((l) => l.features.acceptsVeterans);
+    // Check if accepts veterans
+    filtered = filtered.filter((l) => l.eligibility?.veterans === true);
   }
 
   if (quickFilters.families) {
-    filtered = filtered.filter((l) => l.features.acceptsFamilies);
+    // Check if accepts families
+    filtered = filtered.filter((l) =>
+      l.eligibility?.family_status?.includes("family") === true
+    );
   }
 
   if (quickFilters.nearMe) {
+    // Filter by distance
     filtered = filtered.filter((l) => (l.distance || 0) < 2);
   }
 

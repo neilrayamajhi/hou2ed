@@ -1,21 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  getThreadMessages,
-  sendMessage,
-  subscribeToThread,
-  sendTypingIndicator,
-  deleteMessage,
-  editMessage,
-  type Message,
-  type Thread,
-  type SendMessageParams,
-} from '../services/messaging.service';
+import { messageService } from '../services/messageService';
 import { useAuthStore } from '../state/useAuthStore';
 
 interface UseChatOptions {
   threadId: string;
-  onNewMessage?: (message: Message) => void;
+  onNewMessage?: (message: any) => void;
   onTypingChange?: (userId: string, isTyping: boolean) => void;
   autoMarkAsRead?: boolean;
   enableRealtime?: boolean;
@@ -35,41 +25,40 @@ export function useChat({
   autoMarkAsRead = true,
   enableRealtime = true,
 }: UseChatOptions) {
-  const user = useAuthStore((state) => state.user);
+  const { user } = useAuthStore();
   const queryClient = useQueryClient();
-
-  // State
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<any[]>([]);
   const [typingUsers, setTypingUsers] = useState<Map<string, TypingUser>>(new Map());
   const [isTyping, setIsTyping] = useState(false);
-  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
-
-  // Refs
+  const [editingMessage, setEditingMessage] = useState<any | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastTypingRef = useRef<number>(0);
 
-  // Fetch messages
-  const { data: fetchedMessages, isLoading, error, refetch } = useQuery({
-    queryKey: ['messages', threadId],
-    queryFn: () => getThreadMessages(threadId),
+  // Initialize messageService
+  useEffect(() => {
+    messageService.initialize().catch(console.error);
+  }, []);
+
+  // Fetch thread and messages
+  const { data: thread, isLoading, error, refetch } = useQuery({
+    queryKey: ['thread', threadId],
+    queryFn: async () => {
+      const result = await messageService.getThread(threadId);
+      if (result?.messages) {
+        setMessages(result.messages);
+      }
+      return result;
+    },
     enabled: !!threadId,
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
-
-  // Update local messages when fetched
-  useEffect(() => {
-    if (fetchedMessages) {
-      setMessages(fetchedMessages);
-    }
-  }, [fetchedMessages]);
 
   // Subscribe to realtime updates
   useEffect(() => {
     if (!enableRealtime || !threadId) return;
 
     // Handle new messages
-    const handleNewMessage = (message: Message) => {
+    const handleNewMessage = (message: any) => {
       setMessages((prev) => {
         // Check if message already exists (prevent duplicates)
         if (prev.some((m) => m.id === message.id)) {
@@ -78,45 +67,27 @@ export function useChat({
         return [...prev, message];
       });
 
+      // Mark as read if needed
+      if (autoMarkAsRead && message.sender_id !== user?.id) {
+        messageService.markMessagesAsRead(threadId, [message.id]).catch(console.error);
+      }
+
       // Callback
       onNewMessage?.(message);
 
       // Invalidate queries
       queryClient.invalidateQueries({ queryKey: ['threads'] });
+      queryClient.invalidateQueries({ queryKey: ['thread', threadId] });
     };
 
-    // Handle typing indicators
-    const handleTyping = (userId: string, isTyping: boolean) => {
-      if (userId === user?.id) return; // Ignore own typing
-
-      setTypingUsers((prev) => {
-        const newMap = new Map(prev);
-        if (isTyping) {
-          newMap.set(userId, { userId, timestamp: Date.now() });
-        } else {
-          newMap.delete(userId);
-        }
-        return newMap;
-      });
-
-      onTypingChange?.(userId, isTyping);
-    };
-
-    // Subscribe
-    unsubscribeRef.current = subscribeToThread(
-      threadId,
-      handleNewMessage,
-      handleTyping
-    );
+    // Subscribe to thread
+    messageService.subscribeToThread(threadId, handleNewMessage);
 
     // Cleanup
     return () => {
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-        unsubscribeRef.current = null;
-      }
+      messageService.unsubscribeFromThread(threadId);
     };
-  }, [threadId, enableRealtime, user?.id, onNewMessage, onTypingChange, queryClient]);
+  }, [threadId, enableRealtime, user?.id, onNewMessage, autoMarkAsRead, queryClient]);
 
   // Clean up stale typing indicators
   useEffect(() => {
@@ -142,239 +113,198 @@ export function useChat({
 
   // Send message mutation
   const sendMessageMutation = useMutation({
-    mutationFn: (params: Omit<SendMessageParams, 'threadId'>) =>
-      sendMessage({ ...params, threadId }),
-    onSuccess: (result) => {
-      if (result.success && result.message) {
+    mutationFn: async (params: { body: string; attachmentUrls?: string[] }) => {
+      return await messageService.sendMessage(threadId, params.body, params.attachmentUrls);
+    },
+    onSuccess: (message) => {
+      if (message) {
         // Optimistically add message
-        setMessages((prev) => [...prev, result.message!]);
+        setMessages((prev) => {
+          // Check if message already exists
+          if (prev.some((m) => m.id === message.id)) {
+            return prev;
+          }
+          return [...prev, message];
+        });
 
         // Invalidate queries
-        queryClient.invalidateQueries({ queryKey: ['messages', threadId] });
         queryClient.invalidateQueries({ queryKey: ['threads'] });
+        queryClient.invalidateQueries({ queryKey: ['thread', threadId] });
       }
     },
     onError: (error) => {
-      console.error('Send message error:', error);
-    },
-  });
-
-  // Delete message mutation
-  const deleteMessageMutation = useMutation({
-    mutationFn: deleteMessage,
-    onSuccess: (result, messageId) => {
-      if (result.success) {
-        // Remove message from local state
-        setMessages((prev) => prev.filter((m) => m.id !== messageId));
-
-        // Invalidate queries
-        queryClient.invalidateQueries({ queryKey: ['messages', threadId] });
-      }
+      console.error('Failed to send message:', error);
     },
   });
 
   // Edit message mutation
   const editMessageMutation = useMutation({
-    mutationFn: ({ messageId, newBody }: { messageId: string; newBody: string }) =>
-      editMessage(messageId, newBody),
-    onSuccess: (result) => {
-      if (result.success && result.message) {
-        // Update local message
-        setMessages((prev) =>
-          prev.map((m) => (m.id === result.message!.id ? result.message! : m))
-        );
-
-        // Clear editing state
+    mutationFn: async ({ messageId, body }: { messageId: string; body: string }) => {
+      return await messageService.editMessage(messageId, body);
+    },
+    onSuccess: (message) => {
+      if (message) {
+        setMessages((prev) => prev.map((m) => (m.id === message.id ? message : m)));
         setEditingMessage(null);
-
-        // Invalidate queries
-        queryClient.invalidateQueries({ queryKey: ['messages', threadId] });
+        queryClient.invalidateQueries({ queryKey: ['thread', threadId] });
       }
+    },
+    onError: (error) => {
+      console.error('Failed to edit message:', error);
     },
   });
 
-  // Send a message
-  const send = useCallback(
+  // Delete message mutation
+  const deleteMessageMutation = useMutation({
+    mutationFn: async (messageId: string) => {
+      return await messageService.deleteMessage(messageId);
+    },
+    onSuccess: (_, messageId) => {
+      setMessages((prev) => prev.map((m) =>
+        m.id === messageId ? { ...m, deleted_at: new Date().toISOString() } : m
+      ));
+      queryClient.invalidateQueries({ queryKey: ['thread', threadId] });
+    },
+    onError: (error) => {
+      console.error('Failed to delete message:', error);
+    },
+  });
+
+  // Send message
+  const sendMessage = useCallback(
     async (body: string, attachmentUrls?: string[]) => {
-      if (!body.trim()) return;
+      if (!body.trim() && (!attachmentUrls || attachmentUrls.length === 0)) {
+        return;
+      }
 
-      // Stop typing indicator
-      handleStopTyping();
-
-      // Send message
-      await sendMessageMutation.mutateAsync({ body: body.trim(), attachmentUrls });
+      await sendMessageMutation.mutateAsync({ body, attachmentUrls });
     },
     [sendMessageMutation]
   );
 
-  // Handle typing indicator
-  const handleTyping = useCallback(() => {
-    const now = Date.now();
+  // Edit message
+  const startEditing = useCallback((message: any) => {
+    setEditingMessage(message);
+  }, []);
 
-    // Only send if not recently sent
-    if (now - lastTypingRef.current > 2000) {
-      sendTypingIndicator(threadId, true);
-      lastTypingRef.current = now;
-    }
-
-    // Clear existing timeout
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    // Set new timeout to stop typing
-    typingTimeoutRef.current = setTimeout(() => {
-      handleStopTyping();
-    }, TYPING_TIMEOUT);
-
-    setIsTyping(true);
-  }, [threadId]);
-
-  // Stop typing indicator
-  const handleStopTyping = useCallback(() => {
-    if (isTyping) {
-      sendTypingIndicator(threadId, false);
-      setIsTyping(false);
-    }
-
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = null;
-    }
-  }, [threadId, isTyping]);
-
-  // Start editing a message
-  const startEditing = useCallback((message: Message) => {
-    if (message.sender_id === user?.id) {
-      setEditingMessage(message);
-    }
-  }, [user?.id]);
-
-  // Cancel editing
   const cancelEditing = useCallback(() => {
     setEditingMessage(null);
   }, []);
 
-  // Save edit
   const saveEdit = useCallback(
-    async (newBody: string) => {
+    async (body: string) => {
       if (!editingMessage) return;
-
-      await editMessageMutation.mutateAsync({
-        messageId: editingMessage.id,
-        newBody,
-      });
+      await editMessageMutation.mutateAsync({ messageId: editingMessage.id, body });
     },
     [editingMessage, editMessageMutation]
   );
 
-  // Delete a message
-  const remove = useCallback(
+  // Delete message
+  const deleteMsg = useCallback(
     async (messageId: string) => {
       await deleteMessageMutation.mutateAsync(messageId);
     },
     [deleteMessageMutation]
   );
 
-  // Load more messages (pagination)
-  const loadMore = useCallback(async () => {
-    if (messages.length === 0) return;
+  // Mark messages as read
+  const markAsRead = useCallback(
+    async (messageIds?: string[]) => {
+      const idsToMark = messageIds || messages
+        .filter((m) => m.sender_id !== user?.id && !m.read_by?.includes(user?.id))
+        .map((m) => m.id);
 
-    const oldestMessage = messages[0];
-    const olderMessages = await getThreadMessages(
-      threadId,
-      50,
-      oldestMessage.created_at
-    );
-
-    if (olderMessages.length > 0) {
-      setMessages((prev) => [...olderMessages, ...prev]);
-    }
-
-    return olderMessages.length > 0;
-  }, [threadId, messages]);
-
-  // Retry failed message
-  const retry = useCallback(
-    async (message: Message) => {
-      // Remove failed message from local state
-      setMessages((prev) => prev.filter((m) => m.id !== message.id));
-
-      // Resend
-      await send(message.body, message.attachment_urls);
+      if (idsToMark.length > 0) {
+        await messageService.markMessagesAsRead(threadId, idsToMark);
+        queryClient.invalidateQueries({ queryKey: ['thread', threadId] });
+      }
     },
-    [send]
+    [threadId, messages, user?.id, queryClient]
   );
 
-  // Check if user can edit/delete message
+  // Typing indicator
+  const sendTypingIndicator = useCallback(
+    (typing: boolean) => {
+      setIsTyping(typing);
+
+      // Clear existing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      if (typing) {
+        // Auto-stop typing after timeout
+        typingTimeoutRef.current = setTimeout(() => {
+          setIsTyping(false);
+        }, TYPING_TIMEOUT);
+      }
+
+      // Note: Typing indicators would need to be implemented in messageService
+      // For now, just update local state
+      onTypingChange?.(user?.id || '', typing);
+    },
+    [user?.id, onTypingChange]
+  );
+
+  // Check if user can modify message
   const canModifyMessage = useCallback(
-    (message: Message): boolean => {
-      if (!user) return false;
-
-      // User can only modify their own messages
+    (message: any) => {
+      if (!user || !message) return false;
       if (message.sender_id !== user.id) return false;
+      if (message.deleted_at) return false;
 
-      // Check if message is recent (within 24 hours)
-      const messageAge = Date.now() - new Date(message.created_at).getTime();
-      const twentyFourHours = 24 * 60 * 60 * 1000;
+      // Allow editing within 24 hours
+      const messageDate = new Date(message.created_at);
+      const now = new Date();
+      const hoursDiff = (now.getTime() - messageDate.getTime()) / (1000 * 60 * 60);
 
-      return messageAge < twentyFourHours;
+      return hoursDiff < 24;
     },
     [user]
   );
 
-  // Get typing users list
-  const getTypingUsersList = useCallback((): string[] => {
-    return Array.from(typingUsers.keys());
+  // Get typing users display
+  const typingUsersDisplay = useCallback(() => {
+    const typing = Array.from(typingUsers.values());
+    if (typing.length === 0) return null;
+
+    const names = typing.map((t) => t.userId); // Should be user names, not IDs
+    if (names.length === 1) {
+      return `${names[0]} is typing...`;
+    } else if (names.length === 2) {
+      return `${names.join(' and ')} are typing...`;
+    } else {
+      return `${names.slice(0, 2).join(', ')} and ${names.length - 2} others are typing...`;
+    }
   }, [typingUsers]);
-
-  // Format typing indicator text
-  const getTypingText = useCallback((): string => {
-    const users = getTypingUsersList();
-    if (users.length === 0) return '';
-    if (users.length === 1) return `${users[0]} is typing...`;
-    if (users.length === 2) return `${users[0]} and ${users[1]} are typing...`;
-    return `${users[0]} and ${users.length - 1} others are typing...`;
-  }, [getTypingUsersList]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      handleStopTyping();
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-      }
-    };
-  }, []);
 
   return {
     // Data
     messages,
+    thread,
     isLoading,
     error,
-    typingUsers: getTypingUsersList(),
-    typingText: getTypingText(),
+    typingUsers,
+    typingUsersDisplay: typingUsersDisplay(),
+    isTyping,
     editingMessage,
 
     // Actions
-    send,
-    remove,
+    sendMessage,
+    deleteMessage: deleteMsg,
     startEditing,
     cancelEditing,
     saveEdit,
-    handleTyping,
-    handleStopTyping,
-    loadMore,
-    retry,
+    markAsRead,
+    sendTypingIndicator,
     refetch,
 
-    // Status
+    // Utils
+    canModifyMessage,
+
+    // Mutations state
     isSending: sendMessageMutation.isPending,
     isEditing: editMessageMutation.isPending,
     isDeleting: deleteMessageMutation.isPending,
-    isTyping,
-
-    // Helpers
-    canModifyMessage,
   };
 }

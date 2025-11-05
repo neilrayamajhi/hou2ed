@@ -1,46 +1,74 @@
-/**
- * Real-time Messaging Service
- * Handles all messaging operations with Supabase
- */
-
 import { supabase } from '../lib/supabase';
-import type {
-  MessageThread,
-  Message,
-  MessageThreadInsert,
-  MessageInsert,
-  Profile
-} from '../lib/supabase-types';
-import { RealtimeChannel } from '@supabase/supabase-js';
 
-export interface MessageWithSender extends Message {
-  sender?: Profile;
+// Types
+interface Message {
+  id: string;
+  thread_id: string;
+  sender_id: string;
+  body: string;
+  attachment_urls?: string[];
+  read_by: string[];
+  deleted_at: string | null;
+  edited_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-export interface ThreadWithDetails extends MessageThread {
+interface MessageWithSender extends Message {
+  sender: any;
+}
+
+interface Thread {
+  id: string;
+  subject?: string;
+  participant_ids: string[];
+  listing_id?: string;
+  application_id?: string;
+  last_message_at: string;
+  created_at: string;
+  updated_at: string;
+  participants?: any[];
   messages?: MessageWithSender[];
-  participants?: Profile[];
-  lastMessage?: MessageWithSender;
-  unreadCount?: number;
+  unread_count?: number;
 }
 
-class MessageService {
-  private messageSubscriptions: Map<string, RealtimeChannel> = new Map();
-  private threadSubscriptions: Map<string, RealtimeChannel> = new Map();
+class MessageServiceFix {
   private userId: string | null = null;
-  private threadTableName: string = 'message_threads'; // Will fallback to 'threads' if needed
+  private threadTableName: 'message_threads' | 'threads' = 'message_threads';
+  private messageSubscriptions: Map<string, any> = new Map();
+  private inboxSubscription: any = null;
+  private profileCache: Map<string, any> = new Map();
+  private profileCacheTimeout: NodeJS.Timeout | null = null;
 
   /**
    * Initialize the service with current user
    */
-  async initialize() {
-    const { data: { user } } = await supabase.auth.getUser();
-    this.userId = user?.id || null;
+  async initialize(): Promise<string | null> {
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
 
-    // Check which table name to use
-    await this.detectThreadTableName();
+      if (error) {
+        console.error('Failed to get current user:', error);
+        throw new Error('Authentication required');
+      }
 
-    return this.userId;
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      this.userId = user.id;
+
+      // Check which table name to use
+      await this.detectThreadTableName();
+
+      // Start profile cache cleanup
+      this.startProfileCacheCleanup();
+
+      return this.userId;
+    } catch (error) {
+      console.error('Failed to initialize message service:', error);
+      throw error;
+    }
   }
 
   /**
@@ -56,38 +84,631 @@ class MessageService {
 
       if (!messageThreadsError) {
         this.threadTableName = 'message_threads';
+        console.log('✅ Using message_threads table');
         return;
       }
 
-      // If message_threads doesn't exist, try threads
-      if (messageThreadsError.code === 'PGRST205') {
-        const { error: threadsError } = await supabase
-          .from('threads')
-          .select('id')
-          .limit(0);
+      // If message_threads doesn't exist, check error code
+      if (messageThreadsError.code === 'PGRST205' ||
+          messageThreadsError.message?.includes('relation') ||
+          messageThreadsError.message?.includes('does not exist')) {
 
-        if (!threadsError) {
-          this.threadTableName = 'threads';
-          console.warn('Using "threads" table (legacy). Please run database migration.');
-          return;
-        }
-
-        // Neither table exists
-        if (threadsError.code === 'PGRST205') {
-          console.error('⚠️ No messaging tables found. Please run the database migration to create them.');
-          console.error('Run the SQL from /Users/neilrayamajhi/h2d/CREATE_MESSAGING_TABLES.sql in Supabase');
-          // Use message_threads as default (will fail but with better error)
-          this.threadTableName = 'message_threads';
-          return;
-        }
+        console.error('❌ message_threads table not found');
+        throw new Error('Messaging tables not configured. Please run database migration.');
       }
 
-      // Some other error
-      console.error('Error detecting thread table:', messageThreadsError);
+      // Some other error (likely RLS)
+      console.warn('⚠️ Error accessing message_threads:', messageThreadsError.message);
       this.threadTableName = 'message_threads';
     } catch (error) {
       console.error('Error detecting thread table name:', error);
-      this.threadTableName = 'message_threads';
+      throw error;
+    }
+  }
+
+  /**
+   * Start periodic cleanup of profile cache
+   */
+  private startProfileCacheCleanup() {
+    // Clear cache every 5 minutes
+    this.profileCacheTimeout = setInterval(() => {
+      this.profileCache.clear();
+    }, 5 * 60 * 1000);
+  }
+
+  /**
+   * Get cached profile or fetch from database
+   */
+  private async getCachedProfile(userId: string): Promise<any> {
+    // Check cache first
+    if (this.profileCache.has(userId)) {
+      return this.profileCache.get(userId);
+    }
+
+    // Fetch from database
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (!error && profile) {
+      this.profileCache.set(userId, profile);
+    }
+
+    return profile;
+  }
+
+  /**
+   * Batch fetch profiles for multiple user IDs
+   */
+  private async getBatchProfiles(userIds: string[]): Promise<Map<string, any>> {
+    const uniqueIds = [...new Set(userIds)];
+    const profiles = new Map<string, any>();
+
+    // Check cache first
+    const uncachedIds = uniqueIds.filter(id => {
+      if (this.profileCache.has(id)) {
+        profiles.set(id, this.profileCache.get(id));
+        return false;
+      }
+      return true;
+    });
+
+    // Fetch uncached profiles
+    if (uncachedIds.length > 0) {
+      const { data: fetchedProfiles, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .in('id', uncachedIds);
+
+      if (!error && fetchedProfiles) {
+        fetchedProfiles.forEach(profile => {
+          this.profileCache.set(profile.id, profile);
+          profiles.set(profile.id, profile);
+        });
+      }
+    }
+
+    return profiles;
+  }
+
+  /**
+   * Create a new thread or find existing one
+   */
+  async createThread(
+    participantIds: string[],
+    subject?: string,
+    listingId?: string,
+    applicationId?: string
+  ): Promise<Thread> {
+    try {
+      if (!this.userId) {
+        throw new Error('User not initialized');
+      }
+
+      // Ensure current user is included
+      const allParticipants = [...new Set([this.userId, ...participantIds])];
+
+      // Check for existing thread with same participants
+      const { data: existingThreads, error: searchError } = await supabase
+        .from(this.threadTableName)
+        .select('*')
+        .contains('participant_ids', allParticipants)
+        .order('created_at', { ascending: false });
+
+      if (searchError) {
+        console.error('Error searching for existing thread:', searchError);
+        throw searchError;
+      }
+
+      // Find exact match
+      const existingThread = existingThreads?.find(thread => {
+        const threadParticipants = [...thread.participant_ids].sort();
+        const searchParticipants = [...allParticipants].sort();
+        return JSON.stringify(threadParticipants) === JSON.stringify(searchParticipants);
+      });
+
+      if (existingThread) {
+        return existingThread;
+      }
+
+      // Create new thread
+      const { data: newThread, error: createError } = await supabase
+        .from(this.threadTableName)
+        .insert({
+          subject,
+          participant_ids: allParticipants,
+          listing_id: listingId,
+          application_id: applicationId,
+          last_message_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Error creating thread:', createError);
+        throw createError;
+      }
+
+      return newThread;
+    } catch (error) {
+      console.error('Failed to create thread:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all threads for current user with optimized profile fetching
+   */
+  async getThreads(): Promise<Thread[]> {
+    try {
+      if (!this.userId) {
+        throw new Error('User not initialized');
+      }
+
+      // Get threads
+      const { data: threads, error } = await supabase
+        .from(this.threadTableName)
+        .select('*')
+        .contains('participant_ids', [this.userId])
+        .order('last_message_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching threads:', error);
+        throw error;
+      }
+
+      if (!threads || threads.length === 0) {
+        return [];
+      }
+
+      // Collect all participant IDs
+      const allParticipantIds = new Set<string>();
+      threads.forEach(thread => {
+        thread.participant_ids.forEach((id: string) => allParticipantIds.add(id));
+      });
+
+      // Batch fetch all profiles
+      const profileMap = await this.getBatchProfiles([...allParticipantIds]);
+
+      // Get last messages for each thread
+      const threadIds = threads.map(t => t.id);
+      const { data: messages, error: messagesError } = await supabase
+        .from('messages')
+        .select('*')
+        .in('thread_id', threadIds)
+        .order('created_at', { ascending: false });
+
+      if (messagesError) {
+        console.error('Error fetching messages:', messagesError);
+      }
+
+      // Group messages by thread
+      const messagesByThread = new Map<string, any[]>();
+      messages?.forEach(msg => {
+        if (!messagesByThread.has(msg.thread_id)) {
+          messagesByThread.set(msg.thread_id, []);
+        }
+        messagesByThread.get(msg.thread_id)!.push(msg);
+      });
+
+      // Process threads
+      return threads.map(thread => {
+        // Add participants
+        const participants = thread.participant_ids
+          .map((id: string) => profileMap.get(id))
+          .filter(Boolean);
+
+        // Get messages for this thread
+        const threadMessages = messagesByThread.get(thread.id) || [];
+
+        // Calculate unread count
+        const unreadCount = threadMessages.filter((msg: any) =>
+          msg.sender_id !== this.userId &&
+          !msg.read_by?.includes(this.userId!)
+        ).length;
+
+        return {
+          ...thread,
+          participants,
+          unread_count: unreadCount
+        };
+      });
+    } catch (error) {
+      console.error('Failed to get threads:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get a single thread with messages (optimized)
+   */
+  async getThread(threadId: string): Promise<Thread | null> {
+    try {
+      if (!this.userId) {
+        throw new Error('User not initialized');
+      }
+
+      // Get thread
+      const { data: thread, error: threadError } = await supabase
+        .from(this.threadTableName)
+        .select('*')
+        .eq('id', threadId)
+        .single();
+
+      if (threadError) {
+        console.error('Error fetching thread:', threadError);
+        throw threadError;
+      }
+
+      // Get messages
+      const { data: messages, error: messagesError } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('thread_id', threadId)
+        .order('created_at', { ascending: true });
+
+      if (messagesError) {
+        console.error('Error fetching messages:', messagesError);
+        throw messagesError;
+      }
+
+      // Batch fetch profiles for all participants and message senders
+      const allUserIds = new Set<string>([...thread.participant_ids]);
+      messages?.forEach(msg => allUserIds.add(msg.sender_id));
+
+      const profileMap = await this.getBatchProfiles([...allUserIds]);
+
+      // Add sender info to messages
+      const messagesWithSenders = messages?.map(msg => ({
+        ...msg,
+        sender: profileMap.get(msg.sender_id)
+      })) || [];
+
+      // Add participants to thread
+      const participants = thread.participant_ids
+        .map((id: string) => profileMap.get(id))
+        .filter(Boolean);
+
+      return {
+        ...thread,
+        participants,
+        messages: messagesWithSenders
+      };
+    } catch (error) {
+      console.error('Failed to get thread:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send a message with proper error handling
+   */
+  async sendMessage(
+    threadId: string,
+    body: string,
+    attachmentUrls?: string[]
+  ): Promise<MessageWithSender> {
+    try {
+      if (!this.userId) {
+        throw new Error('User not initialized');
+      }
+
+      if (!body?.trim() && (!attachmentUrls || attachmentUrls.length === 0)) {
+        throw new Error('Message must have content or attachments');
+      }
+
+      // Insert message
+      const { data: message, error } = await supabase
+        .from('messages')
+        .insert({
+          thread_id: threadId,
+          sender_id: this.userId,
+          body: body.trim(),
+          attachment_urls: attachmentUrls || [],
+          read_by: [this.userId]
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error sending message:', error);
+        throw error;
+      }
+
+      // Update thread's last_message_at
+      const { error: updateError } = await supabase
+        .from(this.threadTableName)
+        .update({ last_message_at: new Date().toISOString() })
+        .eq('id', threadId);
+
+      if (updateError) {
+        console.error('Error updating thread timestamp:', updateError);
+      }
+
+      // Get sender profile from cache
+      const sender = await this.getCachedProfile(this.userId);
+
+      return {
+        ...message,
+        sender
+      };
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Mark messages as read (optimized batch update)
+   */
+  async markMessagesAsRead(threadId: string, messageIds: string[]): Promise<void> {
+    try {
+      if (!this.userId || messageIds.length === 0) {
+        return;
+      }
+
+      // Batch update all messages at once
+      const { error } = await supabase.rpc('add_user_to_read_by', {
+        p_message_ids: messageIds,
+        p_user_id: this.userId
+      });
+
+      if (error) {
+        console.error('Error marking messages as read:', error);
+
+        // Fallback to individual updates if RPC doesn't exist
+        if (error.code === 'PGRST202') {
+          for (const messageId of messageIds) {
+            const { data: message } = await supabase
+              .from('messages')
+              .select('read_by')
+              .eq('id', messageId)
+              .single();
+
+            if (message && !message.read_by?.includes(this.userId!)) {
+              await supabase
+                .from('messages')
+                .update({
+                  read_by: [...(message.read_by || []), this.userId]
+                })
+                .eq('id', messageId);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to mark messages as read:', error);
+    }
+  }
+
+  /**
+   * Subscribe to new messages in a thread (optimized)
+   */
+  subscribeToThread(
+    threadId: string,
+    onMessage: (message: MessageWithSender) => void
+  ): () => void {
+    try {
+      // Clean up existing subscription
+      this.unsubscribeFromThread(threadId);
+
+      const channel = supabase
+        .channel(`thread-${threadId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages',
+            filter: `thread_id=eq.${threadId}`,
+          },
+          async (payload) => {
+            try {
+              // Get sender profile from cache
+              const sender = await this.getCachedProfile(payload.new.sender_id);
+
+              const messageWithSender: MessageWithSender = {
+                ...payload.new as Message,
+                sender
+              };
+
+              onMessage(messageWithSender);
+            } catch (error) {
+              console.error('Error processing new message:', error);
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'messages',
+            filter: `thread_id=eq.${threadId}`,
+          },
+          async (payload) => {
+            try {
+              // Get sender profile from cache
+              const sender = await this.getCachedProfile(payload.new.sender_id);
+
+              const messageWithSender: MessageWithSender = {
+                ...payload.new as Message,
+                sender
+              };
+
+              onMessage(messageWithSender);
+            } catch (error) {
+              console.error('Error processing message update:', error);
+            }
+          }
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            console.log(`✅ Subscribed to thread ${threadId}`);
+          } else if (status === 'CLOSED') {
+            console.log(`⚠️ Subscription closed for thread ${threadId}`);
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error(`❌ Subscription error for thread ${threadId}`);
+          }
+        });
+
+      this.messageSubscriptions.set(threadId, channel);
+
+      // Return unsubscribe function
+      return () => this.unsubscribeFromThread(threadId);
+    } catch (error) {
+      console.error('Failed to subscribe to thread:', error);
+      return () => {};
+    }
+  }
+
+  /**
+   * Unsubscribe from a thread
+   */
+  unsubscribeFromThread(threadId: string) {
+    const channel = this.messageSubscriptions.get(threadId);
+    if (channel) {
+      channel.unsubscribe();
+      this.messageSubscriptions.delete(threadId);
+    }
+  }
+
+  /**
+   * Delete a message (soft delete)
+   */
+  async deleteMessage(messageId: string): Promise<boolean> {
+    try {
+      if (!this.userId) {
+        throw new Error('User not initialized');
+      }
+
+      const { error } = await supabase
+        .from('messages')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', messageId)
+        .eq('sender_id', this.userId);
+
+      if (error) {
+        console.error('Error deleting message:', error);
+        throw error;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Failed to delete message:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Edit a message
+   */
+  async editMessage(messageId: string, newBody: string): Promise<Message | null> {
+    try {
+      if (!this.userId) {
+        throw new Error('User not initialized');
+      }
+
+      if (!newBody?.trim()) {
+        throw new Error('Message body cannot be empty');
+      }
+
+      const { data: message, error } = await supabase
+        .from('messages')
+        .update({
+          body: newBody.trim(),
+          edited_at: new Date().toISOString()
+        })
+        .eq('id', messageId)
+        .eq('sender_id', this.userId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error editing message:', error);
+        throw error;
+      }
+
+      return message;
+    } catch (error) {
+      console.error('Failed to edit message:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Subscribe to inbox updates
+   */
+  subscribeToInbox(onUpdate: () => void): () => void {
+    try {
+      if (!this.userId) {
+        throw new Error('User not initialized');
+      }
+
+      // Clean up existing subscription
+      this.unsubscribeFromInbox();
+
+      this.inboxSubscription = supabase
+        .channel('inbox-updates')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: this.threadTableName,
+          },
+          (payload) => {
+            // Check if user is participant
+            if (payload.new?.participant_ids?.includes(this.userId!)) {
+              onUpdate();
+            }
+          }
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            console.log('✅ Subscribed to inbox updates');
+          } else if (status === 'CLOSED') {
+            console.log('⚠️ Inbox subscription closed');
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('❌ Inbox subscription error');
+          }
+        });
+
+      return () => this.unsubscribeFromInbox();
+    } catch (error) {
+      console.error('Failed to subscribe to inbox:', error);
+      return () => {};
+    }
+  }
+
+  /**
+   * Unsubscribe from inbox updates
+   */
+  unsubscribeFromInbox() {
+    if (this.inboxSubscription) {
+      this.inboxSubscription.unsubscribe();
+      this.inboxSubscription = null;
+    }
+  }
+
+  /**
+   * Cleanup all subscriptions
+   */
+  cleanup() {
+    // Unsubscribe from all message threads
+    this.messageSubscriptions.forEach(channel => channel.unsubscribe());
+    this.messageSubscriptions.clear();
+
+    // Unsubscribe from inbox
+    this.unsubscribeFromInbox();
+
+    // Clear profile cache
+    this.profileCache.clear();
+    if (this.profileCacheTimeout) {
+      clearInterval(this.profileCacheTimeout);
+      this.profileCacheTimeout = null;
     }
   }
 
@@ -97,530 +718,7 @@ class MessageService {
   getCurrentUserId(): string | null {
     return this.userId;
   }
-
-  /**
-   * Create a new message thread
-   */
-  async createThread(
-    participantIds: string[],
-    subject?: string,
-    listingId?: string,
-    applicationId?: string
-  ): Promise<MessageThread | null> {
-    try {
-      // Ensure current user is included
-      if (this.userId && !participantIds.includes(this.userId)) {
-        participantIds.push(this.userId);
-      }
-
-      // Check if thread already exists
-      const existingThread = await this.findExistingThread(
-        participantIds,
-        listingId,
-        applicationId
-      );
-
-      if (existingThread) {
-        return existingThread;
-      }
-
-      // Create new thread
-      const threadData: MessageThreadInsert = {
-        participant_ids: participantIds,
-        subject,
-        listing_id: listingId,
-        application_id: applicationId,
-        last_message_at: new Date().toISOString(),
-      };
-
-      const { data, error } = await supabase
-        .from(this.threadTableName)
-        .insert(threadData)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error creating thread:', error);
-        return null;
-      }
-
-      return data;
-    } catch (error) {
-      console.error('Error in createThread:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Find existing thread between participants
-   */
-  private async findExistingThread(
-    participantIds: string[],
-    listingId?: string,
-    applicationId?: string
-  ): Promise<MessageThread | null> {
-    try {
-      let query = supabase
-        .from(this.threadTableName)
-        .select('*')
-        .contains('participant_ids', participantIds);
-
-      if (listingId) {
-        query = query.eq('listing_id', listingId);
-      }
-
-      if (applicationId) {
-        query = query.eq('application_id', applicationId);
-      }
-
-      const { data, error } = await query.single();
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error finding thread:', error);
-      }
-
-      return data;
-    } catch (error) {
-      console.error('Error in findExistingThread:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Get all threads for current user
-   */
-  async getThreads(): Promise<ThreadWithDetails[]> {
-    if (!this.userId) {
-      await this.initialize();
-    }
-
-    try {
-      const { data: threads, error } = await supabase
-        .from(this.threadTableName)
-        .select(`
-          *,
-          messages (
-            *,
-            profiles!sender_id (
-              id,
-              full_name,
-              username,
-              avatar_url,
-              role
-            )
-          )
-        `)
-        .contains('participant_ids', [this.userId!])
-        .order('last_message_at', { ascending: false });
-
-      if (error) {
-        // If table doesn't exist, return empty array instead of crashing
-        if (error.code === 'PGRST205') {
-          console.warn('Message threads table not found. Messaging system needs to be initialized.');
-          return [];
-        }
-        console.error('Error fetching threads:', error);
-        return [];
-      }
-
-      // Process threads to add computed fields
-      const processedThreads = await Promise.all(
-        (threads || []).map(async (thread: any) => {
-          // Get participant profiles
-          const { data: participants } = await supabase
-            .from('profiles')
-            .select('*')
-            .in('id', thread.participant_ids);
-
-          // Process messages with sender profiles
-          const processedMessages = thread.messages?.map((msg: any) => ({
-            ...msg,
-            sender: msg.profiles || null
-          }));
-
-          // Get last message
-          const lastMessage = processedMessages
-            ?.sort((a: any, b: any) =>
-              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-            )[0];
-
-          // Count unread messages
-          const unreadCount = processedMessages?.filter(
-            (msg: any) =>
-              msg.sender_id !== this.userId &&
-              !msg.read_by?.includes(this.userId!)
-          ).length || 0;
-
-          return {
-            ...thread,
-            participants: participants || [],
-            lastMessage,
-            unreadCount
-          };
-        })
-      );
-
-      return processedThreads;
-    } catch (error) {
-      console.error('Error in getThreads:', error);
-      return [];
-    }
-  }
-
-  /**
-   * Get single thread with messages
-   */
-  async getThread(threadId: string): Promise<ThreadWithDetails | null> {
-    try {
-      const { data: thread, error } = await supabase
-        .from(this.threadTableName)
-        .select(`
-          *,
-          messages (
-            *,
-            profiles!sender_id (
-              id,
-              full_name,
-              username,
-              avatar_url,
-              role
-            )
-          )
-        `)
-        .eq('id', threadId)
-        .single();
-
-      if (error) {
-        console.error('Error fetching thread:', error);
-        return null;
-      }
-
-      // Get participant profiles
-      const { data: participants } = await supabase
-        .from('profiles')
-        .select('*')
-        .in('id', thread.participant_ids);
-
-      // Process messages with sender profiles
-      const processedMessages = thread.messages?.map((msg: any) => ({
-        ...msg,
-        sender: msg.profiles || null
-      }));
-
-      // Sort messages by timestamp
-      if (processedMessages) {
-        processedMessages.sort((a: any, b: any) =>
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        );
-      }
-
-      return {
-        ...thread,
-        messages: processedMessages || [],
-        participants: participants || []
-      };
-    } catch (error) {
-      console.error('Error in getThread:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Send a message in a thread
-   */
-  async sendMessage(
-    threadId: string,
-    body: string,
-    attachmentUrls?: string[]
-  ): Promise<Message | null> {
-    if (!this.userId) {
-      await this.initialize();
-    }
-
-    try {
-      const messageData: MessageInsert = {
-        thread_id: threadId,
-        sender_id: this.userId!,
-        body,
-        attachment_urls: attachmentUrls,
-        read_by: [this.userId!], // Sender has read their own message
-      };
-
-      const { data: message, error } = await supabase
-        .from('messages')
-        .insert(messageData)
-        .select(`
-          *,
-          profiles!sender_id (
-            id,
-            full_name,
-            username,
-            avatar_url,
-            role
-          )
-        `)
-        .single();
-
-      if (error) {
-        console.error('Error sending message:', error);
-        return null;
-      }
-
-      // Update thread's last_message_at
-      await supabase
-        .from(this.threadTableName)
-        .update({ last_message_at: new Date().toISOString() })
-        .eq('id', threadId);
-
-      return message;
-    } catch (error) {
-      console.error('Error in sendMessage:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Mark messages as read
-   */
-  async markMessagesAsRead(threadId: string): Promise<boolean> {
-    if (!this.userId) {
-      await this.initialize();
-    }
-
-    try {
-      // Get all unread messages in the thread
-      const { data: messages, error: fetchError } = await supabase
-        .from('messages')
-        .select('id, read_by')
-        .eq('thread_id', threadId)
-        .not('sender_id', 'eq', this.userId!);
-
-      if (fetchError) {
-        console.error('Error fetching messages:', fetchError);
-        return false;
-      }
-
-      // Update unread messages
-      const unreadMessages = messages?.filter(
-        msg => !msg.read_by?.includes(this.userId!)
-      );
-
-      if (unreadMessages && unreadMessages.length > 0) {
-        const updates = unreadMessages.map(msg => ({
-          id: msg.id,
-          read_by: [...(msg.read_by || []), this.userId!]
-        }));
-
-        for (const update of updates) {
-          await supabase
-            .from('messages')
-            .update({ read_by: update.read_by })
-            .eq('id', update.id);
-        }
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Error in markMessagesAsRead:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Subscribe to new messages in a thread
-   */
-  subscribeToThread(
-    threadId: string,
-    onMessage: (message: MessageWithSender) => void
-  ): () => void {
-    // Clean up existing subscription
-    this.unsubscribeFromThread(threadId);
-
-    const channel = supabase
-      .channel(`thread-${threadId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `thread_id=eq.${threadId}`,
-        },
-        async (payload) => {
-          // Fetch sender profile
-          const { data: sender } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', payload.new.sender_id)
-            .single();
-
-          const messageWithSender: MessageWithSender = {
-            ...payload.new as Message,
-            sender
-          };
-
-          onMessage(messageWithSender);
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'messages',
-          filter: `thread_id=eq.${threadId}`,
-        },
-        async (payload) => {
-          // Handle message updates (edits, read receipts)
-          const { data: sender } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', payload.new.sender_id)
-            .single();
-
-          const messageWithSender: MessageWithSender = {
-            ...payload.new as Message,
-            sender
-          };
-
-          onMessage(messageWithSender);
-        }
-      )
-      .subscribe();
-
-    this.messageSubscriptions.set(threadId, channel);
-
-    // Return unsubscribe function
-    return () => this.unsubscribeFromThread(threadId);
-  }
-
-  /**
-   * Subscribe to all threads for the user (for inbox updates)
-   */
-  subscribeToInbox(
-    onUpdate: (thread: MessageThread) => void
-  ): () => void {
-    if (!this.userId) {
-      console.warn('User not initialized');
-      return () => {};
-    }
-
-    const channel = supabase
-      .channel('inbox-updates')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: this.threadTableName,
-        },
-        async (payload) => {
-          // Check if user is a participant
-          const thread = payload.new as MessageThread;
-          if (thread.participant_ids?.includes(this.userId!)) {
-            onUpdate(thread);
-          }
-        }
-      )
-      .subscribe();
-
-    this.threadSubscriptions.set('inbox', channel);
-
-    return () => this.unsubscribeFromInbox();
-  }
-
-  /**
-   * Unsubscribe from thread updates
-   */
-  private unsubscribeFromThread(threadId: string) {
-    const channel = this.messageSubscriptions.get(threadId);
-    if (channel) {
-      channel.unsubscribe();
-      this.messageSubscriptions.delete(threadId);
-    }
-  }
-
-  /**
-   * Unsubscribe from inbox updates
-   */
-  private unsubscribeFromInbox() {
-    const channel = this.threadSubscriptions.get('inbox');
-    if (channel) {
-      channel.unsubscribe();
-      this.threadSubscriptions.delete('inbox');
-    }
-  }
-
-  /**
-   * Clean up all subscriptions
-   */
-  cleanup() {
-    // Unsubscribe from all message channels
-    this.messageSubscriptions.forEach(channel => channel.unsubscribe());
-    this.messageSubscriptions.clear();
-
-    // Unsubscribe from all thread channels
-    this.threadSubscriptions.forEach(channel => channel.unsubscribe());
-    this.threadSubscriptions.clear();
-  }
-
-  /**
-   * Delete a message (soft delete)
-   */
-  async deleteMessage(messageId: string): Promise<boolean> {
-    if (!this.userId) {
-      await this.initialize();
-    }
-
-    try {
-      const { error } = await supabase
-        .from('messages')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', messageId)
-        .eq('sender_id', this.userId!);
-
-      if (error) {
-        console.error('Error deleting message:', error);
-        return false;
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Error in deleteMessage:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Edit a message
-   */
-  async editMessage(messageId: string, newBody: string): Promise<boolean> {
-    if (!this.userId) {
-      await this.initialize();
-    }
-
-    try {
-      const { error } = await supabase
-        .from('messages')
-        .update({
-          body: newBody,
-          edited_at: new Date().toISOString()
-        })
-        .eq('id', messageId)
-        .eq('sender_id', this.userId!);
-
-      if (error) {
-        console.error('Error editing message:', error);
-        return false;
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Error in editMessage:', error);
-      return false;
-    }
-  }
 }
 
 // Export singleton instance
-export const messageService = new MessageService();
+export const messageService = new MessageServiceFix();

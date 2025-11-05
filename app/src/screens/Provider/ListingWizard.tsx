@@ -119,19 +119,33 @@ export default function ListingWizard() {
       if (created.success && created.listingId) {
         // Upload photos if any
         if (photos.length > 0) {
+          console.log(`📸 Uploading ${photos.length} photo(s) for listing ${created.listingId}`);
           const urls: string[] = [];
-          for (const uri of photos) {
+          for (let i = 0; i < photos.length; i++) {
+            const uri = photos[i];
+            console.log(`📤 Uploading photo ${i + 1}/${photos.length}: ${uri}`);
             const res = await uploadListingImage(uri, created.listingId, {
               resize: "full",
             });
-            if (res.success && res.url) urls.push(res.url);
+            if (res.success && res.url) {
+              console.log(`✅ Photo ${i + 1} uploaded successfully: ${res.url}`);
+              urls.push(res.url);
+            } else {
+              console.error(`❌ Photo ${i + 1} upload failed:`, res.error);
+            }
           }
           if (urls.length > 0) {
+            console.log(`💾 Saving ${urls.length} image URL(s) to database`);
             const { updateListing } = await import(
               "../../services/listing.service"
             );
-            await updateListing(created.listingId, { images: urls });
+            const updateResult = await updateListing(created.listingId, { images: urls });
+            console.log('📝 Update listing result:', updateResult);
+          } else {
+            console.warn('⚠️ No images were successfully uploaded');
           }
+        } else {
+          console.log('📷 No photos selected for this listing');
         }
         // Persist per-day availability (calendar) if provided
         if (Object.keys(availabilityDays).length > 0) {
@@ -265,10 +279,20 @@ export default function ListingWizard() {
               mediaTypes: ImagePicker.MediaTypeOptions.Images,
               allowsEditing: false,
               quality: 0.9,
+              allowsMultipleSelection: false,
             });
-            if (!result.canceled) {
-              const uri = result.assets?.[0]?.uri;
-              if (uri) setPhotos((prev) => [...prev, uri]);
+            if (!result.canceled && result.assets && result.assets[0]) {
+              const uri = result.assets[0].uri;
+              console.log('📷 Image picked:', uri);
+              if (uri) {
+                setPhotos((prev) => {
+                  const newPhotos = [...prev, uri];
+                  console.log(`📸 Total photos selected: ${newPhotos.length}`);
+                  return newPhotos;
+                });
+              }
+            } else {
+              console.log('📷 Image picker cancelled or no image selected');
             }
           }}
           accessibilityLabel="Add photo"

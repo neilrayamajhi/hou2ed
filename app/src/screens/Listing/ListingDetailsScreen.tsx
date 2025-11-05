@@ -17,6 +17,8 @@ import Badge from "../../components/ui/Badge";
 import { colors, spacing, radius } from "../../theme/tokens";
 import { fetchShelterDetails } from "../../services/shelterDetailsService";
 import useSavedStore from "../../state/useSavedStore";
+import { messageService } from "../../services/messageService";
+import { useAuthStore } from "../../state/useAuthStore";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -121,13 +123,16 @@ export default function ListingDetailsScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const { isListingSaved, toggleListing } = useSavedStore();
+  const { user } = useAuthStore();
   const [isLoadingDetails, setIsLoadingDetails] = useState(true);
   const [shelterDetails, setShelterDetails] = useState<any>(null);
+  const [isCreatingThread, setIsCreatingThread] = useState(false);
 
   // Get listing from navigation params, fallback to mock data
   const listingFromParams = route.params?.listing;
-  const baseListing = listingFromParams ? {
+  const baseListing = listingFromParams && typeof listingFromParams === 'object' ? {
     id: listingFromParams.id,
+    providerId: listingFromParams.provider_id,
     title: listingFromParams.name || "Safe Haven Recovery House",
     providerName: listingFromParams.provider || "Hope Foundation",
     isVerified: listingFromParams.verified || false,
@@ -218,6 +223,47 @@ export default function ListingDetailsScreen() {
     // @ts-ignore
     navigation.navigate("ApplyWizard", { listingId: listing.id });
   }, [navigation, listing.id]);
+
+  const handleMessage = useCallback(async () => {
+    if (!user) {
+      // Navigate to sign in if not authenticated
+      // @ts-ignore
+      navigation.navigate("Auth", { screen: "SignIn" });
+      return;
+    }
+
+    if (!baseListing.providerId) {
+      alert("Unable to message provider. Provider information missing.");
+      return;
+    }
+
+    setIsCreatingThread(true);
+    try {
+      // Initialize message service if needed
+      await messageService.initialize();
+
+      // Create or find existing thread with provider
+      const thread = await messageService.createThread(
+        baseListing.providerId,
+        `Inquiry about ${baseListing.title}`,
+        baseListing.id // listing_id for context
+      );
+
+      // Navigate to thread screen
+      // @ts-ignore
+      navigation.navigate("Thread", {
+        threadId: thread.id,
+        propertyTitle: baseListing.title,
+        senderName: baseListing.providerName,
+        participantId: baseListing.providerId,
+      });
+    } catch (error) {
+      console.error("Error creating message thread:", error);
+      alert("Unable to start conversation. Please try again.");
+    } finally {
+      setIsCreatingThread(false);
+    }
+  }, [user, baseListing, navigation]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -434,6 +480,25 @@ export default function ListingDetailsScreen() {
             size={24}
             color={colors.white}
           />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.messageButton}
+          onPress={handleMessage}
+          activeOpacity={0.7}
+          disabled={isCreatingThread}
+          accessibilityRole="button"
+          accessibilityLabel="Message provider"
+        >
+          {isCreatingThread ? (
+            <ActivityIndicator size="small" color={colors.white} />
+          ) : (
+            <Ionicons
+              name="chatbubble-outline"
+              size={24}
+              color={colors.white}
+            />
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -697,6 +762,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  messageButton: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.white,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: spacing.xs,
+  },
   applyButton: {
     flex: 1,
     height: 48,
@@ -704,6 +779,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     justifyContent: "center",
     alignItems: "center",
+    marginLeft: spacing.xs,
   },
   applyButtonText: {
     fontSize: 16,

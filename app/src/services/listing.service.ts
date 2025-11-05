@@ -467,6 +467,8 @@ export async function updateListing(
 
     // Update images if provided
     if (updates.images !== undefined) {
+      console.log('🖼️ Updating images for listing:', listingId);
+      console.log('   New images array:', updates.images);
       updateData.images = updates.images;
     }
 
@@ -549,17 +551,36 @@ export async function updateListing(
       updateData.eligibility = eligibilityObj;
     }
 
-    const { error } = await supabase
+    console.log('📝 Updating listing with data:', {
+      listingId,
+      updateFields: Object.keys(updateData),
+      hasImages: 'images' in updateData,
+      imageCount: updateData.images ? updateData.images.length : 0
+    });
+
+    const { data, error } = await supabase
       .from("listings")
       .update(updateData)
-      .eq("id", listingId);
+      .eq("id", listingId)
+      .select();
 
     if (error) {
-      console.error("Error updating listing:", error);
+      console.error("❌ Error updating listing:", error);
+      console.error("   Error details:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      });
       return {
         success: false,
         error: error.message || "Failed to update listing",
       };
+    }
+
+    console.log('✅ Listing updated successfully');
+    if (data && data[0]) {
+      console.log('   Updated listing has images:', Array.isArray(data[0].images) ? data[0].images.length : 'none');
     }
 
     return { success: true };

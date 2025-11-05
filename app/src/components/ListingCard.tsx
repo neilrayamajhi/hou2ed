@@ -27,28 +27,22 @@ export default function ListingCard({
   isActive = false,
 }: ListingCardProps) {
   const getAvailabilityColor = () => {
-    switch (listing.availability) {
-      case "available":
-        return "#21C55D";
-      case "waitlist":
-        return "#F59E0B";
-      case "full":
-        return "#374151";
-      default:
-        return "#4B5563";
+    if (listing.availability.beds_today > 0) {
+      return "#21C55D"; // available
+    } else if (listing.availability.waitlist > 0) {
+      return "#F59E0B"; // waitlist
+    } else {
+      return "#374151"; // full
     }
   };
 
   const getAvailabilityText = () => {
-    switch (listing.availability) {
-      case "available":
-        return `${listing.bedsAvailable} beds available`;
-      case "waitlist":
-        return "Waitlist open";
-      case "full":
-        return "Currently full";
-      default:
-        return "Check availability";
+    if (listing.availability.beds_today > 0) {
+      return `${listing.availability.beds_today} beds available`;
+    } else if (listing.availability.waitlist > 0) {
+      return "Waitlist open";
+    } else {
+      return "Currently full";
     }
   };
 
@@ -60,7 +54,7 @@ export default function ListingCard({
     >
       {/* Cover Image */}
       <Image
-        source={{ uri: listing.coverImage || "https://via.placeholder.com/400x300" }}
+        source={{ uri: listing.images?.[0] || "https://via.placeholder.com/400x300" }}
         style={styles.image}
         resizeMode="cover"
       />
@@ -71,10 +65,10 @@ export default function ListingCard({
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Text style={styles.name} numberOfLines={1}>
-              {listing.name}
+              {listing.title}
             </Text>
             <Text style={styles.provider} numberOfLines={1}>
-              {listing.provider}
+              {listing.provider?.full_name || "Provider"}
             </Text>
           </View>
           {listing.verified && (
@@ -106,37 +100,30 @@ export default function ListingCard({
               color={"#4B5563"}
             />
             <Text style={styles.infoText}>
-              {listing.price.isFree ? "Free" : `$${listing.price.min}-${listing.price.max}`}
+              {listing.cost?.free ? "Free" : listing.cost?.monthly ? `$${listing.cost.monthly}/mo` : "Contact"}
             </Text>
           </View>
 
-          {/* Rating */}
-          {listing.rating && (
-            <View style={styles.infoItem}>
-              <Ionicons name="star" size={14} color={"#D4AF37"} />
-              <Text style={styles.infoText}>{listing.rating.toFixed(1)}</Text>
-            </View>
-          )}
         </View>
 
         {/* Features */}
         <View style={styles.features}>
-          {listing.features.acceptsFamilies && (
+          {listing.eligibility?.family_status?.includes("family") && (
             <View style={styles.featureChip}>
               <Text style={styles.featureText}>Families</Text>
             </View>
           )}
-          {listing.features.acceptsVeterans && (
+          {listing.eligibility?.veterans && (
             <View style={styles.featureChip}>
               <Text style={styles.featureText}>Veterans</Text>
             </View>
           )}
-          {listing.features.wheelchairAccessible && (
+          {listing.accessibility?.mobility?.length > 0 && (
             <View style={styles.featureChip}>
               <Text style={styles.featureText}>Accessible</Text>
             </View>
           )}
-          {listing.features.petsAllowed && (
+          {listing.rules?.pets === "allowed" && (
             <View style={styles.featureChip}>
               <Text style={styles.featureText}>Pets OK</Text>
             </View>
