@@ -1,128 +1,105 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useCallback, useMemo, useEffect, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
   SafeAreaView,
+  ActivityIndicator,
+  RefreshControl,
+  Linking,
+  Alert,
 } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing, typography, radius } from "../../theme/tokens";
 import { RootStackNavigationProp } from "../../navigation/types";
-import { messageService, ThreadWithDetails } from "../../services/messageService";
-import { useAuthStore } from "../../state/useAuthStore";
+import { colors, spacing, typography, radius } from "../../theme/tokens";
+import {
+  messageService,
+  ThreadWithDetails,
+} from "../../services/messageService";
+import { supabase } from "../../lib/supabase";
+import { useI18n } from "../../i18n";
 
-interface MessageTime {
-  time: string;
-  label: string;
-}
-
-function formatMessageTime(date: Date | string): MessageTime {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
+function formatTimestamp(date: Date | string): string {
+  const dateObj = typeof date === "string" ? new Date(date) : date;
   const now = new Date();
   const diff = now.getTime() - dateObj.getTime();
-  const minutes = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
 
-  if (minutes < 1) {
-    return { time: "now", label: "Just now" };
-  } else if (minutes < 60) {
-    return { time: `${minutes}m`, label: `${minutes} minutes ago` };
+  if (hours < 1) {
+    const mins = Math.floor(diff / 60000);
+    return `${mins}m`;
   } else if (hours < 24) {
-    return { time: `${hours}h`, label: `${hours} hours ago` };
+    return `${hours}h`;
   } else if (days < 7) {
-    return { time: `${days}d`, label: `${days} days ago` };
+    return `${days}d`;
   } else {
-    return {
-      time: dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-      label: dateObj.toLocaleDateString("en-US", { month: "long", day: "numeric" })
-    };
+    return dateObj.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
   }
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 }
 
 export default function InboxScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
-  const { user } = useAuthStore(); // Get user from auth store
   const [threads, setThreads] = useState<ThreadWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [tablesMissing, setTablesMissing] = useState(false);
-  const [initialized, setInitialized] = useState(false);
-  const [unsubscribe, setUnsubscribe] = useState<(() => void) | null>(null);
+  const i18n = useI18n();
 
   // Initialize and fetch threads
   const loadThreads = useCallback(async () => {
     try {
-      // Initialize message service only if not already initialized
-      if (!initialized) {
-        const userId = await messageService.initialize();
-        setCurrentUserId(userId);
-        setInitialized(true);
-      }
+      // Initialize message service
+      const userId = await messageService.initialize();
+      setCurrentUserId(userId);
 
       // Fetch threads
       const fetchedThreads = await messageService.getThreads();
       setThreads(fetchedThreads);
       setTablesMissing(false);
     } catch (error) {
-      console.error('Error loading threads:', error);
+      console.error("Error loading threads:", error);
       // Check if this is a missing table error
-      if (error?.message?.includes('table') || error?.code === 'PGRST205') {
+      if (error?.message?.includes("table") || error?.code === "PGRST205") {
         setTablesMissing(true);
-      } else if (error?.message?.includes('Authentication required') || error?.message?.includes('User not authenticated')) {
-        // User not logged in
-        console.log('User not authenticated, cannot load messages');
       }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [initialized]);
+  }, []);
 
-  // Initial load
-  useEffect(() => {
-    if (user) {
-      loadThreads();
-    } else {
-      setLoading(false);
-      console.log('No user logged in');
-    }
-  }, [user]);
-
-  // Subscribe to inbox updates after initialization
-  useEffect(() => {
-    if (initialized && currentUserId) {
-      try {
-        const unsub = messageService.subscribeToInbox(() => {
-          // Reload threads when there's an update
-          loadThreads();
-        });
-        setUnsubscribe(() => unsub);
-
-        return () => {
-          if (unsub) {
-            unsub();
-          }
-        };
-      } catch (error) {
-        console.error('Failed to subscribe to inbox:', error);
-      }
-    }
-  }, [initialized, currentUserId, loadThreads]);
-
-  // Load threads when screen focuses
+  // Load threads on mount and when screen focuses
   useFocusEffect(
     useCallback(() => {
-      if (initialized) {
+      loadThreads();
+
+      // Subscribe to inbox updates
+      const unsubscribe = messageService.subscribeToInbox(() => {
+        // Reload threads when there's an update
         loadThreads();
-      }
-    }, [initialized, loadThreads])
+      });
+
+      return () => {
+        unsubscribe();
+      };
+    }, [loadThreads]),
   );
 
   // Handle pull to refresh
@@ -131,195 +108,292 @@ export default function InboxScreen() {
     loadThreads();
   }, [loadThreads]);
 
-  const handleThreadPress = useCallback((thread: ThreadWithDetails) => {
-    // Mark messages as read when opening thread
-    if (currentUserId) {
-      messageService.markMessagesAsRead(thread.id).catch(console.error);
-    }
+  const handleThreadPress = useCallback(
+    (thread: ThreadWithDetails) => {
+      // Mark messages as read when opening thread
+      messageService.markMessagesAsRead(thread.id);
 
-    // Get other participant for display
-    const otherParticipant = thread.participants?.find(
-      p => p.id !== currentUserId
-    );
+      // Get other participant for display
+      const otherParticipant = thread.participants?.find(
+        (p) => p.id !== currentUserId,
+      );
 
-    navigation.navigate("Thread", {
-      threadId: thread.id,
-      messageId: thread.id, // For backward compatibility
-      applicationId: thread.application_id || '',
-      propertyTitle: thread.subject || 'Conversation',
-      senderName: otherParticipant?.full_name || 'User',
-      participantId: otherParticipant?.id || '',
-    });
-  }, [navigation, currentUserId]);
+      navigation.navigate("Thread", {
+        threadId: thread.id,
+        messageId: thread.id, // For backward compatibility
+        applicationId: thread.application_id || "",
+        propertyTitle: thread.subject || "Conversation",
+        senderName: otherParticipant?.full_name || "User",
+        participantId: otherParticipant?.id || "",
+      });
+    },
+    [navigation, currentUserId],
+  );
 
-  const renderMessage = useCallback(({ item }: { item: ThreadWithDetails }) => {
-    // Get other participant (not the current user)
-    const otherParticipant = item.participants?.find(
-      p => p.id !== currentUserId
-    );
+  const renderMessage = useCallback(
+    ({ item }: { item: ThreadWithDetails }) => {
+      // Get other participant (not the current user)
+      const otherParticipant = item.participants?.find(
+        (p) => p.id !== currentUserId,
+      );
 
-    if (!otherParticipant) return null;
+      if (!otherParticipant) return null;
 
-    const avatarColors = [
-      "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FECA57",
-      "#48C9B0", "#9B59B6", "#E74C3C", "#3498DB", "#F39C12"
-    ];
+      const avatarColors = [
+        "#FF6B6B",
+        "#4ECDC4",
+        "#45B7D1",
+        "#96CEB4",
+        "#FECA57",
+        "#48C9B0",
+        "#9B59B6",
+        "#E74C3C",
+        "#3498DB",
+        "#F39C12",
+      ];
 
-    // Generate consistent color based on user ID
-    const colorIndex = otherParticipant.id.charCodeAt(0) % avatarColors.length;
-    const avatarColor = avatarColors[colorIndex];
+      // Generate consistent color based on user ID
+      const colorIndex =
+        otherParticipant.id.charCodeAt(0) % avatarColors.length;
+      const avatarColor = avatarColors[colorIndex];
 
-    return (
-      <TouchableOpacity
-        style={styles.messageCard}
-        onPress={() => handleThreadPress(item)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.messageContent}>
-          <View style={styles.avatarContainer}>
-            <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
-              <Text style={styles.avatarText}>
-                {otherParticipant.full_name?.charAt(0).toUpperCase() || "?"}
-              </Text>
+      return (
+        <TouchableOpacity
+          style={styles.messageCard}
+          onPress={() => handleThreadPress(item)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.messageContent}>
+            <View style={styles.avatarContainer}>
+              {otherParticipant.avatar_url ? (
+                <View style={styles.avatar}>
+                  {/* In a real app, you'd use an Image component here */}
+                  <Text style={styles.avatarText}>
+                    {getInitials(otherParticipant.full_name)}
+                  </Text>
+                </View>
+              ) : (
+                <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
+                  <Text style={styles.avatarText}>
+                    {getInitials(otherParticipant.full_name)}
+                  </Text>
+                </View>
+              )}
+              {item.unreadCount > 0 && (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadCount}>{item.unreadCount}</Text>
+                </View>
+              )}
             </View>
-            {item.unread_count > 0 && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadCount}>
-                  {item.unread_count > 99 ? "99+" : item.unread_count}
+
+            <View style={styles.messageDetails}>
+              <View style={styles.messageHeader}>
+                <Text style={styles.senderName} numberOfLines={1}>
+                  {otherParticipant.full_name}
+                </Text>
+                <Text style={styles.timestamp}>
+                  {item.last_message_at
+                    ? formatTimestamp(item.last_message_at)
+                    : ""}
                 </Text>
               </View>
-            )}
-          </View>
-
-          <View style={styles.messageDetails}>
-            <View style={styles.messageHeader}>
-              <Text style={styles.senderName} numberOfLines={1}>
-                {otherParticipant.full_name || "Unknown User"}
-              </Text>
-              <Text style={styles.messageTime}>
-                {formatMessageTime(item.last_message_at || item.created_at).time}
+              {item.subject && (
+                <Text style={styles.propertyTitle} numberOfLines={1}>
+                  {item.subject}
+                </Text>
+              )}
+              <Text
+                style={[
+                  styles.lastMessage,
+                  item.unreadCount > 0 && styles.unreadMessage,
+                ]}
+                numberOfLines={2}
+              >
+                {item.lastMessage?.body ||
+                  i18n.t("messages.thread.typeMessage")}
               </Text>
             </View>
+          </View>
+        </TouchableOpacity>
+      );
+    },
+    [handleThreadPress, currentUserId, i18n],
+  );
 
-            <Text style={styles.messageSubject} numberOfLines={1}>
-              {item.subject || item.listing_id ? "Property Inquiry" : "Direct Message"}
+  const keyExtractor = useCallback((item: ThreadWithDetails) => item.id, []);
+
+  const ItemSeparator = useCallback(
+    () => <View style={styles.separator} />,
+    [],
+  );
+
+  const EmptyComponent = useCallback(
+    () => (
+      <View style={styles.emptyContainer}>
+        <Ionicons
+          name="chatbubbles-outline"
+          size={64}
+          color={colors.gray[400]}
+        />
+        <Text style={styles.emptyTitle}>{i18n.t("messages.inbox.empty")}</Text>
+        <Text style={styles.emptySubtitle}>
+          {i18n.t("messages.inbox.emptyDesc")}
+        </Text>
+      </View>
+    ),
+    [i18n],
+  );
+
+  const TablesMissingComponent = useCallback(() => {
+    const handleOpenSupabase = () => {
+      Alert.alert(
+        i18n.t("messages.setup.required"),
+        i18n.t("messages.setup.instructions"),
+        [
+          {
+            text: i18n.t("common.cancel"),
+            style: "cancel",
+          },
+          {
+            text: i18n.t("messages.setup.openButton"),
+            onPress: () => {
+              Linking.openURL(
+                "https://supabase.com/dashboard/project/rixiofltzptwaiwxhhlf/sql/new",
+              );
+            },
+          },
+        ],
+      );
+    };
+
+    return (
+      <View style={styles.setupContainer}>
+        <View style={styles.setupIconContainer}>
+          <Ionicons
+            name="construct-outline"
+            size={64}
+            color={colors.primary[400]}
+          />
+        </View>
+        <Text style={styles.setupTitle}>{i18n.t("messages.setup.title")}</Text>
+        <Text style={styles.setupSubtitle}>
+          {i18n.t("messages.setup.subtitle")}
+        </Text>
+
+        <View style={styles.setupSteps}>
+          <Text style={styles.stepHeader}>
+            {i18n.t("messages.setup.stepsHeader")}
+          </Text>
+          <View style={styles.step}>
+            <Text style={styles.stepNumber}>1.</Text>
+            <Text style={styles.stepText}>
+              {i18n.t("messages.setup.step1")}
             </Text>
-
-            {item.messages && item.messages.length > 0 && (
-              <Text style={styles.messagePreview} numberOfLines={2}>
-                {item.messages[0].body}
-              </Text>
-            )}
+          </View>
+          <View style={styles.step}>
+            <Text style={styles.stepNumber}>2.</Text>
+            <Text style={styles.stepText}>
+              {i18n.t("messages.setup.step2")}
+            </Text>
+          </View>
+          <View style={styles.step}>
+            <Text style={styles.stepNumber}>3.</Text>
+            <Text style={styles.stepText}>
+              {i18n.t("messages.setup.step3")}
+            </Text>
+          </View>
+          <View style={styles.step}>
+            <Text style={styles.stepNumber}>4.</Text>
+            <Text style={styles.stepText}>
+              {i18n.t("messages.setup.step4")}
+            </Text>
           </View>
         </View>
 
-        <Ionicons
-          name="chevron-forward"
-          size={20}
-          color={colors.gray[600]}
-          style={styles.chevron}
-        />
-      </TouchableOpacity>
-    );
-  }, [currentUserId, handleThreadPress]);
-
-  // Show login prompt if not authenticated
-  if (!user) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Messages</Text>
-        </View>
-        <View style={styles.emptyContainer}>
-          <Ionicons name="mail-outline" size={64} color={colors.gray[600]} />
-          <Text style={styles.emptyTitle}>Sign In Required</Text>
-          <Text style={styles.emptyText}>
-            Please sign in to view your messages
+        <TouchableOpacity
+          style={styles.setupButton}
+          onPress={handleOpenSupabase}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="open-outline" size={20} color={colors.gray[900]} />
+          <Text style={styles.setupButtonText}>
+            {i18n.t("messages.setup.openButton")}
           </Text>
-          <TouchableOpacity
-            style={styles.signInButton}
-            onPress={() => navigation.navigate('Auth', { screen: 'SignIn' })}
-          >
-            <Text style={styles.signInButtonText}>Sign In</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
+        </TouchableOpacity>
 
-  // Show loading spinner
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={loadThreads}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.retryButtonText}>
+            {i18n.t("messages.setup.retry")}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }, [loadThreads, i18n]);
+
+  const sortedThreads = useMemo(
+    () =>
+      [...threads].sort((a, b) => {
+        const aTime = new Date(a.last_message_at || 0).getTime();
+        const bTime = new Date(b.last_message_at || 0).getTime();
+        return bTime - aTime;
+      }),
+    [threads],
+  );
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Messages</Text>
+          <Text style={styles.headerTitle}>
+            {i18n.t("messages.inbox.title")}
+          </Text>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary[400]} />
-          <Text style={styles.loadingText}>Loading messages...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  // Show table missing error
+  // Show setup screen if tables are missing
   if (tablesMissing) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Messages</Text>
-        </View>
-        <View style={styles.emptyContainer}>
-          <Ionicons name="alert-circle-outline" size={64} color={colors.error[400]} />
-          <Text style={styles.emptyTitle}>Database Setup Required</Text>
-          <Text style={styles.emptyText}>
-            The messaging tables need to be set up.{"\n"}
-            Please contact support or run the database migration.
+          <Text style={styles.headerTitle}>
+            {i18n.t("messages.inbox.title")}
           </Text>
         </View>
+        <TablesMissingComponent />
       </SafeAreaView>
     );
   }
 
-  // Show empty state
-  if (threads.length === 0) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Messages</Text>
-        </View>
-        <View style={styles.emptyContainer}>
-          <Ionicons name="mail-outline" size={64} color={colors.gray[600]} />
-          <Text style={styles.emptyTitle}>No Messages Yet</Text>
-          <Text style={styles.emptyText}>
-            Your conversations will appear here
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // Show messages list
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Messages</Text>
+        <Text style={styles.headerTitle}>{i18n.t("messages.inbox.title")}</Text>
       </View>
 
       <FlatList
-        data={threads}
+        data={sortedThreads}
         renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
+        keyExtractor={keyExtractor}
         contentContainerStyle={styles.listContent}
+        ItemSeparatorComponent={ItemSeparator}
+        ListEmptyComponent={EmptyComponent}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={[colors.primary[400]]}
             tintColor={colors.primary[400]}
           />
         }
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
     </SafeAreaView>
   );
@@ -328,43 +402,42 @@ export default function InboxScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.gray[900],
   },
   header: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.gray[800],
   },
   headerTitle: {
-    fontSize: typography.sizes.xl,
+    fontSize: typography.sizes["2xl"],
     fontWeight: "700",
-    color: colors.primary[400],
+    color: colors.gray[50],
   },
   listContent: {
-    paddingBottom: spacing.xl,
+    flexGrow: 1,
   },
   messageCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: spacing.md,
+    backgroundColor: colors.gray[850],
     paddingVertical: spacing.md,
-    backgroundColor: colors.background,
+    paddingHorizontal: spacing.lg,
   },
   messageContent: {
-    flex: 1,
     flexDirection: "row",
+    alignItems: "center",
   },
   avatarContainer: {
-    marginRight: spacing.sm,
     position: "relative",
+    marginRight: spacing.md,
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: colors.primary[500],
   },
   avatarText: {
     fontSize: typography.sizes.lg,
@@ -373,26 +446,25 @@ const styles = StyleSheet.create({
   },
   unreadBadge: {
     position: "absolute",
-    top: -4,
-    right: -4,
-    backgroundColor: colors.error[400],
+    top: -2,
+    right: -2,
+    backgroundColor: colors.primary[500],
     borderRadius: 10,
     minWidth: 20,
     height: 20,
-    paddingHorizontal: 4,
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: 4,
     borderWidth: 2,
-    borderColor: colors.background,
+    borderColor: colors.gray[850],
   },
   unreadCount: {
-    fontSize: 10,
+    fontSize: typography.sizes.xs,
     fontWeight: "700",
-    color: colors.white,
+    color: colors.gray[900],
   },
   messageDetails: {
     flex: 1,
-    justifyContent: "center",
   },
   messageHeader: {
     flexDirection: "row",
@@ -403,48 +475,49 @@ const styles = StyleSheet.create({
   senderName: {
     fontSize: typography.sizes.md,
     fontWeight: "600",
-    color: colors.text.primary,
-    flex: 1,
-    marginRight: spacing.xs,
-  },
-  messageTime: {
-    fontSize: typography.sizes.xs,
-    color: colors.gray[500],
-  },
-  messageSubject: {
-    fontSize: typography.sizes.sm,
     color: colors.primary[400],
-    marginBottom: 2,
+    flex: 1,
+    marginRight: spacing.sm,
   },
-  messagePreview: {
+  timestamp: {
     fontSize: typography.sizes.sm,
     color: colors.gray[400],
+  },
+  propertyTitle: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray[300],
+    marginBottom: 4,
+  },
+  lastMessage: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray[50],
     lineHeight: 18,
   },
-  chevron: {
-    marginLeft: spacing.xs,
+  unreadMessage: {
+    fontWeight: "500",
   },
   separator: {
     height: 1,
-    backgroundColor: colors.gray[900],
-    marginLeft: spacing.md + 48 + spacing.sm, // Align with message content
+    backgroundColor: colors.gray[800],
+    marginLeft: spacing.lg + 52 + spacing.md,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xl * 3,
   },
   emptyTitle: {
     fontSize: typography.sizes.lg,
     fontWeight: "600",
-    color: colors.text.primary,
+    color: colors.gray[50],
     marginTop: spacing.md,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
-  emptyText: {
+  emptySubtitle: {
     fontSize: typography.sizes.sm,
-    color: colors.gray[500],
+    color: colors.gray[400],
     textAlign: "center",
   },
   loadingContainer: {
@@ -452,21 +525,82 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  loadingText: {
-    fontSize: typography.sizes.sm,
-    color: colors.gray[500],
-    marginTop: spacing.md,
+  setupContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: spacing.xl,
   },
-  signInButton: {
-    marginTop: spacing.lg,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    backgroundColor: colors.primary[400],
-    borderRadius: radius.md,
+  setupIconContainer: {
+    marginBottom: spacing.lg,
   },
-  signInButtonText: {
+  setupTitle: {
+    fontSize: typography.sizes.xl,
+    fontWeight: "700",
+    color: colors.primary[400],
+    marginBottom: spacing.sm,
+    textAlign: "center",
+  },
+  setupSubtitle: {
+    fontSize: typography.sizes.md,
+    color: colors.gray[400],
+    textAlign: "center",
+    marginBottom: spacing.xl,
+    lineHeight: 22,
+  },
+  setupSteps: {
+    backgroundColor: colors.gray[850],
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.xl,
+    width: "100%",
+  },
+  stepHeader: {
     fontSize: typography.sizes.md,
     fontWeight: "600",
-    color: colors.black,
+    color: colors.gray[50],
+    marginBottom: spacing.md,
+  },
+  step: {
+    flexDirection: "row",
+    marginBottom: spacing.sm,
+  },
+  stepNumber: {
+    fontSize: typography.sizes.sm,
+    fontWeight: "600",
+    color: colors.primary[400],
+    marginRight: spacing.sm,
+    width: 20,
+  },
+  stepText: {
+    flex: 1,
+    fontSize: typography.sizes.sm,
+    color: colors.gray[300],
+    lineHeight: 20,
+  },
+  setupButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.primary[500],
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  setupButtonText: {
+    fontSize: typography.sizes.md,
+    fontWeight: "600",
+    color: colors.gray[900],
+  },
+  retryButton: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
+  retryButtonText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: "500",
+    color: colors.gray[400],
+    textDecorationLine: "underline",
   },
 });

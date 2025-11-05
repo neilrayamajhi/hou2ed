@@ -15,26 +15,22 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MapView, Marker, PROVIDER_GOOGLE } from "../../components/MapView";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { theme } from "../../theme";
 import ListingCard from "../../components/ListingCard";
 import FiltersSheet from "../Search/FiltersSheet";
 import { useFilterStore } from "../../state/useFilterStore";
 import { useLocation } from "../../hooks/useLocation";
-import { useAuthStore } from "../../state/useAuthStore";
 import {
   generateMockListings,
   generateListingsAroundLocation,
   filterListingsByQuick,
 } from "../../data/mockListings";
 import { fetchRealShelters } from "../../services/shelterService";
-import {
-  getMarketplaceListings,
-  type MarketplaceListing,
-} from "../../services/marketplace.service";
 import { usePerformance } from "../../utils/perf";
 import type { Listing } from "../../types/listing";
 import type { RootStackNavigationProp } from "../../navigation/types";
+import { useI18n } from "../../i18n";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
@@ -75,12 +71,10 @@ export default function HomeScreen() {
   const mapRef = useRef<MapView>(null);
   const listRef = useRef<FlatList>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
+  const i18n = useI18n();
 
   // Get user location
   const { location, loading: locationLoading, refreshLocation } = useLocation();
-
-  // Get current user to detect account switches
-  const { user } = useAuthStore();
 
   // Store state
   const { quickFilters, toggleQuickFilter, searchQuery, setSearchQuery } =
@@ -106,118 +100,66 @@ export default function HomeScreen() {
   const mapPerf = usePerformance("mapUpdate");
   const listingLoadPerf = usePerformance("listingLoad");
 
-  // Track if we're currently loading to prevent duplicate calls
-  const isLoadingRef = useRef(false);
+  // Load real shelter data or fall back to mock data
+  useEffect(() => {
+    async function loadShelters() {
+      if (!location) return;
 
-  // Track the last user to detect actual switches
-  const lastUserRef = useRef(user?.id);
-
-  // Function to load listings with proper dependencies
-  const loadListings = useCallback(async () => {
-    // Prevent duplicate simultaneous calls
-    if (isLoadingRef.current) {
-      console.log("⚠️ Already loading listings, skipping duplicate call");
-      return;
-    }
-
-    console.log(`🔄 Loading listings for user: ${user?.email || "guest"}`);
-    console.log(`📍 Location: ${location?.latitude}, ${location?.longitude}`);
-    console.log(`🔍 Filters:`, quickFilters);
-
-    isLoadingRef.current = true;
-    setLoadingData(true);
-
-    try {
-      // Fetch real listings from Supabase database
-      const dbListings = await getMarketplaceListings(
-        location?.latitude,
-        location?.longitude,
-        50, // 50 mile radius
-      );
-
-      let allListings: Listing[];
-
-      if (dbListings && dbListings.length > 0) {
-        // Use database listings
-        allListings = dbListings as any;
-        console.log(
-          `✅ Found ${dbListings.length} real listings from database`,
+      setLoadingData(true);
+      listingLoadPerf.start();
+      try {
+        // Try to fetch real shelters from OpenStreetMap
+        const realShelters = await fetchRealShelters(
+          location.latitude,
+          location.longitude,
+          15, // 15km radius (~10 miles)
         );
-        setIsRealData(true);
-        setDataSource("Live Database");
-      } else {
-        // Fall back to mock data if no database listings
-        console.log("No database listings found, using mock data");
-        if (location) {
+
+        let allListings: Listing[];
+
+        if (realShelters && realShelters.length > 0) {
+          // Use real shelter data
+          allListings = realShelters as any;
+          console.log(`Found ${realShelters.length} real shelters nearby`);
+          setIsRealData(true);
+          setDataSource("OpenStreetMap Data");
+        } else {
+          // Fall back to mock data if no real shelters found
+          console.log("No real shelters found, using mock data");
           allListings = generateListingsAroundLocation(
             location.latitude,
             location.longitude,
             20,
           );
-        } else {
-          allListings = generateMockListings(20);
         }
-        setIsRealData(false);
-        setDataSource("Mock Data");
+
+        const filtered = filterListingsByQuick(allListings, quickFilters);
+        setListings(filtered);
+      } catch (error) {
+        console.error("Error loading shelters:", error);
+        // Fall back to mock data on error
+        const mockData = generateListingsAroundLocation(
+          location.latitude,
+          location.longitude,
+          20,
+        );
+        const filtered = filterListingsByQuick(mockData, quickFilters);
+        setListings(filtered);
+      } finally {
+        listingLoadPerf.end();
+        setLoadingData(false);
       }
-
-      // Debug the data before filtering
-      console.log(`🔍 Before filtering: ${allListings.length} total listings`);
-      console.log(`🔍 Active filters:`, Object.entries(quickFilters).filter(([k, v]) => v).map(([k]) => k));
-
-      const filtered = filterListingsByQuick(allListings, quickFilters);
-      console.log(`📍 After filtering: ${filtered.length} listings remain`);
-
-      if (filtered.length > 0) {
-        console.log(`📊 First listing:`, {
-          name: filtered[0]?.name,
-          id: filtered[0]?.id,
-          coordinates: filtered[0]?.coordinates,
-        });
-      } else {
-        console.log("⚠️ No listings after filtering!");
-      }
-
-      // Set the listings state with the filtered data
-      setListings(filtered);
-    } catch (error) {
-      console.error("Error loading listings:", error);
-      // Fall back to mock data on error
-      const mockData = location
-        ? generateListingsAroundLocation(
-            location.latitude,
-            location.longitude,
-            20,
-          )
-        : generateMockListings(20);
-      const filtered = filterListingsByQuick(mockData, quickFilters);
-      setListings(filtered);
-      setIsRealData(false);
-      setDataSource("Mock Data (Error Fallback)");
-    } finally {
-      setLoadingData(false);
-      isLoadingRef.current = false;
-      console.log("✅ Loading complete");
     }
-  }, [location?.latitude, location?.longitude, quickFilters, user?.email]); // Proper dependencies
 
-  // Load listings when dependencies change
-  useEffect(() => {
-    console.log("📱 Dependencies changed, loading listings");
-    loadListings();
-  }, [loadListings]);
-
-  // Handle focus events for user switching
-  useFocusEffect(
-    useCallback(() => {
-      // Only reload if user actually changed
-      if (lastUserRef.current !== user?.id && user?.id) {
-        console.log("🔄 User switch detected on focus, reloading listings");
-        lastUserRef.current = user?.id;
-        loadListings();
-      }
-    }, [user?.id, loadListings]),
-  );
+    if (location) {
+      loadShelters();
+    } else {
+      // Use default mock data if no location
+      const allListings = generateMockListings(20);
+      const filtered = filterListingsByQuick(allListings, quickFilters);
+      setListings(filtered);
+    }
+  }, [quickFilters, location]);
 
   // Update map region when user location is loaded
   useEffect(() => {
@@ -324,8 +266,8 @@ export default function HomeScreen() {
           >
             <Text style={styles.badgeText}>
               {item.availability === "available"
-                ? `${item.bedsAvailable} beds`
-                : "Full"}
+                ? `${item.bedsAvailable} ${item.bedsAvailable === 1 ? i18n.t("home.bed") : i18n.t("home.beds")}`
+                : i18n.t("home.full")}
             </Text>
           </View>
         </View>
@@ -337,11 +279,15 @@ export default function HomeScreen() {
 
         <View style={styles.listItemFooter}>
           <Text style={styles.listItemPrice}>
-            {item.price.isFree ? "FREE" : `$${item.price.min}/mo`}
+            {item.price.isFree
+              ? i18n.t("home.free").toUpperCase()
+              : `$${item.price.min}/mo`}
           </Text>
           <View style={styles.listItemDistance}>
             <Ionicons name="navigate" size={14} color="#D4AF37" />
-            <Text style={styles.distanceText}>{item.distance || 0.5} mi</Text>
+            <Text style={styles.distanceText}>
+              {item.distance || 0.5} {i18n.t("home.mi")}
+            </Text>
           </View>
         </View>
       </View>
@@ -351,7 +297,7 @@ export default function HomeScreen() {
 
   const renderQuickFilter = (
     key: keyof typeof quickFilters,
-    label: string,
+    translationKey: string,
     icon: string,
   ) => (
     <TouchableOpacity
@@ -374,7 +320,7 @@ export default function HomeScreen() {
           quickFilters[key] && styles.quickFilterTextActive,
         ]}
       >
-        {label}
+        {i18n.t(translationKey)}
       </Text>
     </TouchableOpacity>
   );
@@ -386,7 +332,9 @@ export default function HomeScreen() {
         <View style={styles.realDataBanner}>
           <Ionicons name="checkmark-circle" size={16} color="#21C55D" />
           <Text style={styles.realDataText}>{dataSource}</Text>
-          <Text style={styles.realDataSubtext}>Live Updates</Text>
+          <Text style={styles.realDataSubtext}>
+            {i18n.t("home.liveUpdates")}
+          </Text>
         </View>
       )}
 
@@ -396,7 +344,7 @@ export default function HomeScreen() {
           <Ionicons name="search" size={20} color="#8a8a8a" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search by location or name"
+            placeholder={i18n.t("home.searchPlaceholder")}
             placeholderTextColor="#6a6a6a"
             value={searchText}
             onChangeText={setSearchText}
@@ -421,11 +369,11 @@ export default function HomeScreen() {
           style={styles.quickFiltersScroll}
           contentContainerStyle={styles.quickFiltersContent}
         >
-          {renderQuickFilter("immediate", "Available Now", "flash")}
-          {renderQuickFilter("free", "Free", "gift")}
-          {renderQuickFilter("veterans", "Veterans", "shield-checkmark")}
-          {renderQuickFilter("families", "Families", "people")}
-          {renderQuickFilter("nearMe", "Near Me", "location")}
+          {renderQuickFilter("immediate", "home.availableNow", "flash")}
+          {renderQuickFilter("free", "home.free", "gift")}
+          {renderQuickFilter("veterans", "home.veterans", "shield-checkmark")}
+          {renderQuickFilter("families", "home.families", "people")}
+          {renderQuickFilter("nearMe", "home.nearMe", "location")}
         </ScrollView>
       </View>
 
@@ -462,7 +410,9 @@ export default function HomeScreen() {
                   ]}
                 >
                   <Text style={styles.markerText}>
-                    {listing.price.isFree ? "FREE" : `$${listing.price.min}`}
+                    {listing.price.isFree
+                      ? i18n.t("home.free").toUpperCase()
+                      : `$${listing.price.min}`}
                   </Text>
                 </View>
               </Marker>
@@ -523,9 +473,11 @@ export default function HomeScreen() {
             ) : (
               <>
                 <Text style={styles.resultsCount}>
-                  {listings.length} places
+                  {listings.length} {i18n.t("home.places")}
                 </Text>
-                <Text style={styles.resultsSubtext}>in this area</Text>
+                <Text style={styles.resultsSubtext}>
+                  {i18n.t("home.inThisArea")}
+                </Text>
               </>
             )}
           </View>
@@ -541,7 +493,7 @@ export default function HomeScreen() {
               color="#000"
             />
             <Text style={styles.viewToggleText}>
-              {showListView ? "Map" : "List"}
+              {showListView ? i18n.t("home.map") : i18n.t("home.list")}
             </Text>
           </TouchableOpacity>
         </View>
@@ -564,14 +516,14 @@ export default function HomeScreen() {
               <View style={styles.miniCardFooter}>
                 <Text style={styles.miniCardPrice}>
                   {listings[activeIndex].price.isFree
-                    ? "FREE"
+                    ? i18n.t("home.free").toUpperCase()
                     : `$${listings[activeIndex].price.min}/mo`}
                 </Text>
                 <View style={styles.miniCardBadge}>
                   <Text style={styles.miniCardBadgeText}>
                     {listings[activeIndex].availability === "available"
-                      ? `${listings[activeIndex].bedsAvailable} beds`
-                      : "Full"}
+                      ? `${listings[activeIndex].bedsAvailable} ${listings[activeIndex].bedsAvailable === 1 ? i18n.t("home.bed") : i18n.t("home.beds")}`
+                      : i18n.t("home.full")}
                   </Text>
                 </View>
               </View>

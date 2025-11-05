@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+} from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { en, es } from "./translations";
 
@@ -9,7 +16,7 @@ type TranslationKeys = typeof en;
 
 interface I18nContextType {
   language: Language;
-  setLanguage: (lang: Language) => void;
+  setLanguage: (lang: Language) => Promise<void>;
   t: (key: string, params?: Record<string, any>) => string;
 }
 
@@ -47,7 +54,6 @@ export function t(key: string, params?: Record<string, any>): string {
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<Language>("en");
   const [isLoading, setIsLoading] = useState(true);
-  const translationCache = useMemo(() => new Map<string, string>(), []);
 
   // Load saved language preference
   useEffect(() => {
@@ -60,27 +66,24 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setIsLoading(false));
   }, []);
 
-  // Save language preference and clear cache
-  const setLanguage = async (lang: Language) => {
-    translationCache.clear(); // Clear cache when language changes
+  // Save language preference - use useCallback to maintain stable reference
+  const setLanguage = useCallback(async (lang: Language) => {
+    console.log("setLanguage called with:", lang);
     setLanguageState(lang);
     await AsyncStorage.setItem("@app_language", lang);
-  };
+    console.log("Language saved to AsyncStorage:", lang);
+  }, []);
 
-  // Translation function with caching
-  const translate = (key: string, params?: Record<string, any>): string => {
-    // Safety check for translations object
-    if (!translations || !translations[language]) {
-      console.warn(`Translations not loaded for language: ${language}`);
-      return key;
-    }
+  // Translation function - use useCallback with language dependency
+  const translate = useCallback(
+    (key: string, params?: Record<string, any>): string => {
+      // Safety check for translations object
+      if (!translations || !translations[language]) {
+        console.warn(`Translations not loaded for language: ${language}`);
+        return key;
+      }
 
-    // Check cache first
-    const cacheKey = `${language}:${key}`;
-    let translation = translationCache.get(cacheKey);
-
-    if (!translation) {
-      translation = getNestedValue(translations[language], key);
+      const translation = getNestedValue(translations[language], key);
 
       if (!translation) {
         // Fallback to English if translation not found
@@ -89,15 +92,13 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
           console.warn(`Translation missing for key: ${key}`);
           return key;
         }
-        translation = fallback;
+        return interpolate(fallback, params);
       }
 
-      // Cache the translation
-      translationCache.set(cacheKey, translation);
-    }
-
-    return interpolate(translation, params);
-  };
+      return interpolate(translation, params);
+    },
+    [language],
+  );
 
   // Memoize the context value to prevent unnecessary re-renders
   const value: I18nContextType = useMemo(
@@ -106,7 +107,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       setLanguage,
       t: translate,
     }),
-    [language]
+    [language, setLanguage, translate],
   );
 
   if (isLoading) {

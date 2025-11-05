@@ -28,6 +28,7 @@ import { sortListings, SORT_OPTIONS } from "../../utils/sortListings";
 import { usePerformance } from "../../utils/perf";
 import type { Listing } from "../../types/listing";
 import type { SortOption } from "../../types/filters";
+import { useI18n } from "../../i18n";
 
 type ViewMode = "list" | "map";
 
@@ -58,6 +59,17 @@ const MAP_DARK_STYLE = [
 
 export default function SearchScreen() {
   const navigation = useNavigation();
+  const i18n = useI18n();
+
+  // Create translated SORT_OPTIONS
+  const translatedSortOptions = useMemo(
+    () =>
+      SORT_OPTIONS.map((option) => ({
+        value: option.value,
+        label: i18n.t(`search.sortOptions.${option.value}`),
+      })),
+    [i18n],
+  );
 
   // Store state
   const {
@@ -105,7 +117,7 @@ export default function SearchScreen() {
           l.name.toLowerCase().includes(query) ||
           l.description.toLowerCase().includes(query) ||
           l.address.city.toLowerCase().includes(query) ||
-          l.provider.toLowerCase().includes(query)
+          l.provider.toLowerCase().includes(query),
       );
     }
 
@@ -139,11 +151,14 @@ export default function SearchScreen() {
   }, []);
 
   // Open details
-  const openDetails = useCallback((listing: Listing) => {
-    console.log("Open details:", listing.id);
-    // @ts-ignore - Navigation types will be updated
-    navigation.navigate("ListingDetails", { listingId: listing.id, listing });
-  }, [navigation]);
+  const openDetails = useCallback(
+    (listing: Listing) => {
+      console.log("Open details:", listing.id);
+      // @ts-ignore - Navigation types will be updated
+      navigation.navigate("ListingDetails", { listingId: listing.id, listing });
+    },
+    [navigation],
+  );
 
   // Render listing item
   const renderListingItem = useCallback(
@@ -152,7 +167,7 @@ export default function SearchScreen() {
         <ListingCard listing={item} onPress={() => openDetails(item)} />
       </View>
     ),
-    [openDetails]
+    [openDetails],
   );
 
   // List key extractor
@@ -171,14 +186,10 @@ export default function SearchScreen() {
       <View style={styles.header}>
         {/* Search Bar */}
         <View style={styles.searchBar}>
-          <Ionicons
-            name="search-outline"
-            size={20}
-            color={"#4B5563"}
-          />
+          <Ionicons name="search-outline" size={20} color={"#4B5563"} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search location or shelter..."
+            placeholder={i18n.t("search.placeholder")}
             placeholderTextColor={"#4B5563"}
             value={searchText}
             onChangeText={setSearchText}
@@ -186,11 +197,16 @@ export default function SearchScreen() {
             returnKeyType="search"
           />
           <TouchableOpacity onPress={handleSearch} style={styles.searchButton}>
-            <Text style={styles.searchButtonText}>Search</Text>
+            <Text style={styles.searchButtonText}>
+              {i18n.t("search.searchButton")}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={openFilters} style={styles.filterButton}>
             <Ionicons name="options-outline" size={20} color={"#D4AF37"} />
-            <Text style={styles.filterButtonText}>Filters{filterCountText}</Text>
+            <Text style={styles.filterButtonText}>
+              {i18n.t("search.filtersButton")}
+              {filterCountText}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -216,7 +232,7 @@ export default function SearchScreen() {
                   viewMode === "map" && styles.toggleTextActive,
                 ]}
               >
-                Map
+                {i18n.t("search.map")}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -237,7 +253,7 @@ export default function SearchScreen() {
                   viewMode === "list" && styles.toggleTextActive,
                 ]}
               >
-                List
+                {i18n.t("search.list")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -253,13 +269,10 @@ export default function SearchScreen() {
               color={"#FFFFFF"}
             />
             <Text style={styles.sortText}>
-              {SORT_OPTIONS.find((o) => o.value === sortBy)?.label || "Sort"}
+              {translatedSortOptions.find((o) => o.value === sortBy)?.label ||
+                i18n.t("search.sort")}
             </Text>
-            <Ionicons
-              name="chevron-down-outline"
-              size={16}
-              color={"#4B5563"}
-            />
+            <Ionicons name="chevron-down-outline" size={16} color={"#4B5563"} />
           </TouchableOpacity>
         </View>
       </View>
@@ -270,15 +283,19 @@ export default function SearchScreen() {
       {/* Results Count */}
       <View style={styles.resultsCount}>
         <Text style={styles.resultsText}>
-          {listings.length} {listings.length === 1 ? "place" : "places"} found
+          {listings.length}{" "}
+          {listings.length === 1
+            ? i18n.t("search.place")
+            : i18n.t("search.places")}{" "}
+          {i18n.t("search.found")}
         </Text>
       </View>
 
       {/* Content */}
       {listings.length === 0 ? (
         <EmptyState
-          message="No matches found"
-          subMessage="Try adjusting your filters or expanding your search area"
+          message={i18n.t("search.noMatches")}
+          subMessage={i18n.t("search.tryAdjusting")}
           onClearFilters={hasActiveFilters() ? clearAll : undefined}
           showClearButton={hasActiveFilters()}
         />
@@ -327,7 +344,9 @@ export default function SearchScreen() {
                   ]}
                 >
                   <Text style={styles.markerText}>
-                    {listing.price.isFree ? "FREE" : `$${listing.price.min}`}
+                    {listing.price.isFree
+                      ? i18n.t("home.free").toUpperCase()
+                      : `$${listing.price.min}`}
                   </Text>
                 </View>
               </Marker>
@@ -350,13 +369,13 @@ export default function SearchScreen() {
         >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Sort By</Text>
+              <Text style={styles.modalTitle}>{i18n.t("search.sortBy")}</Text>
               <TouchableOpacity onPress={() => setShowSortModal(false)}>
                 <Ionicons name="close" size={24} color={"#FFFFFF"} />
               </TouchableOpacity>
             </View>
             <ScrollView>
-              {SORT_OPTIONS.map((option) => (
+              {translatedSortOptions.map((option) => (
                 <TouchableOpacity
                   key={option.value}
                   style={[
@@ -377,11 +396,7 @@ export default function SearchScreen() {
                     {option.label}
                   </Text>
                   {sortBy === option.value && (
-                    <Ionicons
-                      name="checkmark"
-                      size={20}
-                      color={"#D4AF37"}
-                    />
+                    <Ionicons name="checkmark" size={20} color={"#D4AF37"} />
                   )}
                 </TouchableOpacity>
               ))}
@@ -391,7 +406,10 @@ export default function SearchScreen() {
       </Modal>
 
       {/* Filters Sheet */}
-      <FiltersSheet visible={showFilters} onClose={() => setShowFilters(false)} />
+      <FiltersSheet
+        visible={showFilters}
+        onClose={() => setShowFilters(false)}
+      />
     </SafeAreaView>
   );
 }

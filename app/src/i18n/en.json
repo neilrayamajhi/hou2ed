@@ -90,11 +90,47 @@
     "viewAll": "View All",
     "recommended": "Recommended",
     "recentlyAdded": "Recently Added",
-    "unitsAvailable": "{{count}} units available"
+    "unitsAvailable": "{{count}} units available",
+    "liveUpdates": "Live Updates",
+    "searchPlaceholder": "Search by location or name",
+    "availableNow": "Available Now",
+    "free": "Free",
+    "veterans": "Veterans",
+    "families": "Families",
+    "nearMe": "Near Me",
+    "beds": "beds",
+    "bed": "bed",
+    "full": "Full",
+    "mi": "mi",
+    "places": "places",
+    "inThisArea": "in this area",
+    "map": "Map",
+    "list": "List"
   },
   "search": {
     "title": "Search",
-    "placeholder": "Search by location or property",
+    "placeholder": "Search location or shelter...",
+    "searchButton": "Search",
+    "filtersButton": "Filters",
+    "map": "Map",
+    "list": "List",
+    "sort": "Sort",
+    "sortBy": "Sort By",
+    "place": "place",
+    "places": "places",
+    "found": "found",
+    "foundPlural": "found",
+    "noMatches": "No matches found",
+    "tryAdjusting": "Try adjusting your filters or expanding your search area",
+    "sortOptions": {
+      "relevance": "Relevance",
+      "priceAsc": "Price: Low to High",
+      "priceDesc": "Price: High to Low",
+      "distance": "Distance: Nearest",
+      "newest": "Recently Updated",
+      "rating": "Highest Rated",
+      "availability": "Available First"
+    },
     "filters": {
       "title": "Filters",
       "priceRange": "Price Range",
@@ -151,6 +187,19 @@
         "placeholder": "Describe the inappropriate behavior...",
         "submit": "Submit Report"
       }
+    },
+    "setup": {
+      "required": "Setup Required",
+      "instructions": "The messaging system needs to be set up in your database. The SQL migration has been copied to your clipboard.\n\n1. Click OK to open Supabase\n2. Paste the SQL in the editor\n3. Click Run\n4. Come back and refresh",
+      "title": "Database Setup Required",
+      "subtitle": "The messaging tables need to be created in your Supabase database.",
+      "stepsHeader": "Quick Setup Steps:",
+      "step1": "Click the button below to open Supabase",
+      "step2": "Paste the SQL (already in your clipboard)",
+      "step3": "Click \"Run\" to create the tables",
+      "step4": "Come back and pull to refresh",
+      "openButton": "Open Supabase Dashboard",
+      "retry": "Retry"
     }
   },
   "saved": {
@@ -160,7 +209,16 @@
     "emptyDesc": "Listings you save will appear here for easy access",
     "browse": "Browse Listings",
     "remove": "Remove from Saved?",
-    "removeConfirm": "Remove \"{{title}}\" from your saved listings?"
+    "removeConfirm": "Remove \"{{title}}\" from your saved listings?",
+    "removed": "Removed",
+    "removedSuccess": "Listing has been removed from your saved items",
+    "shareError": "Unable to share listing",
+    "unit": "unit",
+    "units": "units",
+    "available": "available",
+    "listing": "listing",
+    "listings": "listings",
+    "saved": "saved"
   },
   "profile": {
     "title": "Profile",
@@ -178,7 +236,9 @@
       "emailNotifications": "Email Notifications",
       "language": "Language",
       "deleteAccount": "Delete Account",
-      "deleteConfirm": "Are you sure you want to delete your account? This action cannot be undone."
+      "deleteConfirm": "Are you sure you want to delete your account? This action cannot be undone.",
+      "selectLanguage": "Select Language",
+      "chooseLanguage": "Choose your preferred language"
     },
     "changePassword": {
       "title": "Change Password",

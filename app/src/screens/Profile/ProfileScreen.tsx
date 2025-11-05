@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -45,6 +45,7 @@ export default function ProfileScreen() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [applicationsCount, setApplicationsCount] = useState<number>(0);
 
   const handleEditAvatar = useCallback(async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -59,9 +60,40 @@ export default function ProfileScreen() {
     }
   }, []);
 
+  // Fetch applications count
+  const fetchApplicationsCount = useCallback(async () => {
+    if (!user?.id) return;
+
+    try {
+      const { supabase } = await import("../../lib/supabase");
+      const { count, error } = await supabase
+        .from("applications")
+        .select("*", { count: "exact", head: true })
+        .eq("seeker_id", user.id);
+
+      if (!error && count !== null) {
+        setApplicationsCount(count);
+      }
+    } catch (error) {
+      console.error("Error fetching applications count:", error);
+    }
+  }, [user?.id]);
+
+  // Fetch count on mount and when screen is focused
+  React.useEffect(() => {
+    fetchApplicationsCount();
+  }, [fetchApplicationsCount]);
+
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => {
+      fetchApplicationsCount();
+    });
+    return unsubscribe;
+  }, [navigation, fetchApplicationsCount]);
+
   const handleApplications = useCallback(() => {
-    Alert.alert("Applications", "You have 3 active applications");
-  }, []);
+    navigation.navigate("ApplicationsList");
+  }, [navigation]);
 
   const handleSavedSearches = useCallback(() => {
     Alert.alert(
@@ -74,7 +106,7 @@ export default function ProfileScreen() {
     setChangePasswordModalVisible(true);
   }, []);
 
-  const submitPasswordChange = useCallback(() => {
+  const submitPasswordChange = useCallback(async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
       Alert.alert("Error", "Please fill in all fields");
       return;
@@ -90,11 +122,27 @@ export default function ProfileScreen() {
       return;
     }
 
-    Alert.alert("Success", "Password changed successfully");
-    setChangePasswordModalVisible(false);
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
+    try {
+      const { supabase } = await import("../../lib/supabase");
+
+      // Update the password in Supabase
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        Alert.alert("Error", "Failed to change password. Please try again.");
+        return;
+      }
+
+      Alert.alert("Success", "Password changed successfully");
+      setChangePasswordModalVisible(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      Alert.alert("Error", "Failed to change password. Please try again.");
+    }
   }, [currentPassword, newPassword, confirmPassword]);
 
   const handleDeleteAccount = useCallback(() => {
@@ -216,43 +264,54 @@ export default function ProfileScreen() {
     );
   }, [user?.role, logout, navigation]);
 
-  const profileSections: ProfileSection[] = [
-    // Provider Dashboard - only show if user is a provider
-    ...(user?.role === "provider"
-      ? [
-          {
-            id: "provider-dashboard",
-            title: "Provider Dashboard",
-            icon: "home-outline" as keyof typeof Ionicons.glyphMap,
-            onPress: () => navigation.navigate("ProviderDashboard"),
-            showArrow: true,
-          },
-        ]
-      : []),
-    {
-      id: "applications",
-      title: "My Applications",
-      icon: "document-text-outline",
-      onPress: handleApplications,
-      badge: 3,
-      showArrow: true,
-    },
-    {
-      id: "saved-searches",
-      title: "Saved Searches",
-      icon: "search-outline",
-      onPress: handleSavedSearches,
-      badge: savedSearches.length,
-      showArrow: true,
-    },
-    {
-      id: "account-settings",
-      title: "Account Settings",
-      icon: "settings-outline",
-      onPress: () => {},
-      showArrow: false,
-    },
-  ];
+  const profileSections: ProfileSection[] = useMemo(
+    () => [
+      // Provider Dashboard - only show if user is a provider
+      ...(user?.role === "provider"
+        ? [
+            {
+              id: "provider-dashboard",
+              title: "Provider Dashboard",
+              icon: "home-outline" as keyof typeof Ionicons.glyphMap,
+              onPress: () => navigation.navigate("ProviderDashboard"),
+              showArrow: true,
+            },
+          ]
+        : []),
+      {
+        id: "applications",
+        title: i18n.t("profile.sections.applications"),
+        icon: "document-text-outline",
+        onPress: handleApplications,
+        badge: applicationsCount > 0 ? applicationsCount : undefined,
+        showArrow: true,
+      },
+      {
+        id: "saved-searches",
+        title: i18n.t("profile.sections.savedSearches"),
+        icon: "search-outline",
+        onPress: handleSavedSearches,
+        badge: savedSearches.length,
+        showArrow: true,
+      },
+      {
+        id: "account-settings",
+        title: i18n.t("profile.sections.accountSettings"),
+        icon: "settings-outline",
+        onPress: () => {},
+        showArrow: false,
+      },
+    ],
+    [
+      user?.role,
+      i18n.language,
+      handleApplications,
+      handleSavedSearches,
+      savedSearches.length,
+      applicationsCount,
+      navigation,
+    ],
+  );
 
   const renderSection = useCallback(
     (section: ProfileSection) => {
@@ -281,7 +340,9 @@ export default function ProfileScreen() {
                     size={18}
                     color={colors.gray[400]}
                   />
-                  <Text style={styles.settingText}>Change Password</Text>
+                  <Text style={styles.settingText}>
+                    {i18n.t("profile.settings.changePassword")}
+                  </Text>
                 </View>
                 <Ionicons
                   name="chevron-forward"
@@ -297,7 +358,9 @@ export default function ProfileScreen() {
                     size={18}
                     color={colors.gray[400]}
                   />
-                  <Text style={styles.settingText}>Push Notifications</Text>
+                  <Text style={styles.settingText}>
+                    {i18n.t("profile.settings.pushNotifications")}
+                  </Text>
                 </View>
                 <Switch
                   value={pushNotifications}
@@ -321,7 +384,9 @@ export default function ProfileScreen() {
                     size={18}
                     color={colors.gray[400]}
                   />
-                  <Text style={styles.settingText}>Email Notifications</Text>
+                  <Text style={styles.settingText}>
+                    {i18n.t("profile.settings.emailNotifications")}
+                  </Text>
                 </View>
                 <Switch
                   value={emailNotifications}
@@ -342,14 +407,14 @@ export default function ProfileScreen() {
                 style={styles.settingRow}
                 onPress={() => {
                   Alert.alert(
-                    "Select Language",
-                    "Choose your preferred language",
+                    i18n.t("profile.settings.selectLanguage"),
+                    i18n.t("profile.settings.chooseLanguage"),
                     [
                       ...LANGUAGES.map((lang) => ({
                         text: `${lang.nativeName} (${lang.name})`,
                         onPress: () => i18n.setLanguage(lang.code),
                       })),
-                      { text: "Cancel", style: "cancel" },
+                      { text: i18n.t("common.cancel"), style: "cancel" },
                     ],
                   );
                 }}
@@ -362,7 +427,9 @@ export default function ProfileScreen() {
                     size={18}
                     color={colors.gray[400]}
                   />
-                  <Text style={styles.settingText}>Language</Text>
+                  <Text style={styles.settingText}>
+                    {i18n.t("profile.settings.language")}
+                  </Text>
                 </View>
                 <View style={styles.settingRight}>
                   <Text style={styles.settingValue}>
@@ -439,6 +506,8 @@ export default function ProfileScreen() {
       handleApplications,
       handleSavedSearches,
       savedSearches.length,
+      i18n.language,
+      i18n.t,
     ],
   );
 
@@ -446,7 +515,7 @@ export default function ProfileScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Profile</Text>
+          <Text style={styles.headerTitle}>{i18n.t("profile.title")}</Text>
         </View>
 
         {/* Avatar Section */}
@@ -488,7 +557,9 @@ export default function ProfileScreen() {
           </Text>
           <Text style={styles.userEmail}>{user?.email || "Not available"}</Text>
           <Text style={styles.userRole}>
-            {user?.role === "provider" ? "Housing Provider" : "Housing Seeker"}
+            {user?.role === "provider"
+              ? i18n.t("profile.housingProvider")
+              : i18n.t("profile.housingSeeker")}
           </Text>
         </View>
 
@@ -559,13 +630,15 @@ export default function ProfileScreen() {
             style={styles.modalContent}
             onPress={(e) => e.stopPropagation()}
           >
-            <Text style={styles.modalTitle}>Change Password</Text>
+            <Text style={styles.modalTitle}>
+              {i18n.t("profile.changePassword.title")}
+            </Text>
 
             <TextInput
               style={styles.modalInput}
               value={currentPassword}
               onChangeText={setCurrentPassword}
-              placeholder="Current Password"
+              placeholder={i18n.t("profile.changePassword.current")}
               placeholderTextColor={colors.gray[500]}
               secureTextEntry
               accessibilityLabel="Current password input"
@@ -575,7 +648,7 @@ export default function ProfileScreen() {
               style={styles.modalInput}
               value={newPassword}
               onChangeText={setNewPassword}
-              placeholder="New Password"
+              placeholder={i18n.t("profile.changePassword.new")}
               placeholderTextColor={colors.gray[500]}
               secureTextEntry
               accessibilityLabel="New password input"
@@ -585,7 +658,7 @@ export default function ProfileScreen() {
               style={styles.modalInput}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
-              placeholder="Confirm New Password"
+              placeholder={i18n.t("profile.changePassword.confirm")}
               placeholderTextColor={colors.gray[500]}
               secureTextEntry
               accessibilityLabel="Confirm password input"
@@ -596,14 +669,18 @@ export default function ProfileScreen() {
                 style={[styles.modalButton, styles.cancelButton]}
                 onPress={() => setChangePasswordModalVisible(false)}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={styles.cancelButtonText}>
+                  {i18n.t("common.cancel")}
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.modalButton, styles.submitButton]}
                 onPress={submitPasswordChange}
               >
-                <Text style={styles.submitButtonText}>Change Password</Text>
+                <Text style={styles.submitButtonText}>
+                  {i18n.t("profile.changePassword.submit")}
+                </Text>
               </TouchableOpacity>
             </View>
           </Pressable>

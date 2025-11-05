@@ -14,6 +14,7 @@ import ResetPassword from "../screens/Auth/ResetPassword";
 import ListingDetailsScreen from "../screens/Listing/ListingDetailsScreen";
 import ProviderListingDetails from "../screens/Provider/ListingDetails";
 import ApplyWizard from "../screens/Applications/ApplyWizard";
+import ApplicationsListScreen from "../screens/Applications/ApplicationsListScreen";
 import ThreadScreen from "../screens/Messages/ThreadScreen";
 import DevMenu from "../screens/Dev/DevMenu";
 import ProviderDashboard from "../screens/Provider/ProviderDashboard";
@@ -61,7 +62,10 @@ export default function RootNavigator() {
         {/* Listing Details (seeker) */}
         <Stack.Screen name="ListingDetails" component={ListingDetailsScreen} />
         {/* Provider Listing Details */}
-        <Stack.Screen name="ProviderListingDetails" component={ProviderListingDetails} />
+        <Stack.Screen
+          name="ProviderListingDetails"
+          component={ProviderListingDetails}
+        />
 
         {/* Apply Wizard */}
         <Stack.Screen
@@ -71,6 +75,12 @@ export default function RootNavigator() {
             presentation: "modal",
             animation: "slide_from_bottom",
           }}
+        />
+
+        {/* Applications List */}
+        <Stack.Screen
+          name="ApplicationsList"
+          component={ApplicationsListScreen}
         />
 
         {/* Thread Screen */}
@@ -83,7 +93,10 @@ export default function RootNavigator() {
         <Stack.Screen name="ProviderDashboard" component={ProviderDashboard} />
         <Stack.Screen name="AddListing" component={AddListing} />
         <Stack.Screen name="EditListing" component={EditListing} />
-        <Stack.Screen name="AvailabilityUpdater" component={AvailabilityUpdater} />
+        <Stack.Screen
+          name="AvailabilityUpdater"
+          component={AvailabilityUpdater}
+        />
         <Stack.Screen name="ListingWizard" component={ListingWizard} />
         <Stack.Screen name="ApplicationsInbox" component={ApplicationsInbox} />
         <Stack.Screen name="ApplicationDetail" component={ApplicationDetail} />

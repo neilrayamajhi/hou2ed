@@ -13,6 +13,7 @@ export type RootStackParamList = {
   Tabs: undefined;
   ListingDetails: { listingId?: string };
   ApplyWizard: { listingId?: string };
+  ApplicationsList: undefined;
   Thread: {
     threadId?: string;
     messageId: string;
