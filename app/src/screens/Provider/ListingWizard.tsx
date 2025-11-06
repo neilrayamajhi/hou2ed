@@ -178,15 +178,90 @@ export default function ListingWizard() {
     [stepIndex, steps.length],
   );
 
-  const next = () => {
-    if (currentStep === "Basics") {
-      if (!title.trim() || !address.trim() || !totalBeds) {
-        Alert.alert(
-          "Missing info",
-          "Title, address and total beds are required",
+  // Check if current step is valid without showing alerts (for button state)
+  const isStepValid = (): boolean => {
+    switch (currentStep) {
+      case "Basics":
+        return !!(
+          title.trim() &&
+          address.trim() &&
+          totalBeds &&
+          Number(totalBeds) > 0 &&
+          (!availableBeds || Number(availableBeds) <= Number(totalBeds))
         );
-        return;
-      }
+      case "Pricing":
+        return !price || Number(price) >= 0;
+      case "Review":
+        return !!(title.trim() && address.trim() && totalBeds);
+      default:
+        return true;
+    }
+  };
+
+  const validateStep = (): boolean => {
+    switch (currentStep) {
+      case "Basics":
+        if (!title.trim()) {
+          Alert.alert("Missing Information", "Property name is required");
+          return false;
+        }
+        if (!address.trim()) {
+          Alert.alert("Missing Information", "Address is required");
+          return false;
+        }
+        if (!totalBeds || Number(totalBeds) <= 0) {
+          Alert.alert("Missing Information", "Total beds must be greater than 0");
+          return false;
+        }
+        if (availableBeds && Number(availableBeds) > Number(totalBeds)) {
+          Alert.alert("Invalid Information", "Available beds cannot exceed total beds");
+          return false;
+        }
+        return true;
+
+      case "Location":
+        // No required fields for location step (just informational)
+        return true;
+
+      case "Photos":
+        // Photos are optional, so always allow proceeding
+        return true;
+
+      case "AmenitiesRules":
+        // All amenities and rules are optional
+        return true;
+
+      case "Pricing":
+        // Price is optional (can be free)
+        if (price && Number(price) < 0) {
+          Alert.alert("Invalid Information", "Price cannot be negative");
+          return false;
+        }
+        return true;
+
+      case "Availability":
+        // Availability calendar is optional
+        return true;
+
+      case "Review":
+        // Final review - check all required fields again
+        if (!title.trim() || !address.trim() || !totalBeds) {
+          Alert.alert(
+            "Missing Required Information",
+            "Please go back and fill in all required fields:\n• Property name\n• Address\n• Total beds"
+          );
+          return false;
+        }
+        return true;
+
+      default:
+        return true;
+    }
+  };
+
+  const next = () => {
+    if (!validateStep()) {
+      return;
     }
     setStepIndex((i) => Math.min(i + 1, steps.length - 1));
   };
@@ -878,8 +953,18 @@ export default function ListingWizard() {
                 <Text style={styles.secondaryText}>Skip Calendar</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={styles.primaryBtn} onPress={next}>
-              <Text style={styles.primaryText}>Next</Text>
+            <TouchableOpacity
+              style={[
+                styles.primaryBtn,
+                !isStepValid() && styles.primaryBtnDisabled
+              ]}
+              onPress={next}
+              disabled={!isStepValid()}
+            >
+              <Text style={[
+                styles.primaryText,
+                !isStepValid() && styles.primaryTextDisabled
+              ]}>Next</Text>
             </TouchableOpacity>
           </>
         )}
@@ -1038,6 +1123,13 @@ const styles = StyleSheet.create({
     color: colors.gray[900],
     fontSize: typography.sizes.md,
     fontWeight: "600",
+  },
+  primaryBtnDisabled: {
+    backgroundColor: colors.gray[800],
+    opacity: 0.5,
+  },
+  primaryTextDisabled: {
+    color: colors.gray[500],
   },
   sectionTitle: {
     fontSize: typography.sizes.lg,
