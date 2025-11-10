@@ -9,7 +9,15 @@
       "Bash(npm install:*)",
       "Bash(winget:*)",
       "Bash(scoop:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(git log:*)",
+      "Bash(xargs -I {} bash -c 'echo \"\"\"\"\"\"\"\"; echo \"\"\"\"Commit: {}\"\"\"\"; git show {} --name-only | head -20')",
+      "Bash(npx supabase:*)",
+      "Bash(npx turbo typecheck:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

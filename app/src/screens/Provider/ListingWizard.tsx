@@ -83,9 +83,11 @@ export default function ListingWizard() {
 
   // Amenities state
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
+  const [customAmenities, setCustomAmenities] = useState("");
 
   // Services state
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [customServices, setCustomServices] = useState("");
 
   // Rules state
   const [curfew, setCurfew] = useState("");
@@ -93,11 +95,13 @@ export default function ListingWizard() {
   const [petsPolicy, setPetsPolicy] = useState<
     "allowed" | "not_allowed" | "service_only"
   >("not_allowed");
+  const [customRules, setCustomRules] = useState("");
 
   // Eligibility state
   const [minAge, setMinAge] = useState("");
   const [maxAge, setMaxAge] = useState("");
   const [selectedEligibility, setSelectedEligibility] = useState<string[]>([]);
+  const [customEligibility, setCustomEligibility] = useState("");
 
   const { mutate: submit, isPending } = useMutation({
     mutationFn: async () => {
@@ -108,6 +112,24 @@ export default function ListingWizard() {
         ? Number(availableBeds)
         : undefined;
       const priceNum = price ? Number(price) : undefined;
+      // Prepare custom fields (split by comma or newline)
+      const customAmenitiesArray = customAmenities
+        .split(/[,\n]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const customServicesArray = customServices
+        .split(/[,\n]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const customRulesArray = customRules
+        .split(/[,\n]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const customEligibilityArray = customEligibility
+        .split(/[,\n]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+
       const created = await createListing(providerId, {
         title: title.trim(),
         description:
@@ -123,14 +145,23 @@ export default function ListingWizard() {
           ? { lat: locationSel.latitude, lng: locationSel.longitude }
           : undefined,
         amenities: selectedAmenities.length > 0 ? selectedAmenities : undefined,
+        customAmenities:
+          customAmenitiesArray.length > 0 ? customAmenitiesArray : undefined,
         services: selectedServices.length > 0 ? selectedServices : undefined,
+        customServices:
+          customServicesArray.length > 0 ? customServicesArray : undefined,
         curfew: curfew.trim() || undefined,
         visitorsPolicy: visitorsPolicy.trim() || undefined,
         petsPolicy: petsPolicy !== "not_allowed" ? petsPolicy : undefined,
+        customRules: customRulesArray.length > 0 ? customRulesArray : undefined,
         minAge: minAge ? Number(minAge) : undefined,
         maxAge: maxAge ? Number(maxAge) : undefined,
         eligibility:
           selectedEligibility.length > 0 ? selectedEligibility : undefined,
+        customEligibility:
+          customEligibilityArray.length > 0
+            ? customEligibilityArray
+            : undefined,
       });
       // If photos selected and created successfully, upload and attach
       if (created.success && created.listingId) {
@@ -471,6 +502,18 @@ export default function ListingWizard() {
           ))}
         </View>
 
+        <Text style={[styles.label, { marginTop: spacing.md }]}>
+          Other Amenities (Optional)
+        </Text>
+        <TextInput
+          style={[styles.input, { height: 80, textAlignVertical: "top" }]}
+          value={customAmenities}
+          onChangeText={setCustomAmenities}
+          placeholder="e.g., Garden area, Pet-friendly outdoor space, Computer lab"
+          placeholderTextColor={colors.gray[500]}
+          multiline
+        />
+
         {/* Services Section */}
         <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>
           Services
@@ -506,6 +549,18 @@ export default function ListingWizard() {
             </TouchableOpacity>
           ))}
         </View>
+
+        <Text style={[styles.label, { marginTop: spacing.md }]}>
+          Other Services (Optional)
+        </Text>
+        <TextInput
+          style={[styles.input, { height: 80, textAlignVertical: "top" }]}
+          value={customServices}
+          onChangeText={setCustomServices}
+          placeholder="e.g., Childcare, Language classes, Financial counseling"
+          placeholderTextColor={colors.gray[500]}
+          multiline
+        />
 
         {/* Rules Section */}
         <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>
@@ -582,6 +637,18 @@ export default function ListingWizard() {
           </TouchableOpacity>
         </View>
 
+        <Text style={[styles.label, { marginTop: spacing.md }]}>
+          Other Rules (Optional)
+        </Text>
+        <TextInput
+          style={[styles.input, { height: 80, textAlignVertical: "top" }]}
+          value={customRules}
+          onChangeText={setCustomRules}
+          placeholder="e.g., No smoking indoors, Quiet hours 10PM-7AM, Must attend weekly meetings"
+          placeholderTextColor={colors.gray[500]}
+          multiline
+        />
+
         {/* Eligibility Section */}
         <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>
           Who Can Apply
@@ -649,6 +716,18 @@ export default function ListingWizard() {
             </TouchableOpacity>
           ))}
         </View>
+
+        <Text style={[styles.label, { marginTop: spacing.md }]}>
+          Other Eligibility Requirements (Optional)
+        </Text>
+        <TextInput
+          style={[styles.input, { height: 80, textAlignVertical: "top" }]}
+          value={customEligibility}
+          onChangeText={setCustomEligibility}
+          placeholder="e.g., Must have valid ID, Clean background check required, No active warrants"
+          placeholderTextColor={colors.gray[500]}
+          multiline
+        />
       </ScrollView>
     );
   };

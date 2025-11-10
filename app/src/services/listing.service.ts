@@ -30,13 +30,17 @@ export interface CreateListingInput {
   };
   // New fields for amenities, services, rules, eligibility
   amenities?: string[];
+  customAmenities?: string[];
   services?: string[];
+  customServices?: string[];
   curfew?: string;
   visitorsPolicy?: string;
   petsPolicy?: "allowed" | "not_allowed" | "service_only";
+  customRules?: string[];
   minAge?: number;
   maxAge?: number;
   eligibility?: string[];
+  customEligibility?: string[];
 }
 
 // Type for updating a listing
@@ -51,13 +55,17 @@ export interface UpdateListingInput {
   availabilityDays?: Record<string, number>; // YYYY-MM-DD -> beds
   // Amenities, services, rules, eligibility
   amenities?: string[];
+  customAmenities?: string[];
   services?: string[];
+  customServices?: string[];
   curfew?: string;
   visitorsPolicy?: string;
   petsPolicy?: "allowed" | "not_allowed" | "service_only";
+  customRules?: string[];
   minAge?: number;
   maxAge?: number;
   eligibility?: string[];
+  customEligibility?: string[];
 }
 
 /**
@@ -282,6 +290,9 @@ export async function createListing(
     if (listingData.amenities && listingData.amenities.length > 0) {
       amenitiesObj.basic = listingData.amenities;
     }
+    if (listingData.customAmenities && listingData.customAmenities.length > 0) {
+      amenitiesObj.custom = listingData.customAmenities;
+    }
 
     // Build services object from array
     const servicesObj: any = {};
@@ -302,6 +313,9 @@ export async function createListing(
         servicesObj.transportation = ["assistance"];
       if (listingData.services.includes("legal")) servicesObj.legal = true;
     }
+    if (listingData.customServices && listingData.customServices.length > 0) {
+      servicesObj.custom = listingData.customServices;
+    }
 
     // Build rules object
     const rulesObj: any = {};
@@ -309,6 +323,9 @@ export async function createListing(
     if (listingData.visitorsPolicy)
       rulesObj.visitors = listingData.visitorsPolicy;
     if (listingData.petsPolicy) rulesObj.pets = listingData.petsPolicy;
+    if (listingData.customRules && listingData.customRules.length > 0) {
+      rulesObj.custom = listingData.customRules;
+    }
 
     // Build eligibility object
     const eligibilityObj: any = {};
@@ -334,6 +351,12 @@ export async function createListing(
       if (listingData.eligibility.includes("veterans")) {
         eligibilityObj.veterans = true;
       }
+    }
+    if (
+      listingData.customEligibility &&
+      listingData.customEligibility.length > 0
+    ) {
+      eligibilityObj.custom = listingData.customEligibility;
     }
 
     // Use provided coordinates or geocode the address
