@@ -37,7 +37,11 @@ function CollapsibleSection({
         activeOpacity={0.7}
       >
         <Text style={styles.sectionTitle}>{title}</Text>
-        <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={20} color={colors.gold} />
+        <Ionicons
+          name={expanded ? "chevron-up" : "chevron-down"}
+          size={20}
+          color={colors.gold}
+        />
       </TouchableOpacity>
       {expanded && <View style={styles.sectionContent}>{children}</View>}
     </View>
@@ -57,6 +61,28 @@ function toStringArray(v: any): string[] {
   return [];
 }
 
+function normalizeImageUrls(input: any): string[] {
+  const arr = Array.isArray(input) ? input : input ? [input] : [];
+  return arr
+    .filter(Boolean)
+    .map((u: any) => {
+      const s = String(u).trim();
+      // Drop any bad entries that include a device file path
+      if (s.includes("file://")) return "";
+      if (/^https?:\/\//i.test(s)) return s;
+      // If looks like a storage path, convert to public URL
+      try {
+        const { data } = supabase.storage
+          .from("listing-images")
+          .getPublicUrl(s);
+        return data.publicUrl || s;
+      } catch {
+        return s;
+      }
+    })
+    .filter((u: string) => !!u && /^https?:\/\//i.test(u));
+}
+
 export default function ListingDetailsScreen() {
   const navigation = useNavigation();
   const route = useRoute<any>();
@@ -74,11 +100,14 @@ export default function ListingDetailsScreen() {
         setLoadingDb(true);
         const { data, error } = await supabase
           .from("listings")
-          .select("id,title,description,amenities,services,rules,eligibility,images,address,city,state,zip_code,lat,lng")
+          .select(
+            "id,title,description,amenities,services,rules,eligibility,images,address,city,state,zip_code,lat,lng",
+          )
           .eq("id", id)
           .maybeSingle();
         if (!cancelled) {
-          if (error) console.warn("Failed to fetch listing by id:", error.message);
+          if (error)
+            console.warn("Failed to fetch listing by id:", error.message);
           setDbListing(data || null);
         }
       } finally {
@@ -97,24 +126,27 @@ export default function ListingDetailsScreen() {
       providerName: listingFromParams.provider || "",
       isVerified: !!listingFromParams.verified,
       isDVSensitive: !!listingFromParams.isDVSensitive,
-      images: Array.isArray(listingFromParams.images)
-        ? listingFromParams.images
-        : listingFromParams.coverImage
-        ? [listingFromParams.coverImage]
-        : [],
+      images: normalizeImageUrls(
+        listingFromParams.images ||
+          (listingFromParams.coverImage ? [listingFromParams.coverImage] : []),
+      ),
       bedsAvailable: listingFromParams.bedsAvailable ?? 0,
       bedsTotal: listingFromParams.bedsTotal ?? 0,
-      costPerMonth: listingFromParams.price?.min ?? listingFromParams.price ?? 0,
+      costPerMonth:
+        listingFromParams.price?.min ?? listingFromParams.price ?? 0,
       intakeMethod: listingFromParams.intakeMethod || "",
       lastUpdated: listingFromParams.lastUpdated || "",
-      overview: listingFromParams.overview || listingFromParams.description || "",
+      overview:
+        listingFromParams.overview || listingFromParams.description || "",
       amenities: listingFromParams.amenities ?? [],
       services: listingFromParams.services ?? [],
       rules: listingFromParams.rules ?? [],
       eligibility: listingFromParams.eligibility ?? [],
       location: {
-        latitude: listingFromParams.coordinates?.latitude ?? listingFromParams.lat,
-        longitude: listingFromParams.coordinates?.longitude ?? listingFromParams.lng,
+        latitude:
+          listingFromParams.coordinates?.latitude ?? listingFromParams.lat,
+        longitude:
+          listingFromParams.coordinates?.longitude ?? listingFromParams.lng,
         address: listingFromParams.address?.street ?? listingFromParams.address,
         city: listingFromParams.address?.city ?? listingFromParams.city,
         state: listingFromParams.address?.state ?? listingFromParams.state,
@@ -131,9 +163,7 @@ export default function ListingDetailsScreen() {
       services: dbListing.services ?? base.services,
       rules: dbListing.rules ?? base.rules,
       eligibility: dbListing.eligibility ?? base.eligibility,
-      images: Array.isArray(dbListing.images)
-        ? (dbListing.images as string[])
-        : base.images,
+      images: normalizeImageUrls(dbListing.images ?? base.images),
       location: {
         latitude: (dbListing as any).lat ?? base.location.latitude,
         longitude: (dbListing as any).lng ?? base.location.longitude,
@@ -149,35 +179,15 @@ export default function ListingDetailsScreen() {
   const servicesList = toStringArray(merged.services);
   const rulesList = toStringArray(merged.rules);
   const eligibilityList = toStringArray(merged.eligibility);
-  function normalizeImageUrls(input: any): string[] {
-    const arr = Array.isArray(input) ? input : (input ? [input] : []);
-    return arr
-      .filter(Boolean)
-      .map((u: any) => {
-        const s = String(u).trim();
-        // Drop any bad entries that include a device file path
-        if (s.includes('file://')) return '';
-        if (/^https?:\/\//i.test(s)) return s;
-        // If looks like a storage path, convert to public URL
-        try {
-          const { data } = supabase.storage
-            .from("listing-images")
-            .getPublicUrl(s);
-          return data.publicUrl || s;
-        } catch {
-          return s;
-        }
-      })
-      .filter((u: string) => !!u && /^https?:\/\//i.test(u));
-  }
 
-  const imageUrls: string[] = normalizeImageUrls((merged as any).images);
+  // Images are already normalized in the merged object
+  const imageUrls: string[] = merged.images;
   // TEMP debug to verify what seeker sees
   try {
     // eslint-disable-next-line no-console
-    console.log('[ListingDetails] raw images:', (merged as any).images);
+    console.log("[ListingDetails] raw images:", (merged as any).images);
     // eslint-disable-next-line no-console
-    console.log('[ListingDetails] imageUrls:', imageUrls);
+    console.log("[ListingDetails] imageUrls:", imageUrls);
   } catch {}
 
   const isSaved = false;
@@ -191,7 +201,10 @@ export default function ListingDetailsScreen() {
         <Ionicons name="arrow-back" size={24} color={colors.white} />
       </TouchableOpacity>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+      >
         <View style={styles.header}>
           <Text style={styles.title}>{merged.title || "Listing"}</Text>
           <View style={styles.providerRow}>
@@ -242,7 +255,11 @@ export default function ListingDetailsScreen() {
             <View style={styles.listContainer}>
               {servicesList.map((service, i) => (
                 <View key={i} style={styles.listItem}>
-                  <Ionicons name="checkmark-circle" size={16} color={colors.gold} />
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={16}
+                    color={colors.gold}
+                  />
                   <Text style={styles.listText}>{service}</Text>
                 </View>
               ))}
@@ -320,8 +337,8 @@ export default function ListingDetailsScreen() {
                 </View>
               ) : null}
               <Text style={styles.addressText}>
-                {merged.location?.address} {merged.location?.city} {merged.location?.state} {" "}
-                {merged.location?.zip}
+                {merged.location?.address} {merged.location?.city}{" "}
+                {merged.location?.state} {merged.location?.zip}
               </Text>
             </>
           )}
@@ -332,7 +349,11 @@ export default function ListingDetailsScreen() {
 
       <View style={styles.bottomBar}>
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Ionicons name={isSaved ? "bookmark" : "bookmark-outline"} size={24} color={colors.white} />
+          <Ionicons
+            name={isSaved ? "bookmark" : "bookmark-outline"}
+            size={24}
+            color={colors.white}
+          />
         </TouchableOpacity>
         <TouchableOpacity style={styles.applyButton} onPress={handleApply}>
           <Text style={styles.applyButtonText}>Apply Now</Text>
@@ -348,29 +369,101 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: 140 },
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
-  title: { fontSize: 24, fontWeight: "bold", color: colors.gold, marginBottom: spacing.xs },
-  providerRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" },
+  title: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: colors.gold,
+    marginBottom: spacing.xs,
+  },
+  providerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    flexWrap: "wrap",
+  },
   providerName: { fontSize: 16, color: colors.white },
-  section: { marginHorizontal: spacing.lg, marginTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.borderGray },
-  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: spacing.md },
+  section: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderGray,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: spacing.md,
+  },
   sectionTitle: { fontSize: 18, fontWeight: "600", color: colors.gold },
   sectionContent: { paddingBottom: spacing.md },
   bodyText: { fontSize: 14, lineHeight: 20, color: colors.white },
-  subheading: { fontSize: 16, fontWeight: "600", color: colors.gold, marginBottom: spacing.sm },
+  subheading: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.gold,
+    marginBottom: spacing.sm,
+  },
   tagContainer: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
-  tag: { backgroundColor: colors.black, borderWidth: 1, borderColor: colors.white, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  tag: {
+    backgroundColor: colors.black,
+    borderWidth: 1,
+    borderColor: colors.white,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
   tagText: { fontSize: 12, color: colors.white },
   listContainer: { gap: spacing.sm },
   listItem: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
   listText: { fontSize: 14, color: colors.white, flex: 1 },
   bulletPoint: { fontSize: 14, color: colors.gold, width: 15 },
   mapContainer: { marginTop: spacing.sm },
-  map: { width: SCREEN_WIDTH - spacing.lg * 2, height: 200, borderRadius: radius.md, marginBottom: spacing.sm },
+  map: {
+    width: SCREEN_WIDTH - spacing.lg * 2,
+    height: 200,
+    borderRadius: radius.md,
+    marginBottom: spacing.sm,
+  },
   addressText: { fontSize: 14, color: colors.white },
-  sensitiveLocation: { flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.lg, backgroundColor: colors.darkGray, borderRadius: radius.md },
+  sensitiveLocation: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    padding: spacing.lg,
+    backgroundColor: colors.darkGray,
+    borderRadius: radius.md,
+  },
   sensitiveLocationText: { fontSize: 14, color: colors.gold },
-  bottomBar: { position: "absolute", bottom: 0, left: 0, right: 0, flexDirection: "row", alignItems: "center", backgroundColor: colors.black, borderTopWidth: 1, borderTopColor: colors.borderGray, padding: spacing.lg, paddingBottom: spacing.lg + 20, gap: spacing.md },
-  saveButton: { width: 48, height: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.white, justifyContent: "center", alignItems: "center" },
-  applyButton: { flex: 1, height: 48, backgroundColor: colors.gold, borderRadius: radius.md, justifyContent: "center", alignItems: "center" },
+  bottomBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.black,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderGray,
+    padding: spacing.lg,
+    paddingBottom: spacing.lg + 20,
+    gap: spacing.md,
+  },
+  saveButton: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.white,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  applyButton: {
+    flex: 1,
+    height: 48,
+    backgroundColor: colors.gold,
+    borderRadius: radius.md,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   applyButtonText: { fontSize: 16, fontWeight: "bold", color: colors.black },
 });

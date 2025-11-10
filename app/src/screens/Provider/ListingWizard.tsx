@@ -14,7 +14,9 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import AddressAutocompleteClean, { type AddressData } from "../../components/forms/AddressAutocompleteClean";
+import AddressAutocompleteClean, {
+  type AddressData,
+} from "../../components/forms/AddressAutocompleteClean";
 import MapView, { Marker } from "react-native-maps";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
 import { RootStackNavigationProp } from "../../navigation/types";
@@ -25,7 +27,8 @@ import {
   getCurrentProviderId,
 } from "../../services/listing.service";
 import * as ImagePicker from "expo-image-picker";
-import { uploadListingImageClean } from "../../services/storage.clean.service";
+// Use clean uploader that works on all platforms
+import { uploadListingImageClean as uploadListingImage } from "../../services/storage.clean.service";
 import { useRequireProvider } from "../../hooks/useRequireProvider";
 
 type StepKey =
@@ -107,7 +110,8 @@ export default function ListingWizard() {
       const priceNum = price ? Number(price) : undefined;
       const created = await createListing(providerId, {
         title: title.trim(),
-        description: overview && overview.trim().length > 0 ? overview.trim() : undefined,
+        description:
+          overview && overview.trim().length > 0 ? overview.trim() : undefined,
         address: (locationSel?.street || address).trim(),
         city: locationSel?.city,
         state: locationSel?.state,
@@ -115,7 +119,9 @@ export default function ListingWizard() {
         totalBeds: totalBedsNum,
         availableBeds: availableBedsNum,
         price: priceNum,
-        coordinates: locationSel ? { lat: locationSel.latitude, lng: locationSel.longitude } : undefined,
+        coordinates: locationSel
+          ? { lat: locationSel.latitude, lng: locationSel.longitude }
+          : undefined,
         amenities: selectedAmenities.length > 0 ? selectedAmenities : undefined,
         services: selectedServices.length > 0 ? selectedServices : undefined,
         curfew: curfew.trim() || undefined,
@@ -132,7 +138,7 @@ export default function ListingWizard() {
         if (photos.length > 0) {
           const urls: string[] = [];
           for (const uri of photos) {
-            const res = await uploadListingImageClean(uri, created.listingId, {
+            const res = await uploadListingImage(uri, created.listingId, {
               resize: "full",
             });
             if (res.success && res.url) urls.push(res.url);
@@ -141,13 +147,20 @@ export default function ListingWizard() {
             const { updateListing } = await import(
               "../../services/listing.service"
             );
-            const res = await updateListing(created.listingId, { images: urls });
+            const res = await updateListing(created.listingId, {
+              images: urls,
+            });
             if (!res.success) {
-              console.warn('[ListingWizard] Failed to persist images:', res.error);
+              console.warn(
+                "[ListingWizard] Failed to persist images:",
+                res.error,
+              );
             }
           } else if (photos.length > 0 && urls.length === 0) {
             // All uploads failed — avoid saving file:// paths by not writing images
-            console.warn('[ListingWizard] All photo uploads failed; not saving images field');
+            console.warn(
+              "[ListingWizard] All photo uploads failed; not saving images field",
+            );
           }
         }
         // Persist per-day availability (calendar) if provided
@@ -184,16 +197,16 @@ export default function ListingWizard() {
   const next = () => {
     if (currentStep === "Basics") {
       if (!title.trim() || !totalBeds) {
-        Alert.alert(
-          "Missing info",
-          "Title and total beds are required",
-        );
+        Alert.alert("Missing info", "Title and total beds are required");
         return;
       }
     }
     if (currentStep === "Location") {
       if (!locationSel) {
-        Alert.alert("Missing address", "Please select an address and location.");
+        Alert.alert(
+          "Missing address",
+          "Please select an address and location.",
+        );
         return;
       }
     }
@@ -214,7 +227,7 @@ export default function ListingWizard() {
 
       <Text style={styles.label}>Overview (optional)</Text>
       <TextInput
-        style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
+        style={[styles.input, { height: 100, textAlignVertical: "top" }]}
         value={overview}
         onChangeText={setOverview}
         placeholder="Describe your program, services, and who you support."
@@ -327,7 +340,9 @@ export default function ListingWizard() {
     <View style={{ gap: spacing.lg }}>
       <View>
         <Text style={styles.label}>Address & Location *</Text>
-        <Text style={styles.sectionDescription}>Search for your address, then confirm the pin on the map.</Text>
+        <Text style={styles.sectionDescription}>
+          Search for your address, then confirm the pin on the map.
+        </Text>
       </View>
 
       {/* Search card */}
@@ -343,7 +358,9 @@ export default function ListingWizard() {
       {locationSel ? (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Selected address</Text>
-          <Text style={{ color: colors.gray[100], fontWeight: "600" }}>{locationSel.street}</Text>
+          <Text style={{ color: colors.gray[100], fontWeight: "600" }}>
+            {locationSel.street}
+          </Text>
           <Text style={{ color: colors.gray[400], marginTop: 4 }}>
             {locationSel.city}, {locationSel.state} {locationSel.zipCode}
           </Text>
@@ -354,7 +371,14 @@ export default function ListingWizard() {
 
       {/* Map preview */}
       {locationSel && (
-        <View style={{ borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: colors.gray[800] }}>
+        <View
+          style={{
+            borderRadius: radius.md,
+            overflow: "hidden",
+            borderWidth: 1,
+            borderColor: colors.gray[800],
+          }}
+        >
           <MapView
             style={{ height: 240, width: "100%" }}
             initialRegion={{
@@ -364,7 +388,12 @@ export default function ListingWizard() {
               longitudeDelta: 0.01,
             }}
           >
-            <Marker coordinate={{ latitude: locationSel.latitude, longitude: locationSel.longitude }} />
+            <Marker
+              coordinate={{
+                latitude: locationSel.latitude,
+                longitude: locationSel.longitude,
+              }}
+            />
           </MapView>
         </View>
       )}
@@ -771,9 +800,17 @@ export default function ListingWizard() {
             : address || "-"}
         </Text>
         {locationSel && (
-          <View style={{ marginTop: spacing.sm, borderRadius: radius.md, overflow: 'hidden', borderWidth: 1, borderColor: colors.gray[800] }}>
+          <View
+            style={{
+              marginTop: spacing.sm,
+              borderRadius: radius.md,
+              overflow: "hidden",
+              borderWidth: 1,
+              borderColor: colors.gray[800],
+            }}
+          >
             <MapView
-              style={{ height: 160, width: '100%' }}
+              style={{ height: 160, width: "100%" }}
               initialRegion={{
                 latitude: locationSel.latitude,
                 longitude: locationSel.longitude,
@@ -781,7 +818,12 @@ export default function ListingWizard() {
                 longitudeDelta: 0.01,
               }}
             >
-              <Marker coordinate={{ latitude: locationSel.latitude, longitude: locationSel.longitude }} />
+              <Marker
+                coordinate={{
+                  latitude: locationSel.latitude,
+                  longitude: locationSel.longitude,
+                }}
+              />
             </MapView>
           </View>
         )}
@@ -908,13 +950,16 @@ export default function ListingWizard() {
       {currentStep === "Location" ? (
         <KeyboardAvoidingView
           style={styles.locationContainer}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <Text style={styles.stepTitle}>{stepTitles[currentStep]}</Text>
           {body()}
         </KeyboardAvoidingView>
       ) : (
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+        >
           <Text style={styles.stepTitle}>{stepTitles[currentStep]}</Text>
           {body()}
         </ScrollView>
@@ -1156,5 +1201,3 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
-
-

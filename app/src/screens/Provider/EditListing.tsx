@@ -26,6 +26,7 @@ import {
 } from "../../services/listing.service";
 import { useRequireProvider } from "../../hooks/useRequireProvider";
 import * as ImagePicker from "expo-image-picker";
+// Use clean uploader that works on all platforms
 import { uploadListingImageClean as uploadListingImage } from "../../services/storage.clean.service";
 
 export default function EditListing() {
