@@ -90,14 +90,26 @@ export default function InboxScreen() {
     useCallback(() => {
       loadThreads();
 
-      // Subscribe to inbox updates
-      const unsubscribe = messageService.subscribeToInbox(() => {
-        // Reload threads when there's an update
-        loadThreads();
-      });
+      // Subscribe to inbox updates only after initialization
+      let unsubscribe: (() => void) | null = null;
+
+      // Delay subscription to ensure initialization is complete
+      const subscribeTimeout = setTimeout(() => {
+        try {
+          unsubscribe = messageService.subscribeToInbox(() => {
+            // Reload threads when there's an update
+            loadThreads();
+          });
+        } catch (error) {
+          console.error("Failed to subscribe to inbox:", error);
+        }
+      }, 500);
 
       return () => {
-        unsubscribe();
+        clearTimeout(subscribeTimeout);
+        if (unsubscribe) {
+          unsubscribe();
+        }
       };
     }, [loadThreads]),
   );
@@ -111,7 +123,18 @@ export default function InboxScreen() {
   const handleThreadPress = useCallback(
     (thread: ThreadWithDetails) => {
       // Mark messages as read when opening thread
-      messageService.markMessagesAsRead(thread.id);
+      // Get unread message IDs from the thread
+      if (thread.messages && currentUserId) {
+        const unreadMessageIds = thread.messages
+          .filter((msg: any) => !msg.read_by?.includes(currentUserId))
+          .map((msg: any) => msg.id);
+
+        if (unreadMessageIds.length > 0) {
+          messageService.markMessagesAsRead(thread.id, unreadMessageIds).catch(error => {
+            console.error("Failed to mark messages as read:", error);
+          });
+        }
+      }
 
       // Get other participant for display
       const otherParticipant = thread.participants?.find(

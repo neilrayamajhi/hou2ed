@@ -40,7 +40,8 @@ const mockListing = {
   costPerMonth: 650,
   intakeMethod: "Call first",
   lastUpdated: "2 hours ago",
-  overview: "A supportive transitional housing program focused on recovery and reintegration. We provide a structured environment with peer support and case management services. Our residents typically stay 6-12 months while working on their recovery goals.",
+  overview:
+    "A supportive transitional housing program focused on recovery and reintegration. We provide a structured environment with peer support and case management services. Our residents typically stay 6-12 months while working on their recovery goals.",
   amenities: [
     "WiFi",
     "Laundry",
@@ -130,47 +131,58 @@ export default function ListingDetailsScreen() {
 
   // Get listing from navigation params, fallback to mock data
   const listingFromParams = route.params?.listing;
-  const baseListing = listingFromParams && typeof listingFromParams === 'object' ? {
-    id: listingFromParams.id,
-    providerId: listingFromParams.provider_id,
-    title: listingFromParams.name || "Safe Haven Recovery House",
-    providerName: listingFromParams.provider || "Hope Foundation",
-    isVerified: listingFromParams.verified || false,
-    isDVSensitive: false,
-    images: listingFromParams.images || mockListing.images,
-    bedsAvailable: listingFromParams.bedsAvailable || 3,
-    bedsTotal: listingFromParams.bedsTotal || 8,
-    costPerMonth: listingFromParams.price?.min || 650,
-    intakeMethod: "Call first",
-    lastUpdated: "2 hours ago",
-    type: listingFromParams.type,
-    location: {
-      latitude: listingFromParams.coordinates?.latitude || mockListing.location.latitude,
-      longitude: listingFromParams.coordinates?.longitude || mockListing.location.longitude,
-      address: listingFromParams.address?.street || mockListing.location.address,
-      city: listingFromParams.address?.city || mockListing.location.city,
-      state: listingFromParams.address?.state || mockListing.location.state,
-      zip: listingFromParams.address?.zipCode || mockListing.location.zip,
-    },
-  } : mockListing;
+  const baseListing =
+    listingFromParams && typeof listingFromParams === "object"
+      ? {
+          id: listingFromParams.id,
+          providerId: listingFromParams.provider_id,
+          title: listingFromParams.name || "Safe Haven Recovery House",
+          providerName: listingFromParams.provider || "Hope Foundation",
+          isVerified: listingFromParams.verified || false,
+          isDVSensitive: false,
+          images: listingFromParams.images || mockListing.images,
+          bedsAvailable: listingFromParams.bedsAvailable || 3,
+          bedsTotal: listingFromParams.bedsTotal || 8,
+          costPerMonth: listingFromParams.price?.min || 650,
+          intakeMethod: "Call first",
+          lastUpdated: "2 hours ago",
+          type: listingFromParams.type,
+          location: {
+            latitude:
+              listingFromParams.coordinates?.latitude ||
+              mockListing.location.latitude,
+            longitude:
+              listingFromParams.coordinates?.longitude ||
+              mockListing.location.longitude,
+            address:
+              listingFromParams.address?.street || mockListing.location.address,
+            city: listingFromParams.address?.city || mockListing.location.city,
+            state:
+              listingFromParams.address?.state || mockListing.location.state,
+            zip: listingFromParams.address?.zipCode || mockListing.location.zip,
+          },
+        }
+      : mockListing;
 
   // Combine base listing with fetched details
-  const listing = shelterDetails ? {
-    ...baseListing,
-    overview: shelterDetails.overview || baseListing.overview,
-    amenities: shelterDetails.amenities || mockListing.amenities,
-    services: shelterDetails.services || mockListing.services,
-    rules: shelterDetails.rules || mockListing.rules,
-    eligibility: shelterDetails.eligibility || mockListing.eligibility,
-    intakeMethod: shelterDetails.intakeProcess || baseListing.intakeMethod,
-  } : {
-    ...baseListing,
-    overview: mockListing.overview,
-    amenities: mockListing.amenities,
-    services: mockListing.services,
-    rules: mockListing.rules,
-    eligibility: mockListing.eligibility,
-  };
+  const listing = shelterDetails
+    ? {
+        ...baseListing,
+        overview: shelterDetails.overview || baseListing.overview,
+        amenities: shelterDetails.amenities || mockListing.amenities,
+        services: shelterDetails.services || mockListing.services,
+        rules: shelterDetails.rules || mockListing.rules,
+        eligibility: shelterDetails.eligibility || mockListing.eligibility,
+        intakeMethod: shelterDetails.intakeProcess || baseListing.intakeMethod,
+      }
+    : {
+        ...baseListing,
+        overview: mockListing.overview,
+        amenities: mockListing.amenities,
+        services: mockListing.services,
+        rules: mockListing.rules,
+        eligibility: mockListing.eligibility,
+      };
 
   // Fetch detailed shelter information
   useEffect(() => {
@@ -182,12 +194,12 @@ export default function ListingDetailsScreen() {
           baseListing.type,
           {
             city: baseListing.location.city,
-            state: baseListing.location.state
-          }
+            state: baseListing.location.state,
+          },
         );
         setShelterDetails(details);
       } catch (error) {
-        console.error('Error loading shelter details:', error);
+        console.error("Error loading shelter details:", error);
         // Fall back to mock data on error
       } finally {
         setIsLoadingDetails(false);
@@ -195,7 +207,12 @@ export default function ListingDetailsScreen() {
     }
 
     loadShelterDetails();
-  }, [baseListing.title, baseListing.type, baseListing.location.city, baseListing.location.state]);
+  }, [
+    baseListing.title,
+    baseListing.type,
+    baseListing.location.city,
+    baseListing.location.state,
+  ]);
 
   // Check if listing is saved
   const isSaved = isListingSaved(baseListing.id);
@@ -237,6 +254,15 @@ export default function ListingDetailsScreen() {
       return;
     }
 
+    // Validate that providerId looks like a UUID
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(baseListing.providerId)) {
+      console.error("Invalid provider ID format:", baseListing.providerId);
+      alert("Unable to message provider. Invalid provider ID format.");
+      return;
+    }
+
     setIsCreatingThread(true);
     try {
       // Initialize message service if needed
@@ -244,9 +270,9 @@ export default function ListingDetailsScreen() {
 
       // Create or find existing thread with provider
       const thread = await messageService.createThread(
-        baseListing.providerId,
+        [baseListing.providerId], // Wrap in array as createThread expects string[]
         `Inquiry about ${baseListing.title}`,
-        baseListing.id // listing_id for context
+        baseListing.id, // listing_id for context
       );
 
       // Navigate to thread screen
@@ -302,12 +328,13 @@ export default function ListingDetailsScreen() {
           <Text style={styles.title}>{listing.title}</Text>
           <View style={styles.providerRow}>
             <Text style={styles.providerName}>{listing.providerName}</Text>
-            {listing.isVerified && (
-              <Badge type="verified" label="Verified" />
-            )}
-            {listingFromParams?.verified && listingFromParams?.verificationStatus && (
-              <Text style={styles.verificationStatus}>{listingFromParams.verificationStatus}</Text>
-            )}
+            {listing.isVerified && <Badge type="verified" label="Verified" />}
+            {listingFromParams?.verified &&
+              listingFromParams?.verificationStatus && (
+                <Text style={styles.verificationStatus}>
+                  {listingFromParams.verificationStatus}
+                </Text>
+              )}
           </View>
         </View>
 
@@ -317,13 +344,23 @@ export default function ListingDetailsScreen() {
           showsHorizontalScrollIndicator={false}
           style={styles.statsRow}
         >
-          <View style={[styles.statCard, listing.bedsAvailable > 0 && styles.statCardAvailable]}>
+          <View
+            style={[
+              styles.statCard,
+              listing.bedsAvailable > 0 && styles.statCardAvailable,
+            ]}
+          >
             <Ionicons
               name="bed-outline"
               size={20}
               color={listing.bedsAvailable > 0 ? colors.green : colors.gold}
             />
-            <Text style={[styles.statValue, listing.bedsAvailable > 0 && styles.statValueAvailable]}>
+            <Text
+              style={[
+                styles.statValue,
+                listing.bedsAvailable > 0 && styles.statValueAvailable,
+              ]}
+            >
               {listing.bedsAvailable}/{listing.bedsTotal}
             </Text>
             <Text style={styles.statLabel}>Beds</Text>
@@ -381,7 +418,11 @@ export default function ListingDetailsScreen() {
             <View style={styles.listContainer}>
               {listing.services.map((service, index) => (
                 <View key={index} style={styles.listItem}>
-                  <Ionicons name="checkmark-circle" size={16} color={colors.gold} />
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={16}
+                    color={colors.gold}
+                  />
                   <Text style={styles.listText}>{service}</Text>
                 </View>
               ))}
@@ -549,17 +590,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.black,
   },
   headerBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    position: 'absolute',
+    position: "absolute",
     top: 40,
     left: 0,
     right: 0,
     zIndex: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
   },
   backButton: {
     padding: spacing.xs,
@@ -568,8 +609,8 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
   },
   loadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: spacing.md,
   },
   loadingText: {

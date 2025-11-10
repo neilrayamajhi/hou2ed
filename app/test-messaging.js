@@ -132,11 +132,11 @@ async function testMessaging() {
     console.log('2️⃣ Creating message thread...');
 
     const { data: thread, error: threadError } = await supabase
-      .from('message_threads')
+      .from('threads')
       .insert({
         participant_ids: [user1Id, user2Id],
-        subject: 'Test Conversation - Downtown Shelter Inquiry',
-        last_message_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       })
       .select()
       .single();
@@ -144,7 +144,7 @@ async function testMessaging() {
     if (threadError) {
       // Check if thread already exists
       const { data: existingThread } = await supabase
-        .from('message_threads')
+        .from('threads')
         .select('*')
         .contains('participant_ids', [user1Id, user2Id])
         .single();
@@ -167,7 +167,7 @@ async function testMessaging() {
     const message1 = {
       thread_id: threadId,
       sender_id: user1Id,
-      body: 'Hi! I saw your listing for the Downtown Shelter. Do you have any beds available?',
+      content: 'Hi! I saw your listing for the Downtown Shelter. Do you have any beds available?',
       read_by: [user1Id]
     };
 
@@ -178,13 +178,13 @@ async function testMessaging() {
       .single();
 
     if (msg1Error) throw msg1Error;
-    console.log('✅ Message 1 sent:', msg1.body.substring(0, 50) + '...');
+    console.log('✅ Message 1 sent:', (msg1.content || msg1.body || '').substring(0, 50) + '...');
 
     // Message from provider
     const message2 = {
       thread_id: threadId,
       sender_id: user2Id,
-      body: 'Yes, we currently have 3 beds available. Would you like to schedule a visit?',
+      content: 'Yes, we currently have 3 beds available. Would you like to schedule a visit?',
       read_by: [user2Id]
     };
 
@@ -195,13 +195,13 @@ async function testMessaging() {
       .single();
 
     if (msg2Error) throw msg2Error;
-    console.log('✅ Message 2 sent:', msg2.body.substring(0, 50) + '...');
+    console.log('✅ Message 2 sent:', (msg2.content || msg2.body || '').substring(0, 50) + '...');
 
     // Another message from seeker
     const message3 = {
       thread_id: threadId,
       sender_id: user1Id,
-      body: 'That would be great! I can come by tomorrow afternoon if that works.',
+      content: 'That would be great! I can come by tomorrow afternoon if that works.',
       read_by: [user1Id]
     };
 
@@ -212,7 +212,7 @@ async function testMessaging() {
       .single();
 
     if (msg3Error) throw msg3Error;
-    console.log('✅ Message 3 sent:', msg3.body.substring(0, 50) + '...\n');
+    console.log('✅ Message 3 sent:', (msg3.content || msg3.body || '').substring(0, 50) + '...\n');
 
     // Step 4: Test reading messages
     console.log('4️⃣ Testing message retrieval...');
@@ -244,13 +244,13 @@ async function testMessaging() {
 
       console.log('✅ Found', simpleMessages.length, 'messages in thread');
       simpleMessages.forEach((msg, i) => {
-        console.log(`   ${i + 1}. ${msg.body.substring(0, 60)}...`);
+        console.log(`   ${i + 1}. ${(msg.content || msg.body || '').substring(0, 60)}...`);
       });
     } else {
       console.log('✅ Found', threadMessages.length, 'messages in thread');
       threadMessages.forEach((msg, i) => {
         const senderName = msg.sender?.full_name || 'Unknown';
-        console.log(`   ${i + 1}. [${senderName}]: ${msg.body.substring(0, 50)}...`);
+        console.log(`   ${i + 1}. [${senderName}]: ${(msg.content || msg.body || '').substring(0, 50)}...`);
       });
     }
 
@@ -258,10 +258,10 @@ async function testMessaging() {
     console.log('\n5️⃣ Testing thread listing...');
 
     const { data: threads, error: threadsError } = await supabase
-      .from('message_threads')
+      .from('threads')
       .select('*')
       .or(`participant_ids.cs.{${user1Id}},participant_ids.cs.{${user2Id}}`)
-      .order('last_message_at', { ascending: false });
+      .order('updated_at', { ascending: false });
 
     if (threadsError) throw threadsError;
 
@@ -285,7 +285,7 @@ async function testMessaging() {
           filter: `thread_id=eq.${threadId}`
         },
         (payload) => {
-          console.log('🔔 Real-time message received:', payload.new.body);
+          console.log('🔔 Real-time message received:', payload.new.content || payload.new.body);
         }
       )
       .subscribe();
@@ -300,7 +300,7 @@ async function testMessaging() {
         .insert({
           thread_id: threadId,
           sender_id: user2Id,
-          body: '[REAL-TIME TEST] This message should trigger the subscription!',
+          content: '[REAL-TIME TEST] This message should trigger the subscription!',
           read_by: [user2Id]
         });
 

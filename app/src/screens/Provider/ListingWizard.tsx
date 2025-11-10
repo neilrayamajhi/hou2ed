@@ -23,6 +23,8 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import { uploadListingImage } from "../../services/storage.service";
 import { useRequireProvider } from "../../hooks/useRequireProvider";
+import { DocumentRequirement } from "../../types/listing";
+import { PREDEFINED_DOCUMENT_TYPES } from "../../constants/documents";
 
 type StepKey =
   | "Basics"
@@ -90,6 +92,14 @@ export default function ListingWizard() {
   const [maxAge, setMaxAge] = useState("");
   const [selectedEligibility, setSelectedEligibility] = useState<string[]>([]);
 
+  // Document Requirements state
+  const [documentRequirements, setDocumentRequirements] = useState<
+    DocumentRequirement[]
+  >([]);
+  const [customDocumentName, setCustomDocumentName] = useState("");
+  const [customDocumentDescription, setCustomDocumentDescription] =
+    useState("");
+
   const { mutate: submit, isPending } = useMutation({
     mutationFn: async () => {
       const providerId = await getCurrentProviderId();
@@ -114,12 +124,16 @@ export default function ListingWizard() {
         maxAge: maxAge ? Number(maxAge) : undefined,
         eligibility:
           selectedEligibility.length > 0 ? selectedEligibility : undefined,
+        documentsRequired:
+          documentRequirements.length > 0 ? documentRequirements : undefined,
       });
       // If photos selected and created successfully, upload and attach
       if (created.success && created.listingId) {
         // Upload photos if any
         if (photos.length > 0) {
-          console.log(`📸 Uploading ${photos.length} photo(s) for listing ${created.listingId}`);
+          console.log(
+            `📸 Uploading ${photos.length} photo(s) for listing ${created.listingId}`,
+          );
           const urls: string[] = [];
           for (let i = 0; i < photos.length; i++) {
             const uri = photos[i];
@@ -128,7 +142,9 @@ export default function ListingWizard() {
               resize: "full",
             });
             if (res.success && res.url) {
-              console.log(`✅ Photo ${i + 1} uploaded successfully: ${res.url}`);
+              console.log(
+                `✅ Photo ${i + 1} uploaded successfully: ${res.url}`,
+              );
               urls.push(res.url);
             } else {
               console.error(`❌ Photo ${i + 1} upload failed:`, res.error);
@@ -139,13 +155,15 @@ export default function ListingWizard() {
             const { updateListing } = await import(
               "../../services/listing.service"
             );
-            const updateResult = await updateListing(created.listingId, { images: urls });
-            console.log('📝 Update listing result:', updateResult);
+            const updateResult = await updateListing(created.listingId, {
+              images: urls,
+            });
+            console.log("📝 Update listing result:", updateResult);
           } else {
-            console.warn('⚠️ No images were successfully uploaded');
+            console.warn("⚠️ No images were successfully uploaded");
           }
         } else {
-          console.log('📷 No photos selected for this listing');
+          console.log("📷 No photos selected for this listing");
         }
         // Persist per-day availability (calendar) if provided
         if (Object.keys(availabilityDays).length > 0) {
@@ -210,11 +228,17 @@ export default function ListingWizard() {
           return false;
         }
         if (!totalBeds || Number(totalBeds) <= 0) {
-          Alert.alert("Missing Information", "Total beds must be greater than 0");
+          Alert.alert(
+            "Missing Information",
+            "Total beds must be greater than 0",
+          );
           return false;
         }
         if (availableBeds && Number(availableBeds) > Number(totalBeds)) {
-          Alert.alert("Invalid Information", "Available beds cannot exceed total beds");
+          Alert.alert(
+            "Invalid Information",
+            "Available beds cannot exceed total beds",
+          );
           return false;
         }
         return true;
@@ -248,7 +272,7 @@ export default function ListingWizard() {
         if (!title.trim() || !address.trim() || !totalBeds) {
           Alert.alert(
             "Missing Required Information",
-            "Please go back and fill in all required fields:\n• Property name\n• Address\n• Total beds"
+            "Please go back and fill in all required fields:\n• Property name\n• Address\n• Total beds",
           );
           return false;
         }
@@ -358,7 +382,7 @@ export default function ListingWizard() {
             });
             if (!result.canceled && result.assets && result.assets[0]) {
               const uri = result.assets[0].uri;
-              console.log('📷 Image picked:', uri);
+              console.log("📷 Image picked:", uri);
               if (uri) {
                 setPhotos((prev) => {
                   const newPhotos = [...prev, uri];
@@ -367,7 +391,7 @@ export default function ListingWizard() {
                 });
               }
             } else {
-              console.log('📷 Image picker cancelled or no image selected');
+              console.log("📷 Image picker cancelled or no image selected");
             }
           }}
           accessibilityLabel="Add photo"
@@ -644,6 +668,208 @@ export default function ListingWizard() {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Document Requirements Section */}
+        <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>
+          Document Requirements
+        </Text>
+        <Text style={styles.sectionDescription}>
+          Select which documents applicants must provide
+        </Text>
+
+        {/* Predefined Documents */}
+        <View style={{ marginBottom: spacing.lg }}>
+          {PREDEFINED_DOCUMENT_TYPES.map((doc) => {
+            const isSelected = documentRequirements.some(
+              (req) => req.id === doc.id,
+            );
+            const selectedDoc = documentRequirements.find(
+              (req) => req.id === doc.id,
+            );
+
+            return (
+              <TouchableOpacity
+                key={doc.id}
+                style={styles.documentItem}
+                onPress={() => {
+                  if (isSelected) {
+                    // Remove document
+                    setDocumentRequirements((prev) =>
+                      prev.filter((req) => req.id !== doc.id),
+                    );
+                  } else {
+                    // Add document as required by default
+                    setDocumentRequirements((prev) => [
+                      ...prev,
+                      { ...doc, required: true },
+                    ]);
+                  }
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <Ionicons
+                      name={isSelected ? "checkbox" : "square-outline"}
+                      size={24}
+                      color={
+                        isSelected ? colors.primary[500] : colors.gray[400]
+                      }
+                    />
+                    <Text
+                      style={[styles.documentTitle, { marginLeft: spacing.sm }]}
+                    >
+                      {doc.label}
+                    </Text>
+                  </View>
+                  {doc.description && (
+                    <Text style={styles.documentDescription}>
+                      {doc.description}
+                    </Text>
+                  )}
+
+                  {/* Required/Optional Toggle for selected documents */}
+                  {isSelected && (
+                    <View style={styles.requiredToggle}>
+                      <TouchableOpacity
+                        style={[
+                          styles.requiredChip,
+                          selectedDoc?.required && styles.requiredChipActive,
+                        ]}
+                        onPress={() => {
+                          setDocumentRequirements((prev) =>
+                            prev.map((req) =>
+                              req.id === doc.id
+                                ? { ...req, required: true }
+                                : req,
+                            ),
+                          );
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.requiredChipText,
+                            selectedDoc?.required &&
+                              styles.requiredChipTextActive,
+                          ]}
+                        >
+                          Required
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.requiredChip,
+                          !selectedDoc?.required && styles.requiredChipActive,
+                        ]}
+                        onPress={() => {
+                          setDocumentRequirements((prev) =>
+                            prev.map((req) =>
+                              req.id === doc.id
+                                ? { ...req, required: false }
+                                : req,
+                            ),
+                          );
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.requiredChipText,
+                            !selectedDoc?.required &&
+                              styles.requiredChipTextActive,
+                          ]}
+                        >
+                          Optional
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Add Custom Document */}
+        <Text style={[styles.label, { marginTop: spacing.lg }]}>
+          Add Custom Document Requirement
+        </Text>
+        <TextInput
+          style={styles.input}
+          value={customDocumentName}
+          onChangeText={setCustomDocumentName}
+          placeholder="Document name (e.g., TB Test Results)"
+          placeholderTextColor={colors.gray[500]}
+        />
+        <TextInput
+          style={[styles.input, { marginTop: spacing.sm, minHeight: 60 }]}
+          value={customDocumentDescription}
+          onChangeText={setCustomDocumentDescription}
+          placeholder="Instructions or description (optional)"
+          placeholderTextColor={colors.gray[500]}
+          multiline
+        />
+        <TouchableOpacity
+          style={[
+            styles.addCustomButton,
+            !customDocumentName.trim() && styles.addCustomButtonDisabled,
+          ]}
+          disabled={!customDocumentName.trim()}
+          onPress={() => {
+            if (customDocumentName.trim()) {
+              const customDoc: DocumentRequirement = {
+                id: `custom-${Date.now()}`,
+                label: customDocumentName.trim(),
+                description: customDocumentDescription.trim() || undefined,
+                required: true,
+                category: "other",
+                isCustom: true,
+              };
+              setDocumentRequirements((prev) => [...prev, customDoc]);
+              setCustomDocumentName("");
+              setCustomDocumentDescription("");
+            }
+          }}
+        >
+          <Ionicons
+            name="add-circle-outline"
+            size={20}
+            color={colors.gray[50]}
+          />
+          <Text style={styles.addCustomButtonText}>Add Custom Document</Text>
+        </TouchableOpacity>
+
+        {/* Show custom documents */}
+        {documentRequirements.filter((doc) => doc.isCustom).length > 0 && (
+          <View style={{ marginTop: spacing.lg }}>
+            <Text style={styles.label}>Custom Documents</Text>
+            {documentRequirements
+              .filter((doc) => doc.isCustom)
+              .map((doc) => (
+                <View key={doc.id} style={styles.customDocumentItem}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.documentTitle}>{doc.label}</Text>
+                    {doc.description && (
+                      <Text style={styles.documentDescription}>
+                        {doc.description}
+                      </Text>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setDocumentRequirements((prev) =>
+                        prev.filter((req) => req.id !== doc.id),
+                      );
+                    }}
+                  >
+                    <Ionicons
+                      name="trash-outline"
+                      size={20}
+                      color={colors.error[500]}
+                    />
+                  </TouchableOpacity>
+                </View>
+              ))}
+          </View>
+        )}
       </ScrollView>
     );
   };
@@ -956,15 +1182,19 @@ export default function ListingWizard() {
             <TouchableOpacity
               style={[
                 styles.primaryBtn,
-                !isStepValid() && styles.primaryBtnDisabled
+                !isStepValid() && styles.primaryBtnDisabled,
               ]}
               onPress={next}
               disabled={!isStepValid()}
             >
-              <Text style={[
-                styles.primaryText,
-                !isStepValid() && styles.primaryTextDisabled
-              ]}>Next</Text>
+              <Text
+                style={[
+                  styles.primaryText,
+                  !isStepValid() && styles.primaryTextDisabled,
+                ]}
+              >
+                Next
+              </Text>
             </TouchableOpacity>
           </>
         )}
@@ -1157,5 +1387,81 @@ const styles = StyleSheet.create({
   chipTextSelected: {
     color: colors.gray[900],
     fontWeight: "600",
+  },
+  // Document Requirements styles
+  documentItem: {
+    backgroundColor: colors.gray[850],
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.gray[700],
+  },
+  documentTitle: {
+    fontSize: typography.sizes.md,
+    fontWeight: "500",
+    color: colors.gray[50],
+  },
+  documentDescription: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray[400],
+    marginTop: spacing.xs,
+    marginLeft: 32,
+  },
+  requiredToggle: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    marginLeft: 32,
+  },
+  requiredChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.gray[700],
+  },
+  requiredChipActive: {
+    backgroundColor: colors.primary[500],
+    borderColor: colors.primary[500],
+  },
+  requiredChipText: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray[400],
+  },
+  requiredChipTextActive: {
+    color: colors.gray[900],
+    fontWeight: "600",
+  },
+  addCustomButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.gray[850],
+    borderWidth: 1,
+    borderColor: colors.primary[500],
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    marginTop: spacing.md,
+  },
+  addCustomButtonDisabled: {
+    opacity: 0.5,
+    borderColor: colors.gray[700],
+  },
+  addCustomButtonText: {
+    fontSize: typography.sizes.md,
+    fontWeight: "500",
+    color: colors.gray[50],
+  },
+  customDocumentItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.gray[850],
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.gray[700],
   },
 });

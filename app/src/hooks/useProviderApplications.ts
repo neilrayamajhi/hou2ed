@@ -3,14 +3,24 @@ import { getProviderApplications } from "../services/application.service";
 import { useAuthStore } from "../state/useAuthStore";
 
 export function useProviderApplications() {
-  const providerId = useAuthStore((s) => s.user?.id || null);
+  const user = useAuthStore((s) => s.user);
+  const providerId = user?.id || null;
+  const userRole = user?.role;
 
   const query = useQuery({
-    queryKey: ["providerApplications", providerId],
-    enabled: !!providerId,
+    // Include role to ensure proper cache separation
+    queryKey: ["providerApplications", providerId, userRole],
+    enabled: !!providerId && userRole === "provider",
     queryFn: async () => {
-      if (!providerId) return [];
-      return getProviderApplications(providerId);
+      if (!providerId || userRole !== "provider") {
+        console.log("⚠️ Not fetching applications - not a provider");
+        return [];
+      }
+
+      console.log("📋 Fetching applications for provider:", providerId);
+      const applications = await getProviderApplications(providerId);
+      console.log(`✅ Fetched ${applications.length} applications`);
+      return applications;
     },
     staleTime: 30000, // Consider data fresh for 30 seconds
     refetchOnWindowFocus: true, // Refetch when tab becomes active

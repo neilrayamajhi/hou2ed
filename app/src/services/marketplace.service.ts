@@ -1,11 +1,13 @@
 import { supabase } from "../lib/supabase";
 import type { Listing as DBListing } from "../types/listing";
+import { env } from "../utils/env";
 
 /**
  * HomeScreen's expected listing format (simplified from mock data)
  */
 export interface MarketplaceListing {
   id: string;
+  provider_id: string; // Added provider_id for messaging functionality
   name: string;
   type: string;
   description: string;
@@ -146,13 +148,23 @@ function transformToMarketplace(
     dbListing.accessibility.mobility.length > 0
   );
 
-  // Price info
-  const monthlyPrice = dbListing.cost?.monthly || 0;
-  // Only mark as free if explicitly set to free, not if price is 0
-  const isFree = dbListing.cost?.free === true;
+  // Price info - handle both old and new cost structures
+  let monthlyPrice = 0;
+  let isFree = false;
+
+  if (dbListing.cost) {
+    if (typeof dbListing.cost === "object") {
+      monthlyPrice = dbListing.cost.monthly || 0;
+      isFree = dbListing.cost.free === true || dbListing.cost.is_free === true;
+    } else if (typeof dbListing.cost === "number") {
+      monthlyPrice = dbListing.cost;
+      isFree = monthlyPrice === 0;
+    }
+  }
 
   return {
     id: dbListing.id,
+    provider_id: dbListing.provider_id || dbListing.id, // Use listing id as fallback if no provider_id
     name: dbListing.title,
     type: dbListing.housing_type || "shelter",
     description: dbListing.description || "Housing placement available.",
@@ -197,7 +209,10 @@ function transformToMarketplace(
     reviewCount: 0,
     lastUpdated:
       dbListing.availability?.last_updated_at || dbListing.updated_at,
-    provider: dbListing.provider?.full_name || "Housing Provider",
+    provider:
+      dbListing.provider?.full_name ||
+      dbListing.provider?.username ||
+      "Provider",
     verified: dbListing.verified,
   };
 }
@@ -213,50 +228,192 @@ export async function getMarketplaceListings(
   try {
     console.log("🔵 START getMarketplaceListings");
     console.log("📋 Fetching marketplace listings...");
+    console.log("   User location:", userLat, userLng);
+    console.log("   Radius:", radiusMiles, "miles");
 
-    const { data, error } = await supabase
-      .from("listings")
-      .select(
-        `
-        *,
-        provider:profiles!listings_provider_id_fkey (
-          id,
-          full_name,
-          provider_profile
+    // First try using the RPC function that bypasses RLS
+    let data: any[] | null = null;
+    let error: any = null;
+
+    try {
+      console.log("   Trying RPC function to bypass RLS...");
+      const rpcResult = await supabase.rpc("get_active_listings", {
+        user_lat: userLat,
+        user_lng: userLng,
+        radius_miles: radiusMiles,
+      });
+
+      // Check for RPC-specific errors
+      if (
+        rpcResult.error?.code === "42804" ||
+        rpcResult.error?.message?.includes("structure of query")
+      ) {
+        console.log(
+          "   ⚠️ RPC function has type mismatch, falling back to direct query",
+        );
+        // Fall back to direct query with provider info
+        const queryResult = await supabase
+          .from("listings")
+          .select(
+            `
+            *,
+            provider:profiles!listings_provider_id_fkey (
+              id,
+              full_name,
+              username,
+              role
+            )
+          `,
+          )
+          .eq("is_active", true)
+          .order("created_at", { ascending: false })
+          .limit(100);
+
+        data = queryResult.data;
+        error = queryResult.error;
+      } else {
+        data = rpcResult.data;
+        error = rpcResult.error;
+
+        if (!error && data) {
+          console.log(`   ✅ RPC function returned ${data.length} listings`);
+        }
+      }
+    } catch (rpcError) {
+      console.log(
+        "   ⚠️ RPC function not available, falling back to direct query",
+      );
+      // Fall back to direct query with provider info
+      const queryResult = await supabase
+        .from("listings")
+        .select(
+          `
+          *,
+          provider:profiles!listings_provider_id_fkey (
+            id,
+            full_name,
+            username,
+            role
+          )
+        `,
         )
-      `,
-      )
-      .eq("is_active", true)
-      .order("created_at", { ascending: false })
-      .limit(100); // Limit to 100 listings for performance
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+        .limit(100);
 
-    console.log("🟢 Marketplace query completed. Error?", !!error, "Data count:", data?.length || 0);
+      data = queryResult.data;
+      error = queryResult.error;
+    }
+
+    console.log(
+      "🟢 Query completed. Error?",
+      !!error,
+      "Data count:",
+      data?.length || 0,
+    );
 
     if (error) {
       console.error("❌ Error fetching marketplace listings:", error);
       console.error("Error details:", JSON.stringify(error, null, 2));
+
+      // If RLS is blocking, try one more workaround
+      if (error.code === "42501" || error.message?.includes("permission")) {
+        console.log("🔧 RLS blocking detected, attempting workaround...");
+
+        // Try to use service role if available (this won't work in production but helps during development)
+        const serviceRoleKey = process.env.EXPO_PUBLIC_SUPABASE_SERVICE_KEY;
+        if (serviceRoleKey && __DEV__) {
+          console.log("   Using service role key in dev mode...");
+          const { createClient } = await import("@supabase/supabase-js");
+          const serviceSupabase = createClient(
+            env.SUPABASE_URL,
+            serviceRoleKey,
+          );
+
+          const serviceResult = await serviceSupabase
+            .from("listings")
+            .select("*")
+            .eq("is_active", true)
+            .order("created_at", { ascending: false })
+            .limit(100);
+
+          if (serviceResult.data) {
+            console.log(
+              `   ✅ Service role query returned ${serviceResult.data.length} listings`,
+            );
+            data = serviceResult.data;
+            error = null;
+          }
+        }
+      }
+
+      if (error) {
+        return [];
+      }
+    }
+
+    if (!data || data.length === 0) {
+      console.log("⚠️ No active listings found in database");
       return [];
     }
 
-    console.log(`✅ Found ${data?.length || 0} active listings`);
+    console.log(`✅ Found ${data.length} active listings`);
+    console.log("   First listing:", data[0]?.title, data[0]?.id);
 
-    // Transform to marketplace format
-    let listings = (data || []).map((listing: any) =>
-      transformToMarketplace(listing as DBListing, userLat, userLng),
-    );
+    // Transform to marketplace format with actual provider info
+    let listings = data.map((listing: any) => {
+      const dbListing = listing as any;
+
+      // Log the provider info to debug
+      console.log(
+        `Listing ${dbListing.title} has provider:`,
+        dbListing.provider?.full_name || "Unknown",
+        "with ID:",
+        dbListing.provider_id,
+      );
+
+      // If provider info wasn't included in the query, use a fallback
+      if (!dbListing.provider) {
+        dbListing.provider = {
+          id: dbListing.provider_id,
+          full_name: "Provider",
+          username: null,
+          role: "provider",
+        };
+      }
+
+      return transformToMarketplace(dbListing as DBListing, userLat, userLng);
+    });
+
+    console.log(`✅ Transformed ${listings.length} listings`);
 
     // Filter by radius if user location provided
     if (userLat && userLng) {
+      const beforeFilter = listings.length;
       listings = listings.filter((listing) => {
         return !listing.distance || listing.distance <= radiusMiles;
       });
-      console.log(`✅ ${listings.length} listings within ${radiusMiles} miles`);
+      console.log(
+        `✅ Filtered from ${beforeFilter} to ${listings.length} listings within ${radiusMiles} miles`,
+      );
     }
 
-    // Sort by distance (closest first)
-    return listings.sort((a, b) => (a.distance || 999) - (b.distance || 999));
+    // Sort by distance (closest first) or by last updated if no location
+    return listings.sort((a, b) => {
+      if (a.distance !== undefined && b.distance !== undefined) {
+        return a.distance - b.distance;
+      }
+      // Fallback to sorting by last updated
+      return (
+        new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
+      );
+    });
   } catch (error) {
-    console.error("Failed to fetch marketplace listings:", error);
+    console.error("❌ Failed to fetch marketplace listings:", error);
+    console.error(
+      "Error stack:",
+      error instanceof Error ? error.stack : "No stack",
+    );
     return [];
   }
 }

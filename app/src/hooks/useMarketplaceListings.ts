@@ -1,55 +1,135 @@
 import { useQuery } from "@tanstack/react-query";
-import { getMarketplaceListings } from "../services/marketplace.service";
+import {
+  getMarketplaceListings,
+  type MarketplaceListing,
+} from "../services/marketplace.service";
 import { useLocation } from "./useLocation";
 import { useFilterStore } from "../state/useFilterStore";
-import { filterListingsByQuick } from "../data/mockListings";
-import { generateListingsAroundLocation, generateMockListings } from "../data/mockListings";
+import { useAuthStore } from "../state/useAuthStore";
+
+/**
+ * Filter marketplace listings by quick filters
+ */
+function filterMarketplaceListings(
+  listings: MarketplaceListing[],
+  quickFilters: {
+    immediate: boolean;
+    free: boolean;
+    veterans: boolean;
+    families: boolean;
+    nearMe: boolean;
+  },
+): MarketplaceListing[] {
+  // Guard against undefined inputs
+  if (!listings) return [];
+  if (!quickFilters) return listings;
+
+  // If no filters are active, return all listings
+  const activeFilters = Object.values(quickFilters).some((v) => v);
+  if (!activeFilters) {
+    console.log("📝 No active filters, returning all listings");
+    return listings;
+  }
+
+  return listings.filter((listing) => {
+    // Immediate availability filter
+    if (quickFilters.immediate && listing.availability !== "available") {
+      return false;
+    }
+
+    // Free filter
+    if (quickFilters.free && !listing.price?.isFree) {
+      return false;
+    }
+
+    // Veterans filter
+    if (quickFilters.veterans && !listing.features?.acceptsVeterans) {
+      return false;
+    }
+
+    // Families filter
+    if (quickFilters.families && !listing.features?.acceptsFamilies) {
+      return false;
+    }
+
+    // Near me filter (within 2 miles)
+    if (quickFilters.nearMe && listing.distance && listing.distance > 2) {
+      return false;
+    }
+
+    return true;
+  });
+}
 
 export function useMarketplaceListings() {
   const { location } = useLocation();
   const { quickFilters } = useFilterStore();
+  const user = useAuthStore((s) => s.user);
+  const userId = user?.id;
+  const userRole = user?.role;
 
   return useQuery({
-    queryKey: ["marketplaceListings", location?.latitude, location?.longitude, quickFilters],
+    queryKey: [
+      "marketplaceListings",
+      userId, // Include user ID to prevent cache sharing between users
+      userRole, // Include role to ensure seekers and providers have separate caches
+      location?.latitude,
+      location?.longitude,
+      quickFilters,
+    ],
     queryFn: async () => {
+      console.log("🏠 useMarketplaceListings - Fetching listings...");
+      console.log(
+        "   Location:",
+        location
+          ? `${location.latitude}, ${location.longitude}`
+          : "Not available",
+      );
+      console.log("   Quick filters:", quickFilters);
+
       try {
-        // Fetch real listings from Supabase database
+        // Always try to fetch real listings from Supabase database
         const dbListings = await getMarketplaceListings(
           location?.latitude,
           location?.longitude,
-          50 // 50 mile radius
+          50, // 50 mile radius
         );
 
-        let allListings;
+        console.log(
+          `📍 Database query returned ${dbListings?.length || 0} listings`,
+        );
 
+        let allListings: MarketplaceListing[] = [];
+
+        // Use real data if available
         if (dbListings && dbListings.length > 0) {
-          console.log(`📍 Found ${dbListings.length} real listings from database`);
+          console.log(
+            `✅ Using ${dbListings.length} real listings from database`,
+          );
           allListings = dbListings;
         } else {
-          console.log("📍 No database listings, using mock data");
-          // Fall back to mock data if no real listings
-          allListings = location
-            ? generateListingsAroundLocation(location.latitude, location.longitude, 20)
-            : generateMockListings(20);
+          console.log("⚠️ No database listings found");
+          // Return empty array if no real data
+          allListings = [];
         }
 
         // Apply quick filters
-        const filtered = filterListingsByQuick(allListings, quickFilters);
-        console.log(`🔍 Filtered to ${filtered.length} listings based on quick filters`);
+        const filtered = filterMarketplaceListings(allListings, quickFilters);
+        console.log(
+          `🔍 Applied filters: ${allListings.length} → ${filtered.length} listings`,
+        );
 
         return filtered;
       } catch (error) {
-        console.error('Error loading listings:', error);
-        // Fall back to mock data on error
-        const mockData = location
-          ? generateListingsAroundLocation(location.latitude, location.longitude, 20)
-          : generateMockListings(20);
-        return filterListingsByQuick(mockData, quickFilters);
+        console.error("❌ Error loading listings:", error);
+        // Return empty array on error
+        return [];
       }
     },
-    staleTime: 30000, // Consider data stale after 30 seconds
-    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
+    staleTime: 10000, // Consider data stale after 10 seconds for faster updates
+    gcTime: 2 * 60 * 1000, // Keep in cache for 2 minutes
     refetchOnWindowFocus: false, // Don't refetch on window focus to prevent constant reloading
     refetchOnMount: true, // Refetch when component mounts
+    retry: 2, // Retry failed requests twice
   });
 }

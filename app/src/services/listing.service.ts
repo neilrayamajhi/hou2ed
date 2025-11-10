@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import { DocumentRequirement } from "../types/listing";
 
 // Type for a simplified listing (what providers see in dashboard)
 export interface ProviderListing {
@@ -31,6 +32,7 @@ export interface CreateListingInput {
   minAge?: number;
   maxAge?: number;
   eligibility?: string[];
+  documentsRequired?: DocumentRequirement[];
 }
 
 // Type for updating a listing
@@ -63,6 +65,33 @@ export async function getProviderListings(
 ): Promise<ProviderListing[]> {
   console.log("🔵 START getProviderListings for:", providerId);
   try {
+    // CRITICAL: Verify the current session before fetching
+    // This ensures we're using the correct auth context after account switches
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError) {
+      console.error("❌ Session error:", sessionError);
+      throw new Error("Authentication required");
+    }
+
+    if (!session) {
+      console.error("❌ No active session");
+      throw new Error("Please log in to view listings");
+    }
+
+    // Verify this is the correct user
+    if (session.user.id !== providerId) {
+      console.error("❌ Session mismatch:", {
+        sessionUserId: session.user.id,
+        requestedProviderId: providerId,
+      });
+      throw new Error("Session user mismatch");
+    }
+
+    console.log("✅ Session validated for provider:", providerId);
     console.log("📋 Fetching listings for provider:", providerId);
 
     // Create a timeout promise
@@ -71,6 +100,7 @@ export async function getProviderListings(
     );
 
     // Race between the query and timeout
+    // Use the validated session's access token for the query
     const queryPromise = supabase
       .from("listings")
       .select(
@@ -330,6 +360,15 @@ export async function createListing(
       }
     }
 
+    // Build intake object with document requirements
+    const intakeObj: any = {};
+    if (
+      listingData.documentsRequired &&
+      listingData.documentsRequired.length > 0
+    ) {
+      intakeObj.documents_required = listingData.documentsRequired;
+    }
+
     // Prepare the data for Supabase
     const insertData = {
       provider_id: providerId,
@@ -355,7 +394,7 @@ export async function createListing(
       cost: listingData.price
         ? { monthly: listingData.price }
         : { is_free: true },
-      intake: {},
+      intake: intakeObj,
       availability: {
         beds_today: listingData.availableBeds || listingData.totalBeds,
         beds_week: listingData.totalBeds,
@@ -467,8 +506,8 @@ export async function updateListing(
 
     // Update images if provided
     if (updates.images !== undefined) {
-      console.log('🖼️ Updating images for listing:', listingId);
-      console.log('   New images array:', updates.images);
+      console.log("🖼️ Updating images for listing:", listingId);
+      console.log("   New images array:", updates.images);
       updateData.images = updates.images;
     }
 
@@ -551,11 +590,11 @@ export async function updateListing(
       updateData.eligibility = eligibilityObj;
     }
 
-    console.log('📝 Updating listing with data:', {
+    console.log("📝 Updating listing with data:", {
       listingId,
       updateFields: Object.keys(updateData),
-      hasImages: 'images' in updateData,
-      imageCount: updateData.images ? updateData.images.length : 0
+      hasImages: "images" in updateData,
+      imageCount: updateData.images ? updateData.images.length : 0,
     });
 
     const { data, error } = await supabase
@@ -570,7 +609,7 @@ export async function updateListing(
         message: error.message,
         code: error.code,
         details: error.details,
-        hint: error.hint
+        hint: error.hint,
       });
       return {
         success: false,
@@ -578,9 +617,12 @@ export async function updateListing(
       };
     }
 
-    console.log('✅ Listing updated successfully');
+    console.log("✅ Listing updated successfully");
     if (data && data[0]) {
-      console.log('   Updated listing has images:', Array.isArray(data[0].images) ? data[0].images.length : 'none');
+      console.log(
+        "   Updated listing has images:",
+        Array.isArray(data[0].images) ? data[0].images.length : "none",
+      );
     }
 
     return { success: true };

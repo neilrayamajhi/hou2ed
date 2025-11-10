@@ -6,6 +6,7 @@ import { useAuthStore } from "../state/useAuthStore";
 import { theme } from "../theme";
 import { transformUserData, retryWithBackoff } from "../utils/auth";
 import { ERROR_MESSAGES } from "../constants/messages";
+import { queryClient } from "./QueryProvider";
 
 interface AuthContextType {
   session: Session | null;
@@ -41,7 +42,12 @@ export default function AuthProvider({
     // Listen for auth state changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log("Auth event:", event, "Session:", session ? "exists" : "null");
+        console.log(
+          "Auth event:",
+          event,
+          "Session:",
+          session ? "exists" : "null",
+        );
 
         // Handle different auth events
         if (event === "SIGNED_OUT") {
@@ -51,7 +57,35 @@ export default function AuthProvider({
           return;
         }
 
-        if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        if (event === "SIGNED_IN") {
+          // CRITICAL: Clear all caches on sign in to prevent stale data
+          // This is especially important when switching between account types
+          console.log("🔄 User signed in - clearing all caches...");
+
+          // Cancel any in-flight queries
+          await queryClient.cancelQueries();
+
+          // Clear entire cache to prevent any stale data from previous session
+          await queryClient.clear();
+
+          // Set new session and user
+          setSession(session);
+          setUser(session?.user || null);
+
+          if (session?.user) {
+            const userData = transformUserData(session.user);
+            setStoreUser(userData);
+
+            // Small delay to ensure auth token propagation
+            setTimeout(() => {
+              console.log("🔄 Session ready - data will be fetched fresh");
+              // No need to manually invalidate - queries will run fresh since cache was cleared
+            }, 500);
+          }
+        }
+
+        if (event === "TOKEN_REFRESHED") {
+          // Token refresh doesn't need cache clearing
           setSession(session);
           setUser(session?.user || null);
 
@@ -110,9 +144,27 @@ export default function AuthProvider({
 
   const handleSignOut = async () => {
     try {
+      // First, cancel all active queries to prevent race conditions
+      await queryClient.cancelQueries();
+
+      // Clear all React Query cache before signing out
+      await queryClient.clear();
+
+      // Reset all queries to ensure no stale data persists
+      await queryClient.resetQueries();
+
+      // Clear auth store state
+      logout();
+
+      // Now sign out from Supabase
       const { error } = await authHelpers.signOut();
       if (error) throw error;
-      logout();
+
+      // Clear local state
+      setSession(null);
+      setUser(null);
+
+      console.log("✅ Sign out complete: cache cleared, state reset");
     } catch (error) {
       console.error(ERROR_MESSAGES.AUTH.SIGN_OUT_ERROR, error);
       Alert.alert("Error", ERROR_MESSAGES.AUTH.SIGN_OUT_ERROR);

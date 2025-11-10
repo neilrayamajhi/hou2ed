@@ -1,4 +1,10 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 import {
   View,
   StyleSheet,
@@ -15,20 +21,15 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MapView, Marker, PROVIDER_GOOGLE } from "../../components/MapView";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { theme } from "../../theme";
 import ListingCard from "../../components/ListingCard";
 import FiltersSheet from "../Search/FiltersSheet";
 import { useFilterStore } from "../../state/useFilterStore";
 import { useLocation } from "../../hooks/useLocation";
-import {
-  generateMockListings,
-  generateListingsAroundLocation,
-  filterListingsByQuick,
-} from "../../data/mockListings";
-import { fetchRealShelters } from "../../services/shelterService";
+import { useMarketplaceListings } from "../../hooks/useMarketplaceListings";
 import { usePerformance } from "../../utils/perf";
-import type { Listing } from "../../types/listing";
+import type { MarketplaceListing } from "../../services/marketplace.service";
 import type { RootStackNavigationProp } from "../../navigation/types";
 import { useI18n } from "../../i18n";
 
@@ -81,13 +82,9 @@ export default function HomeScreen() {
     useFilterStore();
 
   // Local state
-  const [listings, setListings] = useState<Listing[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [showListView, setShowListView] = useState(false);
-  const [loadingData, setLoadingData] = useState(false);
-  const [isRealData, setIsRealData] = useState(false);
-  const [dataSource, setDataSource] = useState("Mock Data");
   const [mapRegion, setMapRegion] = useState<Region>({
     latitude: 37.7749,
     longitude: -122.4194,
@@ -98,68 +95,27 @@ export default function HomeScreen() {
 
   // Performance tracking
   const mapPerf = usePerformance("mapUpdate");
-  const listingLoadPerf = usePerformance("listingLoad");
 
-  // Load real shelter data or fall back to mock data
-  useEffect(() => {
-    async function loadShelters() {
-      if (!location) return;
+  // Use the marketplace listings hook to get real data from Supabase
+  const {
+    data: listings = [],
+    isLoading: loadingData,
+    refetch,
+    isRefetching,
+  } = useMarketplaceListings();
 
-      setLoadingData(true);
-      listingLoadPerf.start();
-      try {
-        // Try to fetch real shelters from OpenStreetMap
-        const realShelters = await fetchRealShelters(
-          location.latitude,
-          location.longitude,
-          15, // 15km radius (~10 miles)
-        );
+  // Refetch listings when screen gains focus to ensure fresh data
+  useFocusEffect(
+    useCallback(() => {
+      console.log("🏠 HomeScreen focused - refreshing listings");
+      refetch();
+    }, [refetch]),
+  );
 
-        let allListings: Listing[];
-
-        if (realShelters && realShelters.length > 0) {
-          // Use real shelter data
-          allListings = realShelters as any;
-          console.log(`Found ${realShelters.length} real shelters nearby`);
-          setIsRealData(true);
-          setDataSource("OpenStreetMap Data");
-        } else {
-          // Fall back to mock data if no real shelters found
-          console.log("No real shelters found, using mock data");
-          allListings = generateListingsAroundLocation(
-            location.latitude,
-            location.longitude,
-            20,
-          );
-        }
-
-        const filtered = filterListingsByQuick(allListings, quickFilters);
-        setListings(filtered);
-      } catch (error) {
-        console.error("Error loading shelters:", error);
-        // Fall back to mock data on error
-        const mockData = generateListingsAroundLocation(
-          location.latitude,
-          location.longitude,
-          20,
-        );
-        const filtered = filterListingsByQuick(mockData, quickFilters);
-        setListings(filtered);
-      } finally {
-        listingLoadPerf.end();
-        setLoadingData(false);
-      }
-    }
-
-    if (location) {
-      loadShelters();
-    } else {
-      // Use default mock data if no location
-      const allListings = generateMockListings(20);
-      const filtered = filterListingsByQuick(allListings, quickFilters);
-      setListings(filtered);
-    }
-  }, [quickFilters, location]);
+  // Determine if we have real data (not mock)
+  const isRealData =
+    listings.length > 0 && !listings[0]?.id?.startsWith("mock-");
+  const dataSource = isRealData ? "Database" : "Mock Data";
 
   // Update map region when user location is loaded
   useEffect(() => {
@@ -207,7 +163,7 @@ export default function HomeScreen() {
 
   // Navigate to listing details
   const openDetails = useCallback(
-    (listing: Listing) => {
+    (listing: MarketplaceListing) => {
       console.log("Opening details for:", listing.name);
       // @ts-ignore - Navigation types will be updated
       navigation.navigate("ListingDetails", { listingId: listing.id, listing });
@@ -240,12 +196,42 @@ export default function HomeScreen() {
     }
   }, [location, refreshLocation]);
 
+  // Memoize markers to prevent re-rendering on every state change
+  const mapMarkers = useMemo(() => {
+    return listings.map((listing, index) => (
+      <Marker
+        key={listing.id}
+        coordinate={listing.coordinates}
+        onPress={() => handleMarkerPress(index)}
+        tracksViewChanges={false} // Disable automatic view tracking to prevent re-renders
+      >
+        <View
+          style={[
+            styles.mapMarker,
+            listing.availability === "available"
+              ? styles.markerAvailable
+              : styles.markerFull,
+            activeIndex === index && styles.markerActive,
+          ]}
+        >
+          <Text style={styles.markerText} numberOfLines={1}>
+            {listing.price.isFree
+              ? "FREE"
+              : listing.price.min > 0
+                ? `$${listing.price.min}`
+                : "Contact"}
+          </Text>
+        </View>
+      </Marker>
+    ));
+  }, [listings, activeIndex, handleMarkerPress]);
+
   // Render listing item for list view
   const renderListItem = ({
     item,
     index,
   }: {
-    item: Listing;
+    item: MarketplaceListing;
     index: number;
   }) => (
     <TouchableOpacity
@@ -266,7 +252,7 @@ export default function HomeScreen() {
           >
             <Text style={styles.badgeText}>
               {item.availability === "available"
-                ? `${item.unit_beds?.standard || 0} ${(item.unit_beds?.standard || 0) === 1 ? i18n.t("home.bed") : i18n.t("home.beds")}`
+                ? `${item.bedsAvailable || 0} ${(item.bedsAvailable || 0) === 1 ? i18n.t("home.bed") : i18n.t("home.beds")}`
                 : i18n.t("home.full")}
             </Text>
           </View>
@@ -274,18 +260,16 @@ export default function HomeScreen() {
 
         <Text style={styles.listItemAddress}>
           <Ionicons name="location" size={14} color="#8a8a8a" />{" "}
-          {typeof item.address === 'string'
-            ? `${item.address}, ${item.city}`
-            : `${item.address?.street || item.address}, ${item.address?.city || item.city}`}
+          {`${item.address.street}, ${item.address.city}`}
         </Text>
 
         <View style={styles.listItemFooter}>
           <Text style={styles.listItemPrice}>
-            {item.cost?.free
+            {item.price.isFree
               ? i18n.t("home.free").toUpperCase()
-              : item.cost?.monthly
-              ? `$${item.cost.monthly}/mo`
-              : "Contact for pricing"}
+              : item.price.min > 0
+                ? `$${item.price.min}/mo`
+                : "Contact for pricing"}
           </Text>
           <View style={styles.listItemDistance}>
             <Ionicons name="navigate" size={14} color="#D4AF37" />
@@ -390,39 +374,15 @@ export default function HomeScreen() {
             provider={PROVIDER_GOOGLE}
             customMapStyle={MAP_DARK_STYLE}
             initialRegion={mapRegion}
-            onRegionChangeComplete={(region) => {
-              mapPerf.start();
-              setMapRegion(region);
-              mapPerf.end();
-            }}
+            region={mapRegion}
             showsUserLocation
             showsMyLocationButton={false}
+            scrollEnabled={true}
+            zoomEnabled={true}
+            rotateEnabled={false} // Disable rotation to reduce complexity
+            pitchEnabled={false} // Disable 3D view
           >
-            {listings.map((listing, index) => (
-              <Marker
-                key={listing.id}
-                coordinate={listing.coordinates}
-                onPress={() => handleMarkerPress(index)}
-              >
-                <View
-                  style={[
-                    styles.mapMarker,
-                    listing.availability === "available"
-                      ? styles.markerAvailable
-                      : styles.markerFull,
-                    activeIndex === index && styles.markerActive,
-                  ]}
-                >
-                  <Text style={styles.markerText}>
-                    {listing.cost?.free
-                      ? i18n.t("home.free").toUpperCase()
-                      : listing.cost?.monthly
-                      ? `$${listing.cost.monthly}`
-                      : "Contact"}
-                  </Text>
-                </View>
-              </Marker>
-            ))}
+            {mapMarkers}
           </MapView>
 
           {/* Floating Map Controls */}
@@ -513,25 +473,23 @@ export default function HomeScreen() {
           >
             <View style={styles.miniCardContent}>
               <Text style={styles.miniCardTitle} numberOfLines={1}>
-                {listings[activeIndex].title}
+                {listings[activeIndex].name}
               </Text>
               <Text style={styles.miniCardAddress} numberOfLines={1}>
-                {typeof listings[activeIndex].address === 'string'
-                  ? `${listings[activeIndex].address}, ${listings[activeIndex].city}`
-                  : `${listings[activeIndex].address?.street || listings[activeIndex].address}, ${listings[activeIndex].address?.city || listings[activeIndex].city}`}
+                {`${listings[activeIndex].address.street}, ${listings[activeIndex].address.city}`}
               </Text>
               <View style={styles.miniCardFooter}>
                 <Text style={styles.miniCardPrice}>
-                  {listings[activeIndex].cost?.free
+                  {listings[activeIndex].price.isFree
                     ? i18n.t("home.free").toUpperCase()
-                    : listings[activeIndex].cost?.monthly
-                    ? `$${listings[activeIndex].cost.monthly}/mo`
-                    : "Contact for pricing"}
+                    : listings[activeIndex].price.min > 0
+                      ? `$${listings[activeIndex].price.min}/mo`
+                      : "Contact for pricing"}
                 </Text>
                 <View style={styles.miniCardBadge}>
                   <Text style={styles.miniCardBadgeText}>
                     {listings[activeIndex].availability === "available"
-                      ? `${listings[activeIndex].unit_beds?.standard || 0} ${(listings[activeIndex].unit_beds?.standard || 0) === 1 ? i18n.t("home.bed") : i18n.t("home.beds")}`
+                      ? `${listings[activeIndex].bedsAvailable || 0} ${(listings[activeIndex].bedsAvailable || 0) === 1 ? i18n.t("home.bed") : i18n.t("home.beds")}`
                       : i18n.t("home.full")}
                   </Text>
                 </View>
@@ -654,6 +612,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   mapMarker: {
+    minWidth: 70, // Fixed minimum width to prevent resizing
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -662,6 +621,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3,
     elevation: 3,
+    alignItems: "center", // Center the text
+    justifyContent: "center",
   },
   markerAvailable: {
     backgroundColor: "#D4AF37",
@@ -670,15 +631,17 @@ const styles = StyleSheet.create({
     backgroundColor: "#6a6a6a",
   },
   markerActive: {
-    transform: [{ scale: 1.1 }],
-    shadowOpacity: 0.4,
-    shadowRadius: 5,
-    elevation: 5,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 6,
   },
   markerText: {
     fontSize: 12,
     fontWeight: "bold",
     color: "#000000",
+    textAlign: "center", // Center text alignment
   },
   myLocationButton: {
     position: "absolute",

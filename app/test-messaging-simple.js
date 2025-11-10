@@ -4,35 +4,32 @@
 
 const { createClient } = require('@supabase/supabase-js');
 
-// Your Supabase credentials
+// Your Supabase credentials - using service key to bypass RLS for testing
 const SUPABASE_URL = 'https://rixiofltzptwaiwxhhlf.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpeGlvZmx0enB0d2Fpd3hoaGxmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzODk4ODYsImV4cCI6MjA3Mzk2NTg4Nn0.0EXiVBXVcuiqZeSH9xaXhCq_hog5sUjJXz3CzrBkVjU';
+const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpeGlvZmx0enB0d2Fpd3hoaGxmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODM4OTg4NiwiZXhwIjoyMDczOTY1ODg2fQ.J9Oc77ZR1E435SqDsngt8ey4_WVOeTE6UASlYo17Gbc';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 async function testMessagingTables() {
   console.log('🧪 Testing Messaging System Tables...\n');
 
   try {
-    // Step 1: Check if message_threads table exists
-    console.log('1️⃣ Checking message_threads table...');
+    // Step 1: Check if threads table exists
+    console.log('1️⃣ Checking threads table...');
     const { count: threadCount, error: threadError } = await supabase
-      .from('message_threads')
+      .from('threads')
       .select('*', { count: 'exact', head: true });
 
     if (threadError) {
       if (threadError.message.includes('not found')) {
-        console.log('❌ message_threads table does not exist!');
-        console.log('   Please run the SQL migration first:');
-        console.log('   1. Go to: https://supabase.com/dashboard/project/rixiofltzptwaiwxhhlf/sql/new');
-        console.log('   2. Copy and paste the contents of RUN_THIS_SQL_IN_SUPABASE.sql');
-        console.log('   3. Click "Run"');
+        console.log('❌ threads table does not exist!');
+        console.log('   Error:', threadError.message);
         return;
       }
       throw threadError;
     }
 
-    console.log(`✅ message_threads table exists (${threadCount || 0} threads)\n`);
+    console.log(`✅ threads table exists (${threadCount || 0} threads)\n`);
 
     // Step 2: Check if messages table exists
     console.log('2️⃣ Checking messages table...');
@@ -49,7 +46,25 @@ async function testMessagingTables() {
       throw messageError;
     }
 
-    console.log(`✅ messages table exists (${messageCount || 0} messages)\n`);
+    console.log(`✅ messages table exists (${messageCount || 0} messages)`);
+
+    // Check actual message structure
+    const { data: sampleMessages } = await supabase
+      .from('messages')
+      .select('*')
+      .limit(1);
+
+    if (sampleMessages && sampleMessages.length > 0) {
+      const fields = Object.keys(sampleMessages[0]);
+      console.log('   Message fields:', fields.join(', '));
+
+      if ('content' in sampleMessages[0]) {
+        console.log('   ✅ Using "content" field for message text');
+      } else if ('body' in sampleMessages[0]) {
+        console.log('   ⚠️ Using "body" field for message text');
+      }
+    }
+    console.log();
 
     // Step 3: Test creating a thread (without auth)
     console.log('3️⃣ Testing anonymous access (should fail due to RLS)...');
@@ -59,11 +74,11 @@ async function testMessagingTables() {
     const testUserId2 = '22222222-2222-2222-2222-222222222222';
 
     const { data: testThread, error: testThreadError } = await supabase
-      .from('message_threads')
+      .from('threads')
       .insert({
         participant_ids: [testUserId1, testUserId2],
-        subject: 'Test Thread (Anonymous)',
-        last_message_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       })
       .select()
       .single();

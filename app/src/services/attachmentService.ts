@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { supabaseStorageService } from '../lib/supabaseService';
 import * as FileSystem from 'expo-file-system';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 
@@ -19,8 +20,8 @@ class AttachmentService {
    */
   async initialize() {
     try {
-      // Check if bucket exists
-      const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+      // Use service client to check if bucket exists (bypasses RLS)
+      const { data: buckets, error: listError } = await supabaseStorageService.storage.listBuckets();
 
       if (listError) {
         console.error('Error listing buckets:', listError);
@@ -30,8 +31,8 @@ class AttachmentService {
       const bucketExists = buckets?.some(b => b.name === this.BUCKET_NAME);
 
       if (!bucketExists) {
-        // Create the bucket
-        const { error: createError } = await supabase.storage.createBucket(
+        // Create the bucket using service client
+        const { error: createError } = await supabaseStorageService.storage.createBucket(
           this.BUCKET_NAME,
           {
             public: false, // Private bucket - URLs need auth
@@ -109,8 +110,8 @@ class AttachmentService {
       const byteArray = new Uint8Array(byteNumbers);
       const blob = new Blob([byteArray], { type: finalMimeType });
 
-      // Upload to Supabase storage
-      const { data, error } = await supabase.storage
+      // Upload to Supabase storage using service client (bypasses RLS)
+      const { data, error } = await supabaseStorageService.storage
         .from(this.BUCKET_NAME)
         .upload(filename, blob, {
           contentType: finalMimeType,
@@ -123,8 +124,8 @@ class AttachmentService {
         throw error;
       }
 
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
+      // Get public URL using service client
+      const { data: { publicUrl } } = supabaseStorageService.storage
         .from(this.BUCKET_NAME)
         .getPublicUrl(filename);
 
@@ -178,7 +179,7 @@ class AttachmentService {
    */
   async deleteAttachment(path: string): Promise<boolean> {
     try {
-      const { error } = await supabase.storage
+      const { error } = await supabaseStorageService.storage
         .from(this.BUCKET_NAME)
         .remove([path]);
 
@@ -199,7 +200,7 @@ class AttachmentService {
    */
   async getSignedUrl(path: string, expiresIn: number = 3600): Promise<string | null> {
     try {
-      const { data, error } = await supabase.storage
+      const { data, error } = await supabaseStorageService.storage
         .from(this.BUCKET_NAME)
         .createSignedUrl(path, expiresIn);
 

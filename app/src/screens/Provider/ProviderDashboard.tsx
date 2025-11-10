@@ -42,18 +42,42 @@ export default function ProviderDashboard() {
   const { showToast } = useToast();
   const { user, logout } = useAuthStore();
 
-  // Only refresh listings when screen gains focus if user has changed
+  // Track user changes and force refetch when needed
   const lastUserRef = useRef(user?.id);
+  const lastRefetchTime = useRef(0);
+
   useFocusEffect(
     useCallback(() => {
-      if (lastUserRef.current !== user?.id) {
-        console.log(
-          "🔄 User switch detected in ProviderDashboard - refreshing listings",
-        );
-        lastUserRef.current = user?.id;
-        refetch();
+      const now = Date.now();
+      const timeSinceLastRefetch = now - lastRefetchTime.current;
+
+      // Always refetch when provider dashboard gains focus to ensure fresh data
+      if (user?.role === "provider" && user?.id) {
+        const userChanged = lastUserRef.current !== user?.id;
+
+        if (userChanged) {
+          console.log(
+            "🔄 User switch detected in ProviderDashboard - refreshing listings",
+            "Previous:", lastUserRef.current,
+            "Current:", user?.id
+          );
+          lastUserRef.current = user?.id;
+
+          // On user change, add a delay to ensure auth is fully propagated
+          setTimeout(() => {
+            console.log("🔄 Triggering delayed refetch after user change");
+            refetch();
+            lastRefetchTime.current = Date.now();
+          }, 1000);
+        } else if (timeSinceLastRefetch > 5000) {
+          // Only refetch if more than 5 seconds have passed since last refetch
+          // This prevents rapid refetching on navigation
+          console.log("🔄 Refetching provider listings on focus");
+          refetch();
+          lastRefetchTime.current = now;
+        }
       }
-    }, [user?.id, refetch]),
+    }, [user?.id, user?.role, refetch]),
   );
 
   const handleLogout = async () => {

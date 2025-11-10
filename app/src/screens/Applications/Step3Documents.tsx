@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
@@ -14,6 +15,12 @@ import * as ImagePicker from "expo-image-picker";
 import { colors, spacing, radius } from "../../theme/tokens";
 import { DOCUMENT_TYPES, FILE_UPLOAD } from "../../constants/application";
 import type { ApplicationDraft } from "./ApplyWizard";
+import { DocumentRequirement } from "../../types/listing";
+import { supabase } from "../../lib/supabase";
+import {
+  isNewDocumentFormat,
+  convertLegacyDocuments,
+} from "../../constants/documents";
 
 interface Step3DocumentsProps {
   draft: ApplicationDraft;
@@ -41,6 +48,88 @@ export default function Step3Documents({
     draft.documents || [],
   );
   const [uploading, setUploading] = useState<Record<string, boolean>>({});
+  const [documentRequirements, setDocumentRequirements] = useState<
+    DocumentRequirement[]
+  >([]);
+  const [loadingRequirements, setLoadingRequirements] = useState(true);
+
+  // Fetch listing's document requirements
+  useEffect(() => {
+    const fetchDocumentRequirements = async () => {
+      if (!draft.listingId) {
+        console.warn("No listing ID provided");
+        setLoadingRequirements(false);
+        return;
+      }
+
+      try {
+        setLoadingRequirements(true);
+        const { data, error } = await supabase
+          .from("listings")
+          .select("intake")
+          .eq("id", draft.listingId)
+          .single();
+
+        if (error) {
+          console.error("Error fetching listing:", error);
+          // Fall back to default requirements
+          setDocumentRequirements(
+            DOCUMENT_TYPES.map((dt) => ({
+              id: dt.id,
+              label: dt.label,
+              required: dt.required,
+              category: "other" as const,
+            })),
+          );
+        } else if (data?.intake?.documents_required) {
+          const docs = data.intake.documents_required;
+
+          // Check if it's new format or legacy string array
+          if (isNewDocumentFormat(docs)) {
+            setDocumentRequirements(docs);
+          } else if (Array.isArray(docs)) {
+            // Convert legacy format to new format
+            setDocumentRequirements(convertLegacyDocuments(docs as string[]));
+          } else {
+            // No requirements specified, use defaults
+            setDocumentRequirements(
+              DOCUMENT_TYPES.map((dt) => ({
+                id: dt.id,
+                label: dt.label,
+                required: dt.required,
+                category: "other" as const,
+              })),
+            );
+          }
+        } else {
+          // No requirements specified, use defaults
+          setDocumentRequirements(
+            DOCUMENT_TYPES.map((dt) => ({
+              id: dt.id,
+              label: dt.label,
+              required: dt.required,
+              category: "other" as const,
+            })),
+          );
+        }
+      } catch (error) {
+        console.error("Error in fetchDocumentRequirements:", error);
+        // Fall back to default requirements
+        setDocumentRequirements(
+          DOCUMENT_TYPES.map((dt) => ({
+            id: dt.id,
+            label: dt.label,
+            required: dt.required,
+            category: "other" as const,
+          })),
+        );
+      } finally {
+        setLoadingRequirements(false);
+      }
+    };
+
+    fetchDocumentRequirements();
+  }, [draft.listingId]);
 
   // Update draft whenever documents change
   React.useEffect(() => {
@@ -286,6 +375,16 @@ export default function Step3Documents({
     );
   };
 
+  // Show loading state while fetching requirements
+  if (loadingRequirements) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color={colors.gold} />
+        <Text style={styles.loadingText}>Loading document requirements...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -297,7 +396,9 @@ export default function Step3Documents({
         <View style={styles.header}>
           <Text style={styles.title}>Upload Documents</Text>
           <Text style={styles.subtitle}>
-            Please upload the required documents to complete your application.
+            {documentRequirements.length > 0
+              ? "Please upload the documents requested by the provider."
+              : "Please upload the required documents to complete your application."}
           </Text>
         </View>
 
@@ -309,8 +410,23 @@ export default function Step3Documents({
           </Text>
         </View>
 
-        {/* Document Types */}
-        {DOCUMENT_TYPES.map((docType) => {
+        {/* Show custom requirements notice if any custom documents exist */}
+        {documentRequirements.some((req) => req.isCustom) && (
+          <View style={[styles.infoBox, styles.customNoticeBox]}>
+            <Ionicons
+              name="alert-circle"
+              size={20}
+              color={colors.primary[500]}
+            />
+            <Text style={styles.infoText}>
+              This provider has specific document requirements. Please read each
+              requirement carefully.
+            </Text>
+          </View>
+        )}
+
+        {/* Document Types - Now using dynamic requirements */}
+        {documentRequirements.map((docType) => {
           const uploadedDoc = getDocumentForType(docType.id);
           const isUploading = uploading[docType.id];
           const isComplete = uploadedDoc?.uploadProgress === 100;
@@ -319,12 +435,19 @@ export default function Step3Documents({
             <View key={docType.id} style={styles.documentSection}>
               <View style={styles.documentHeader}>
                 <View style={styles.documentTitleRow}>
-                  <Text style={styles.documentTitle}>
-                    {docType.label}
-                    {docType.required && (
-                      <Text style={styles.required}> *</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.documentTitle}>
+                      {docType.label}
+                      {docType.required && (
+                        <Text style={styles.required}> *</Text>
+                      )}
+                    </Text>
+                    {docType.description && (
+                      <Text style={styles.documentDescription}>
+                        {docType.description}
+                      </Text>
                     )}
-                  </Text>
+                  </View>
                   {isComplete && (
                     <Ionicons
                       name="checkmark-circle"
@@ -685,5 +808,24 @@ const styles = StyleSheet.create({
     color: colors.gray,
     textAlign: "center",
     marginTop: spacing.sm,
+  },
+  // New styles for dynamic document requirements
+  centerContent: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.gray,
+    marginTop: spacing.md,
+  },
+  customNoticeBox: {
+    backgroundColor: colors.primary[500] + "10",
+    borderColor: colors.primary[500],
+  },
+  documentDescription: {
+    fontSize: 12,
+    color: colors.gray,
+    marginTop: spacing.xs,
   },
 });

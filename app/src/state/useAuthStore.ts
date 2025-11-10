@@ -63,31 +63,34 @@ export const useAuthStore = create<AuthState>()(
         try {
           console.log("🔴 Logging out - clearing all data...");
 
-          // Sign out from Supabase first
-          await supabase.auth.signOut();
-
-          // Clear React Query cache completely
-          await queryClient.resetQueries();
-          await queryClient.clear();
-          console.log("✅ React Query cache cleared");
-
-          // Clear all auth-related storage
-          await secureStorage.removeItem("auth-storage");
-
-          // Force a small delay to ensure everything is cleared
-          await new Promise((resolve) => setTimeout(resolve, 100));
-
-          // Clear the zustand state
+          // Clear the zustand state immediately to prevent stale data access
           set({
             user: null,
             isAuthenticated: false,
             selectedRole: null,
           });
 
+          // Clear React Query cache completely
+          queryClient.cancelQueries(); // Cancel any in-flight queries
+          await queryClient.invalidateQueries(); // Mark all as stale
+          await queryClient.resetQueries(); // Reset to initial state
+          await queryClient.clear(); // Clear all cache
+          console.log("✅ React Query cache cleared");
+
+          // Clear all auth-related storage
+          await secureStorage.removeItem("auth-storage");
+
+          // Sign out from Supabase last to ensure local state is cleared first
+          await supabase.auth.signOut();
+
+          // Force a small delay to ensure everything is cleared
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
           console.log("✅ Logout complete");
         } catch (error) {
           console.error("Logout error:", error);
           // Even if Supabase signOut fails, clear local state
+          queryClient.cancelQueries();
           await queryClient.resetQueries();
           await queryClient.clear();
           set({

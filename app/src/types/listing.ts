@@ -27,18 +27,18 @@ export type SimpleHousingType =
 
 // Extended housing types matching PRD
 export type HousingType =
-  | 'apartment'
-  | 'shared_room'
-  | 'private_room'
-  | 'house'
-  | 'hotel_motel'
-  | 'shelter'
-  | 'transitional'
-  | 'sober_living'
-  | 'medical_respite'
-  | 'psychiatric_facility'
-  | 'detox'
-  | '5150_capable';
+  | "apartment"
+  | "shared_room"
+  | "private_room"
+  | "house"
+  | "hotel_motel"
+  | "shelter"
+  | "transitional"
+  | "sober_living"
+  | "medical_respite"
+  | "psychiatric_facility"
+  | "detox"
+  | "5150_capable";
 
 export type AvailabilityStatus = "available" | "full" | "waitlist" | "unknown";
 
@@ -61,7 +61,7 @@ export interface UnitBeds {
 export type UnitBedType = keyof UnitBeds;
 
 // Gender Rooming
-export type GenderRooming = 'male' | 'female' | 'co_ed' | 'family' | 'couples';
+export type GenderRooming = "male" | "female" | "co_ed" | "family" | "couples";
 
 // Amenities
 export interface Amenities {
@@ -124,11 +124,27 @@ export interface Cost {
   free?: boolean;
 }
 
+// Document Requirement for listings
+export interface DocumentRequirement {
+  id: string; // Unique identifier (e.g., "id", "income", "custom-1")
+  label: string; // Display name (e.g., "Government ID", "Proof of Income")
+  description?: string; // Additional instructions for this document
+  required: boolean; // Is this document mandatory?
+  category?:
+    | "identification"
+    | "financial"
+    | "medical"
+    | "reference"
+    | "legal"
+    | "other";
+  isCustom?: boolean; // Is this a custom requirement added by provider?
+}
+
 // Intake
 export interface Intake {
-  process?: 'walk_in' | 'appointment' | 'referral' | 'waitlist';
+  process?: "walk_in" | "appointment" | "referral" | "waitlist";
   hours?: string;
-  documents_required?: string[];
+  documents_required?: string[] | DocumentRequirement[]; // Support both legacy and new format
   response_time?: string;
 }
 

@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { supabase } from "../lib/supabase";
 
 // Types
 interface Message {
@@ -34,7 +34,7 @@ interface Thread {
 
 class MessageServiceFix {
   private userId: string | null = null;
-  private threadTableName: 'message_threads' | 'threads' = 'message_threads';
+  private threadTableName: "message_threads" | "threads" = "message_threads";
   private messageSubscriptions: Map<string, any> = new Map();
   private inboxSubscription: any = null;
   private profileCache: Map<string, any> = new Map();
@@ -45,15 +45,18 @@ class MessageServiceFix {
    */
   async initialize(): Promise<string | null> {
     try {
-      const { data: { user }, error } = await supabase.auth.getUser();
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser();
 
       if (error) {
-        console.error('Failed to get current user:', error);
-        throw new Error('Authentication required');
+        console.error("Failed to get current user:", error);
+        throw new Error("Authentication required");
       }
 
       if (!user) {
-        throw new Error('User not authenticated');
+        throw new Error("User not authenticated");
       }
 
       this.userId = user.id;
@@ -66,7 +69,7 @@ class MessageServiceFix {
 
       return this.userId;
     } catch (error) {
-      console.error('Failed to initialize message service:', error);
+      console.error("Failed to initialize message service:", error);
       throw error;
     }
   }
@@ -78,30 +81,36 @@ class MessageServiceFix {
     try {
       // Try to query message_threads table
       const { error: messageThreadsError } = await supabase
-        .from('message_threads')
-        .select('id')
+        .from("message_threads")
+        .select("id")
         .limit(0);
 
       if (!messageThreadsError) {
-        this.threadTableName = 'message_threads';
-        console.log('✅ Using message_threads table');
+        this.threadTableName = "message_threads";
+        console.log("✅ Using message_threads table");
         return;
       }
 
       // If message_threads doesn't exist, check error code
-      if (messageThreadsError.code === 'PGRST205' ||
-          messageThreadsError.message?.includes('relation') ||
-          messageThreadsError.message?.includes('does not exist')) {
-
-        console.error('❌ message_threads table not found');
-        throw new Error('Messaging tables not configured. Please run database migration.');
+      if (
+        messageThreadsError.code === "PGRST205" ||
+        messageThreadsError.message?.includes("relation") ||
+        messageThreadsError.message?.includes("does not exist")
+      ) {
+        console.error("❌ message_threads table not found");
+        throw new Error(
+          "Messaging tables not configured. Please run database migration.",
+        );
       }
 
       // Some other error (likely RLS)
-      console.warn('⚠️ Error accessing message_threads:', messageThreadsError.message);
-      this.threadTableName = 'message_threads';
+      console.warn(
+        "⚠️ Error accessing message_threads:",
+        messageThreadsError.message,
+      );
+      this.threadTableName = "message_threads";
     } catch (error) {
-      console.error('Error detecting thread table name:', error);
+      console.error("Error detecting thread table name:", error);
       throw error;
     }
   }
@@ -111,9 +120,12 @@ class MessageServiceFix {
    */
   private startProfileCacheCleanup() {
     // Clear cache every 5 minutes
-    this.profileCacheTimeout = setInterval(() => {
-      this.profileCache.clear();
-    }, 5 * 60 * 1000);
+    this.profileCacheTimeout = setInterval(
+      () => {
+        this.profileCache.clear();
+      },
+      5 * 60 * 1000,
+    );
   }
 
   /**
@@ -127,9 +139,9 @@ class MessageServiceFix {
 
     // Fetch from database
     const { data: profile, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
       .single();
 
     if (!error && profile) {
@@ -147,7 +159,7 @@ class MessageServiceFix {
     const profiles = new Map<string, any>();
 
     // Check cache first
-    const uncachedIds = uniqueIds.filter(id => {
+    const uncachedIds = uniqueIds.filter((id) => {
       if (this.profileCache.has(id)) {
         profiles.set(id, this.profileCache.get(id));
         return false;
@@ -158,12 +170,12 @@ class MessageServiceFix {
     // Fetch uncached profiles
     if (uncachedIds.length > 0) {
       const { data: fetchedProfiles, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .in('id', uncachedIds);
+        .from("profiles")
+        .select("*")
+        .in("id", uncachedIds);
 
       if (!error && fetchedProfiles) {
-        fetchedProfiles.forEach(profile => {
+        fetchedProfiles.forEach((profile) => {
           this.profileCache.set(profile.id, profile);
           profiles.set(profile.id, profile);
         });
@@ -180,11 +192,11 @@ class MessageServiceFix {
     participantIds: string[],
     subject?: string,
     listingId?: string,
-    applicationId?: string
+    applicationId?: string,
   ): Promise<Thread> {
     try {
       if (!this.userId) {
-        throw new Error('User not initialized');
+        throw new Error("User not initialized");
       }
 
       // Ensure current user is included
@@ -193,20 +205,23 @@ class MessageServiceFix {
       // Check for existing thread with same participants
       const { data: existingThreads, error: searchError } = await supabase
         .from(this.threadTableName)
-        .select('*')
-        .contains('participant_ids', allParticipants)
-        .order('created_at', { ascending: false });
+        .select("*")
+        .contains("participant_ids", allParticipants)
+        .order("created_at", { ascending: false });
 
       if (searchError) {
-        console.error('Error searching for existing thread:', searchError);
+        console.error("Error searching for existing thread:", searchError);
         throw searchError;
       }
 
       // Find exact match
-      const existingThread = existingThreads?.find(thread => {
+      const existingThread = existingThreads?.find((thread) => {
         const threadParticipants = [...thread.participant_ids].sort();
         const searchParticipants = [...allParticipants].sort();
-        return JSON.stringify(threadParticipants) === JSON.stringify(searchParticipants);
+        return (
+          JSON.stringify(threadParticipants) ===
+          JSON.stringify(searchParticipants)
+        );
       });
 
       if (existingThread) {
@@ -221,19 +236,19 @@ class MessageServiceFix {
           participant_ids: allParticipants,
           listing_id: listingId,
           application_id: applicationId,
-          last_message_at: new Date().toISOString()
+          last_message_at: new Date().toISOString(),
         })
         .select()
         .single();
 
       if (createError) {
-        console.error('Error creating thread:', createError);
+        console.error("Error creating thread:", createError);
         throw createError;
       }
 
       return newThread;
     } catch (error) {
-      console.error('Failed to create thread:', error);
+      console.error("Failed to create thread:", error);
       throw error;
     }
   }
@@ -244,18 +259,18 @@ class MessageServiceFix {
   async getThreads(): Promise<Thread[]> {
     try {
       if (!this.userId) {
-        throw new Error('User not initialized');
+        throw new Error("User not initialized");
       }
 
       // Get threads
       const { data: threads, error } = await supabase
         .from(this.threadTableName)
-        .select('*')
-        .contains('participant_ids', [this.userId])
-        .order('last_message_at', { ascending: false });
+        .select("*")
+        .contains("participant_ids", [this.userId])
+        .order("last_message_at", { ascending: false });
 
       if (error) {
-        console.error('Error fetching threads:', error);
+        console.error("Error fetching threads:", error);
         throw error;
       }
 
@@ -265,28 +280,30 @@ class MessageServiceFix {
 
       // Collect all participant IDs
       const allParticipantIds = new Set<string>();
-      threads.forEach(thread => {
-        thread.participant_ids.forEach((id: string) => allParticipantIds.add(id));
+      threads.forEach((thread) => {
+        thread.participant_ids.forEach((id: string) =>
+          allParticipantIds.add(id),
+        );
       });
 
       // Batch fetch all profiles
       const profileMap = await this.getBatchProfiles([...allParticipantIds]);
 
       // Get last messages for each thread
-      const threadIds = threads.map(t => t.id);
+      const threadIds = threads.map((t) => t.id);
       const { data: messages, error: messagesError } = await supabase
-        .from('messages')
-        .select('*')
-        .in('thread_id', threadIds)
-        .order('created_at', { ascending: false });
+        .from("messages")
+        .select("*")
+        .in("thread_id", threadIds)
+        .order("created_at", { ascending: false });
 
       if (messagesError) {
-        console.error('Error fetching messages:', messagesError);
+        console.error("Error fetching messages:", messagesError);
       }
 
       // Group messages by thread
       const messagesByThread = new Map<string, any[]>();
-      messages?.forEach(msg => {
+      messages?.forEach((msg) => {
         if (!messagesByThread.has(msg.thread_id)) {
           messagesByThread.set(msg.thread_id, []);
         }
@@ -294,7 +311,7 @@ class MessageServiceFix {
       });
 
       // Process threads
-      return threads.map(thread => {
+      return threads.map((thread) => {
         // Add participants
         const participants = thread.participant_ids
           .map((id: string) => profileMap.get(id))
@@ -304,19 +321,20 @@ class MessageServiceFix {
         const threadMessages = messagesByThread.get(thread.id) || [];
 
         // Calculate unread count
-        const unreadCount = threadMessages.filter((msg: any) =>
-          msg.sender_id !== this.userId &&
-          !msg.read_by?.includes(this.userId!)
+        const unreadCount = threadMessages.filter(
+          (msg: any) =>
+            msg.sender_id !== this.userId &&
+            !msg.read_by?.includes(this.userId!),
         ).length;
 
         return {
           ...thread,
           participants,
-          unread_count: unreadCount
+          unread_count: unreadCount,
         };
       });
     } catch (error) {
-      console.error('Failed to get threads:', error);
+      console.error("Failed to get threads:", error);
       throw error;
     }
   }
@@ -327,44 +345,45 @@ class MessageServiceFix {
   async getThread(threadId: string): Promise<Thread | null> {
     try {
       if (!this.userId) {
-        throw new Error('User not initialized');
+        throw new Error("User not initialized");
       }
 
       // Get thread
       const { data: thread, error: threadError } = await supabase
         .from(this.threadTableName)
-        .select('*')
-        .eq('id', threadId)
+        .select("*")
+        .eq("id", threadId)
         .single();
 
       if (threadError) {
-        console.error('Error fetching thread:', threadError);
+        console.error("Error fetching thread:", threadError);
         throw threadError;
       }
 
       // Get messages
       const { data: messages, error: messagesError } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('thread_id', threadId)
-        .order('created_at', { ascending: true });
+        .from("messages")
+        .select("*")
+        .eq("thread_id", threadId)
+        .order("created_at", { ascending: true });
 
       if (messagesError) {
-        console.error('Error fetching messages:', messagesError);
+        console.error("Error fetching messages:", messagesError);
         throw messagesError;
       }
 
       // Batch fetch profiles for all participants and message senders
       const allUserIds = new Set<string>([...thread.participant_ids]);
-      messages?.forEach(msg => allUserIds.add(msg.sender_id));
+      messages?.forEach((msg) => allUserIds.add(msg.sender_id));
 
       const profileMap = await this.getBatchProfiles([...allUserIds]);
 
       // Add sender info to messages
-      const messagesWithSenders = messages?.map(msg => ({
-        ...msg,
-        sender: profileMap.get(msg.sender_id)
-      })) || [];
+      const messagesWithSenders =
+        messages?.map((msg) => ({
+          ...msg,
+          sender: profileMap.get(msg.sender_id),
+        })) || [];
 
       // Add participants to thread
       const participants = thread.participant_ids
@@ -374,10 +393,10 @@ class MessageServiceFix {
       return {
         ...thread,
         participants,
-        messages: messagesWithSenders
+        messages: messagesWithSenders,
       };
     } catch (error) {
-      console.error('Failed to get thread:', error);
+      console.error("Failed to get thread:", error);
       throw error;
     }
   }
@@ -388,43 +407,51 @@ class MessageServiceFix {
   async sendMessage(
     threadId: string,
     body: string,
-    attachmentUrls?: string[]
+    attachmentUrls?: string[],
   ): Promise<MessageWithSender> {
     try {
       if (!this.userId) {
-        throw new Error('User not initialized');
+        throw new Error("User not initialized");
       }
 
       if (!body?.trim() && (!attachmentUrls || attachmentUrls.length === 0)) {
-        throw new Error('Message must have content or attachments');
+        throw new Error("Message must have content or attachments");
       }
 
-      // Insert message
+      // Insert message - use 'content' field as per database schema
+      console.log("📤 Sending message to thread:", threadId);
       const { data: message, error } = await supabase
-        .from('messages')
+        .from("messages")
         .insert({
           thread_id: threadId,
           sender_id: this.userId,
-          body: body.trim(),
+          content: body?.trim() || "", // Changed from 'body' to 'content'
           attachment_urls: attachmentUrls || [],
-          read_by: [this.userId]
+          read_by: [this.userId],
         })
         .select()
         .single();
 
       if (error) {
-        console.error('Error sending message:', error);
+        console.error("❌ Error sending message:", error);
+        console.error("Error details:", {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+        });
         throw error;
       }
+
+      console.log("✅ Message sent successfully:", message.id);
 
       // Update thread's last_message_at
       const { error: updateError } = await supabase
         .from(this.threadTableName)
         .update({ last_message_at: new Date().toISOString() })
-        .eq('id', threadId);
+        .eq("id", threadId);
 
       if (updateError) {
-        console.error('Error updating thread timestamp:', updateError);
+        console.error("Error updating thread timestamp:", updateError);
       }
 
       // Get sender profile from cache
@@ -432,10 +459,10 @@ class MessageServiceFix {
 
       return {
         ...message,
-        sender
+        sender,
       };
     } catch (error) {
-      console.error('Failed to send message:', error);
+      console.error("Failed to send message:", error);
       throw error;
     }
   }
@@ -443,43 +470,50 @@ class MessageServiceFix {
   /**
    * Mark messages as read (optimized batch update)
    */
-  async markMessagesAsRead(threadId: string, messageIds: string[]): Promise<void> {
+  async markMessagesAsRead(
+    threadId: string,
+    messageIds: string[] | undefined,
+  ): Promise<void> {
     try {
-      if (!this.userId || messageIds.length === 0) {
+      // Add defensive check for undefined messageIds
+      if (!this.userId || !messageIds || messageIds.length === 0) {
+        if (!messageIds) {
+          console.warn("⚠️ markMessagesAsRead called with undefined messageIds");
+        }
         return;
       }
 
       // Batch update all messages at once
-      const { error } = await supabase.rpc('add_user_to_read_by', {
+      const { error } = await supabase.rpc("add_user_to_read_by", {
         p_message_ids: messageIds,
-        p_user_id: this.userId
+        p_user_id: this.userId,
       });
 
       if (error) {
-        console.error('Error marking messages as read:', error);
+        console.error("Error marking messages as read:", error);
 
         // Fallback to individual updates if RPC doesn't exist
-        if (error.code === 'PGRST202') {
+        if (error.code === "PGRST202") {
           for (const messageId of messageIds) {
             const { data: message } = await supabase
-              .from('messages')
-              .select('read_by')
-              .eq('id', messageId)
+              .from("messages")
+              .select("read_by")
+              .eq("id", messageId)
               .single();
 
             if (message && !message.read_by?.includes(this.userId!)) {
               await supabase
-                .from('messages')
+                .from("messages")
                 .update({
-                  read_by: [...(message.read_by || []), this.userId]
+                  read_by: [...(message.read_by || []), this.userId],
                 })
-                .eq('id', messageId);
+                .eq("id", messageId);
             }
           }
         }
       }
     } catch (error) {
-      console.error('Failed to mark messages as read:', error);
+      console.error("Failed to mark messages as read:", error);
     }
   }
 
@@ -488,7 +522,7 @@ class MessageServiceFix {
    */
   subscribeToThread(
     threadId: string,
-    onMessage: (message: MessageWithSender) => void
+    onMessage: (message: MessageWithSender) => void,
   ): () => void {
     try {
       // Clean up existing subscription
@@ -497,11 +531,11 @@ class MessageServiceFix {
       const channel = supabase
         .channel(`thread-${threadId}`)
         .on(
-          'postgres_changes',
+          "postgres_changes",
           {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'messages',
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
             filter: `thread_id=eq.${threadId}`,
           },
           async (payload) => {
@@ -510,22 +544,22 @@ class MessageServiceFix {
               const sender = await this.getCachedProfile(payload.new.sender_id);
 
               const messageWithSender: MessageWithSender = {
-                ...payload.new as Message,
-                sender
+                ...(payload.new as Message),
+                sender,
               };
 
               onMessage(messageWithSender);
             } catch (error) {
-              console.error('Error processing new message:', error);
+              console.error("Error processing new message:", error);
             }
-          }
+          },
         )
         .on(
-          'postgres_changes',
+          "postgres_changes",
           {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'messages',
+            event: "UPDATE",
+            schema: "public",
+            table: "messages",
             filter: `thread_id=eq.${threadId}`,
           },
           async (payload) => {
@@ -534,22 +568,22 @@ class MessageServiceFix {
               const sender = await this.getCachedProfile(payload.new.sender_id);
 
               const messageWithSender: MessageWithSender = {
-                ...payload.new as Message,
-                sender
+                ...(payload.new as Message),
+                sender,
               };
 
               onMessage(messageWithSender);
             } catch (error) {
-              console.error('Error processing message update:', error);
+              console.error("Error processing message update:", error);
             }
-          }
+          },
         )
         .subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
+          if (status === "SUBSCRIBED") {
             console.log(`✅ Subscribed to thread ${threadId}`);
-          } else if (status === 'CLOSED') {
+          } else if (status === "CLOSED") {
             console.log(`⚠️ Subscription closed for thread ${threadId}`);
-          } else if (status === 'CHANNEL_ERROR') {
+          } else if (status === "CHANNEL_ERROR") {
             console.error(`❌ Subscription error for thread ${threadId}`);
           }
         });
@@ -559,7 +593,7 @@ class MessageServiceFix {
       // Return unsubscribe function
       return () => this.unsubscribeFromThread(threadId);
     } catch (error) {
-      console.error('Failed to subscribe to thread:', error);
+      console.error("Failed to subscribe to thread:", error);
       return () => {};
     }
   }
@@ -581,23 +615,23 @@ class MessageServiceFix {
   async deleteMessage(messageId: string): Promise<boolean> {
     try {
       if (!this.userId) {
-        throw new Error('User not initialized');
+        throw new Error("User not initialized");
       }
 
       const { error } = await supabase
-        .from('messages')
+        .from("messages")
         .update({ deleted_at: new Date().toISOString() })
-        .eq('id', messageId)
-        .eq('sender_id', this.userId);
+        .eq("id", messageId)
+        .eq("sender_id", this.userId);
 
       if (error) {
-        console.error('Error deleting message:', error);
+        console.error("Error deleting message:", error);
         throw error;
       }
 
       return true;
     } catch (error) {
-      console.error('Failed to delete message:', error);
+      console.error("Failed to delete message:", error);
       throw error;
     }
   }
@@ -605,35 +639,38 @@ class MessageServiceFix {
   /**
    * Edit a message
    */
-  async editMessage(messageId: string, newBody: string): Promise<Message | null> {
+  async editMessage(
+    messageId: string,
+    newBody: string,
+  ): Promise<Message | null> {
     try {
       if (!this.userId) {
-        throw new Error('User not initialized');
+        throw new Error("User not initialized");
       }
 
       if (!newBody?.trim()) {
-        throw new Error('Message body cannot be empty');
+        throw new Error("Message body cannot be empty");
       }
 
       const { data: message, error } = await supabase
-        .from('messages')
+        .from("messages")
         .update({
           body: newBody.trim(),
-          edited_at: new Date().toISOString()
+          edited_at: new Date().toISOString(),
         })
-        .eq('id', messageId)
-        .eq('sender_id', this.userId)
+        .eq("id", messageId)
+        .eq("sender_id", this.userId)
         .select()
         .single();
 
       if (error) {
-        console.error('Error editing message:', error);
+        console.error("Error editing message:", error);
         throw error;
       }
 
       return message;
     } catch (error) {
-      console.error('Failed to edit message:', error);
+      console.error("Failed to edit message:", error);
       throw error;
     }
   }
@@ -643,20 +680,22 @@ class MessageServiceFix {
    */
   subscribeToInbox(onUpdate: () => void): () => void {
     try {
+      // Return no-op if not initialized yet
       if (!this.userId) {
-        throw new Error('User not initialized');
+        console.warn("⚠️ subscribeToInbox called before initialization, skipping");
+        return () => {}; // Return no-op cleanup function
       }
 
       // Clean up existing subscription
       this.unsubscribeFromInbox();
 
       this.inboxSubscription = supabase
-        .channel('inbox-updates')
+        .channel("inbox-updates")
         .on(
-          'postgres_changes',
+          "postgres_changes",
           {
-            event: '*',
-            schema: 'public',
+            event: "*",
+            schema: "public",
             table: this.threadTableName,
           },
           (payload) => {
@@ -664,21 +703,21 @@ class MessageServiceFix {
             if (payload.new?.participant_ids?.includes(this.userId!)) {
               onUpdate();
             }
-          }
+          },
         )
         .subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            console.log('✅ Subscribed to inbox updates');
-          } else if (status === 'CLOSED') {
-            console.log('⚠️ Inbox subscription closed');
-          } else if (status === 'CHANNEL_ERROR') {
-            console.error('❌ Inbox subscription error');
+          if (status === "SUBSCRIBED") {
+            console.log("✅ Subscribed to inbox updates");
+          } else if (status === "CLOSED") {
+            console.log("⚠️ Inbox subscription closed");
+          } else if (status === "CHANNEL_ERROR") {
+            console.error("❌ Inbox subscription error");
           }
         });
 
       return () => this.unsubscribeFromInbox();
     } catch (error) {
-      console.error('Failed to subscribe to inbox:', error);
+      console.error("Failed to subscribe to inbox:", error);
       return () => {};
     }
   }
@@ -698,7 +737,7 @@ class MessageServiceFix {
    */
   cleanup() {
     // Unsubscribe from all message threads
-    this.messageSubscriptions.forEach(channel => channel.unsubscribe());
+    this.messageSubscriptions.forEach((channel) => channel.unsubscribe());
     this.messageSubscriptions.clear();
 
     // Unsubscribe from inbox
