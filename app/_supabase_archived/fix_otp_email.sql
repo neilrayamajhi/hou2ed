@@ -34,3 +34,4 @@ WHERE key = 'email';
 
 -- Verify the changes
 SELECT * FROM auth.config WHERE key = 'email';
+-- [ARCHIVED] Legacy SQL. Not applied. Use root migrations.

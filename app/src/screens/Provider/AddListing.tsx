@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,24 +9,38 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
 import { RootStackNavigationProp } from "../../navigation/types";
 import { useToast } from "../../components/ui/Toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createListing, getCurrentProviderId } from "../../services/listing.service";
+import { env } from "../../utils/env";
+import {
+  createListing,
+  getCurrentProviderId,
+} from "../../services/listing.service";
 import { useRequireProvider } from "../../hooks/useRequireProvider";
+import { type AddressData } from "../../components/forms/AddressAutocompleteClean";
+import type { RootStackParamList } from "../../navigation/types";
+
+console.log('[AddListing] module import');
 
 export default function AddListing() {
+  console.log('[AddListing] component loaded');
   const navigation = useNavigation<RootStackNavigationProp>();
+  const route = useRoute<RouteProp<RootStackParamList, 'AddListing'>>();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   useRequireProvider();
 
   // Form state - these hold the values the user types
   const [propertyName, setPropertyName] = useState("");
-  const [address, setAddress] = useState("");
+  const [addressData, setAddressData] = useState<AddressData | null>(null);
+  useEffect(() => {
+    const sel = (route.params as any)?.selectedAddress as AddressData | undefined;
+    if (sel) setAddressData(sel);
+  }, [route.params]);
   const [totalBeds, setTotalBeds] = useState("");
   const [availableBeds, setAvailableBeds] = useState("");
   const [price, setPrice] = useState("");
@@ -35,16 +49,28 @@ export default function AddListing() {
     mutationFn: async () => {
       const providerId = await getCurrentProviderId();
       if (!providerId) throw new Error("You must be logged in as a provider");
+      if (!addressData) throw new Error("Please select an address");
+
       const totalBedsNum = Number(totalBeds);
-      const availableBedsNum = availableBeds ? Number(availableBeds) : undefined;
+      const availableBedsNum = availableBeds
+        ? Number(availableBeds)
+        : undefined;
       const priceNum = price ? Number(price) : undefined;
 
       return createListing(providerId, {
         title: propertyName.trim(),
-        address: address.trim(),
+        address: addressData.street,
+        city: addressData.city,
+        state: addressData.state,
+        zip_code: addressData.zipCode,
         totalBeds: totalBedsNum,
         availableBeds: availableBedsNum,
         price: priceNum,
+        // Pass coordinates directly - no need to geocode!
+        coordinates: {
+          lat: addressData.latitude,
+          lng: addressData.longitude,
+        },
       });
     },
     onSuccess: async (res) => {
@@ -64,7 +90,7 @@ export default function AddListing() {
   // Handle save button press
   const handleSave = () => {
     // Basic validation - make sure required fields are filled
-    if (!propertyName || !address || !totalBeds) {
+    if (!propertyName || !addressData || !totalBeds) {
       Alert.alert("Missing Information", "Please fill in all required fields");
       return;
     }
@@ -92,12 +118,18 @@ export default function AddListing() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Info banner */}
         <View style={styles.infoBanner}>
-          <Ionicons name="information-circle" size={20} color={colors.primary[500]} />
+          <Ionicons
+            name="information-circle"
+            size={20}
+            color={colors.primary[500]}
+          />
           <Text style={styles.infoBannerText}>
-            This is a simplified form. The full 11-step wizard will be built later!
+            Start typing an address and select from the suggestions. Powered by
+            Mapbox!
           </Text>
         </View>
 
@@ -116,19 +148,46 @@ export default function AddListing() {
           />
         </View>
 
-        {/* Address */}
+        {/* Address with Autocomplete */}
         <View style={styles.formGroup}>
           <Text style={styles.label}>
             Address <Text style={styles.required}>*</Text>
           </Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. 123 Main St, San Francisco, CA"
-            placeholderTextColor={colors.gray[500]}
-            value={address}
-            onChangeText={setAddress}
-            accessibilityLabel="Address input"
-          />
+          {!addressData && (
+            <TouchableOpacity
+              style={[styles.selectBtn, { marginTop: spacing.sm }]}
+              onPress={() => navigation.navigate('AddressPicker')}
+            >
+              <Ionicons name="navigate-outline" size={18} color={colors.gray[900]} />
+              <Text style={styles.selectBtnText}>Select Address & Location</Text>
+            </TouchableOpacity>
+          )}
+          {addressData && (
+            <View style={styles.addressPreview}>
+              <Ionicons
+                name="checkmark-circle"
+                size={16}
+                color={colors.green}
+              />
+              <View style={styles.addressPreviewText}>
+                <Text style={styles.addressPreviewMain}>
+                  {addressData.street}
+                </Text>
+                <Text style={styles.addressPreviewSub}>
+                  {addressData.city}, {addressData.state} {addressData.zipCode}
+                </Text>
+              </View>
+            </View>
+          )}
+          {addressData && (
+            <TouchableOpacity
+              style={[styles.selectBtn, { marginTop: spacing.sm }]}
+              onPress={() => navigation.navigate('AddressPicker')}
+            >
+              <Ionicons name="pencil" size={18} color={colors.gray[900]} />
+              <Text style={styles.selectBtnText}>Change Address</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Total Beds */}
@@ -199,8 +258,14 @@ export default function AddListing() {
           accessibilityRole="button"
           disabled={isPending}
         >
-          <Ionicons name={isPending ? "sync" : "checkmark-circle"} size={20} color={colors.gray[900]} />
-          <Text style={styles.saveButtonText}>{isPending ? "Saving..." : "Save Listing"}</Text>
+          <Ionicons
+            name={isPending ? "sync" : "checkmark-circle"}
+            size={20}
+            color={colors.gray[900]}
+          />
+          <Text style={styles.saveButtonText}>
+            {isPending ? "Saving..." : "Save Listing"}
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -328,4 +393,43 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: colors.gray[900],
   },
+  addressPreview: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginTop: spacing.sm,
+    padding: spacing.sm,
+    backgroundColor: colors.gray[800],
+    borderRadius: radius.sm,
+    gap: spacing.sm,
+  },
+  addressPreviewText: {
+    flex: 1,
+  },
+  addressPreviewMain: {
+    fontSize: typography.sizes.sm,
+    fontWeight: "600",
+    color: colors.gray[100],
+  },
+  addressPreviewSub: {
+    fontSize: typography.sizes.xs,
+    color: colors.gray[400],
+    marginTop: 2,
+  },
+  selectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.primary[500],
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    alignSelf: 'flex-start',
+  },
+  selectBtnText: {
+    color: colors.gray[900],
+    fontWeight: '600',
+  },
 });
+
+
+

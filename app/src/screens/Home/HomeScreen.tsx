@@ -21,11 +21,7 @@ import ListingCard from "../../components/ListingCard";
 import FiltersSheet from "../Search/FiltersSheet";
 import { useFilterStore } from "../../state/useFilterStore";
 import { useLocation } from "../../hooks/useLocation";
-import {
-  generateMockListings,
-  generateListingsAroundLocation,
-  filterListingsByQuick,
-} from "../../data/mockListings";
+import { filterListingsByQuick } from "../../data/mockListings";
 import { fetchRealShelters } from "../../services/shelterService";
 import { getMarketplaceListings, type MarketplaceListing } from "../../services/marketplace.service";
 import { usePerformance } from "../../utils/perf";
@@ -121,29 +117,19 @@ export default function HomeScreen() {
           setIsRealData(true);
           setDataSource('Live Database');
         } else {
-          // Fall back to mock data if no database listings
-          console.log('No database listings found, using mock data');
-          if (location) {
-            allListings = generateListingsAroundLocation(
-              location.latitude,
-              location.longitude,
-              20
-            );
-          } else {
-            allListings = generateMockListings(20);
-          }
+          // No database listings — show empty list (no mock)
+          console.log('No database listings found');
+          allListings = [] as any;
+          setIsRealData(true);
+          setDataSource('Live Database');
         }
 
         const filtered = filterListingsByQuick(allListings, quickFilters);
         setListings(filtered);
       } catch (error) {
         console.error('Error loading listings:', error);
-        // Fall back to mock data on error
-        const mockData = location
-          ? generateListingsAroundLocation(location.latitude, location.longitude, 20)
-          : generateMockListings(20);
-        const filtered = filterListingsByQuick(mockData, quickFilters);
-        setListings(filtered);
+        // On error, show empty list (no mock)
+        setListings([]);
       } finally {
         listingLoadPerf.end();
         setLoadingData(false);

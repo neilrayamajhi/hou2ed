@@ -127,3 +127,4 @@ GRANT ALL ON public.message_threads TO authenticated;
 GRANT ALL ON public.messages TO authenticated;
 GRANT USAGE ON SEQUENCE message_threads_id_seq TO authenticated;
 GRANT USAGE ON SEQUENCE messages_id_seq TO authenticated;
+-- [ARCHIVED] Legacy migration. Not used. Use root `supabase/migrations`.

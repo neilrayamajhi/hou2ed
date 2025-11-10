@@ -173,15 +173,27 @@ export default function ProviderDashboard() {
             <Text style={styles.tileLabel}>New Applications</Text>
           </TouchableOpacity>
 
-          {/* Add New Listing Tile */}
+          {/* Create Listing via Wizard */}
           <TouchableOpacity
             style={[styles.tile, styles.addListingTile]}
             onPress={() => navigation.navigate("ListingWizard")}
-            accessibilityLabel="Add new listing"
+            accessibilityLabel="Create listing (wizard)"
             accessibilityRole="button"
           >
             <Ionicons name="add-circle" size={32} color={colors.gray[900]} />
-            <Text style={styles.addListingText}>Add New Listing</Text>
+            <Text style={styles.addListingText}>Create Listing (Wizard)</Text>
+          </TouchableOpacity>
+
+          {/* Geocode Test Tile */}
+          <TouchableOpacity
+            style={[styles.tile, styles.applicationsTile]}
+            onPress={() => navigation.navigate("GeoTest")}
+            accessibilityLabel="Open Geocoding Test"
+            accessibilityRole="button"
+          >
+            <Ionicons name="navigate-outline" size={32} color={colors.primary[500]} />
+            <Text style={styles.tileNumber}>Test</Text>
+            <Text style={styles.tileLabel}>Geocoding</Text>
           </TouchableOpacity>
         </View>
 

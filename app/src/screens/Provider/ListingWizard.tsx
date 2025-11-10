@@ -9,9 +9,13 @@ import {
   TextInput,
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import AddressAutocompleteClean, { type AddressData } from "../../components/forms/AddressAutocompleteClean";
+import MapView, { Marker } from "react-native-maps";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
 import { RootStackNavigationProp } from "../../navigation/types";
 import { useToast } from "../../components/ui/Toast";
@@ -21,7 +25,7 @@ import {
   getCurrentProviderId,
 } from "../../services/listing.service";
 import * as ImagePicker from "expo-image-picker";
-import { uploadListingImage } from "../../services/storage.service";
+import { uploadListingImageClean } from "../../services/storage.clean.service";
 import { useRequireProvider } from "../../hooks/useRequireProvider";
 
 type StepKey =
@@ -63,7 +67,9 @@ export default function ListingWizard() {
 
   // Form state (MVP subset)
   const [title, setTitle] = useState("");
+  const [overview, setOverview] = useState("");
   const [address, setAddress] = useState("");
+  const [locationSel, setLocationSel] = useState<AddressData | null>(null);
   const [totalBeds, setTotalBeds] = useState("");
   const [availableBeds, setAvailableBeds] = useState("");
   const [price, setPrice] = useState("");
@@ -101,10 +107,15 @@ export default function ListingWizard() {
       const priceNum = price ? Number(price) : undefined;
       const created = await createListing(providerId, {
         title: title.trim(),
-        address: address.trim(),
+        description: overview && overview.trim().length > 0 ? overview.trim() : undefined,
+        address: (locationSel?.street || address).trim(),
+        city: locationSel?.city,
+        state: locationSel?.state,
+        zip_code: locationSel?.zipCode,
         totalBeds: totalBedsNum,
         availableBeds: availableBedsNum,
         price: priceNum,
+        coordinates: locationSel ? { lat: locationSel.latitude, lng: locationSel.longitude } : undefined,
         amenities: selectedAmenities.length > 0 ? selectedAmenities : undefined,
         services: selectedServices.length > 0 ? selectedServices : undefined,
         curfew: curfew.trim() || undefined,
@@ -121,7 +132,7 @@ export default function ListingWizard() {
         if (photos.length > 0) {
           const urls: string[] = [];
           for (const uri of photos) {
-            const res = await uploadListingImage(uri, created.listingId, {
+            const res = await uploadListingImageClean(uri, created.listingId, {
               resize: "full",
             });
             if (res.success && res.url) urls.push(res.url);
@@ -130,7 +141,13 @@ export default function ListingWizard() {
             const { updateListing } = await import(
               "../../services/listing.service"
             );
-            await updateListing(created.listingId, { images: urls });
+            const res = await updateListing(created.listingId, { images: urls });
+            if (!res.success) {
+              console.warn('[ListingWizard] Failed to persist images:', res.error);
+            }
+          } else if (photos.length > 0 && urls.length === 0) {
+            // All uploads failed — avoid saving file:// paths by not writing images
+            console.warn('[ListingWizard] All photo uploads failed; not saving images field');
           }
         }
         // Persist per-day availability (calendar) if provided
@@ -166,11 +183,17 @@ export default function ListingWizard() {
 
   const next = () => {
     if (currentStep === "Basics") {
-      if (!title.trim() || !address.trim() || !totalBeds) {
+      if (!title.trim() || !totalBeds) {
         Alert.alert(
           "Missing info",
-          "Title, address and total beds are required",
+          "Title and total beds are required",
         );
+        return;
+      }
+    }
+    if (currentStep === "Location") {
+      if (!locationSel) {
+        Alert.alert("Missing address", "Please select an address and location.");
         return;
       }
     }
@@ -189,14 +212,17 @@ export default function ListingWizard() {
         placeholderTextColor={colors.gray[500]}
       />
 
-      <Text style={styles.label}>Address *</Text>
+      <Text style={styles.label}>Overview (optional)</Text>
       <TextInput
-        style={styles.input}
-        value={address}
-        onChangeText={setAddress}
-        placeholder="e.g. 123 Main St, City"
+        style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
+        value={overview}
+        onChangeText={setOverview}
+        placeholder="Describe your program, services, and who you support."
         placeholderTextColor={colors.gray[500]}
+        multiline
       />
+
+      {/* Address moved to Location step */}
 
       <Text style={styles.label}>Total beds *</Text>
       <TextInput
@@ -295,6 +321,55 @@ export default function ListingWizard() {
       setArray([...array, item]);
     }
   };
+
+  // New richer Location step UI (address + map)
+  const renderLocation2 = () => (
+    <View style={{ gap: spacing.lg }}>
+      <View>
+        <Text style={styles.label}>Address & Location *</Text>
+        <Text style={styles.sectionDescription}>Search for your address, then confirm the pin on the map.</Text>
+      </View>
+
+      {/* Search card */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Search for an address</Text>
+        <AddressAutocompleteClean
+          onAddressSelect={(addr) => setLocationSel(addr)}
+          placeholder="Start typing..."
+        />
+      </View>
+
+      {/* Selected address card */}
+      {locationSel ? (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Selected address</Text>
+          <Text style={{ color: colors.gray[100], fontWeight: "600" }}>{locationSel.street}</Text>
+          <Text style={{ color: colors.gray[400], marginTop: 4 }}>
+            {locationSel.city}, {locationSel.state} {locationSel.zipCode}
+          </Text>
+        </View>
+      ) : (
+        <Text style={styles.helper}>No address selected yet.</Text>
+      )}
+
+      {/* Map preview */}
+      {locationSel && (
+        <View style={{ borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: colors.gray[800] }}>
+          <MapView
+            style={{ height: 240, width: "100%" }}
+            initialRegion={{
+              latitude: locationSel.latitude,
+              longitude: locationSel.longitude,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            }}
+          >
+            <Marker coordinate={{ latitude: locationSel.latitude, longitude: locationSel.longitude }} />
+          </MapView>
+        </View>
+      )}
+    </View>
+  );
 
   const renderAmenities = () => {
     const amenitiesOptions = [
@@ -690,8 +765,26 @@ export default function ListingWizard() {
           <Text style={styles.reviewKey}>Name:</Text> {title || "-"}
         </Text>
         <Text style={styles.reviewItem}>
-          <Text style={styles.reviewKey}>Address:</Text> {address || "-"}
+          <Text style={styles.reviewKey}>Address:</Text>{" "}
+          {locationSel
+            ? `${locationSel.street}, ${locationSel.city}, ${locationSel.state} ${locationSel.zipCode}`
+            : address || "-"}
         </Text>
+        {locationSel && (
+          <View style={{ marginTop: spacing.sm, borderRadius: radius.md, overflow: 'hidden', borderWidth: 1, borderColor: colors.gray[800] }}>
+            <MapView
+              style={{ height: 160, width: '100%' }}
+              initialRegion={{
+                latitude: locationSel.latitude,
+                longitude: locationSel.longitude,
+                latitudeDelta: 0.01,
+                longitudeDelta: 0.01,
+              }}
+            >
+              <Marker coordinate={{ latitude: locationSel.latitude, longitude: locationSel.longitude }} />
+            </MapView>
+          </View>
+        )}
         <Text style={styles.reviewItem}>
           <Text style={styles.reviewKey}>Total beds:</Text> {totalBeds || "-"}
         </Text>
@@ -777,7 +870,7 @@ export default function ListingWizard() {
       case "Basics":
         return renderBasics();
       case "Location":
-        return renderLocation();
+        return renderLocation2();
       case "Photos":
         return renderPhotos();
       case "AmenitiesRules":
@@ -812,13 +905,20 @@ export default function ListingWizard() {
         />
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-      >
-        <Text style={styles.stepTitle}>{stepTitles[currentStep]}</Text>
-        {body()}
-      </ScrollView>
+      {currentStep === "Location" ? (
+        <KeyboardAvoidingView
+          style={styles.locationContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <Text style={styles.stepTitle}>{stepTitles[currentStep]}</Text>
+          {body()}
+        </KeyboardAvoidingView>
+      ) : (
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+          <Text style={styles.stepTitle}>{stepTitles[currentStep]}</Text>
+          {body()}
+        </ScrollView>
+      )}
 
       <View style={styles.bottomBar}>
         {stepIndex > 0 ? (
@@ -887,11 +987,24 @@ const styles = StyleSheet.create({
   progressBarFill: { height: 4, backgroundColor: colors.primary[500] },
   scroll: { flex: 1 },
   scrollContent: { padding: spacing.lg, paddingBottom: 120 },
+  locationContainer: { flex: 1, padding: spacing.lg, paddingBottom: 120 },
   stepTitle: {
     fontSize: typography.sizes.xl,
     fontWeight: "600",
     color: colors.gray[50],
     marginBottom: spacing.lg,
+  },
+  card: {
+    backgroundColor: colors.gray[900],
+    borderWidth: 1,
+    borderColor: colors.gray[800],
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  cardTitle: {
+    color: colors.gray[200],
+    fontSize: typography.sizes.sm,
+    marginBottom: spacing.sm,
   },
   sectionDescription: {
     fontSize: typography.sizes.sm,
@@ -1043,3 +1156,5 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+
+

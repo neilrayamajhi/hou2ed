@@ -26,7 +26,7 @@ import {
 } from "../../services/listing.service";
 import { useRequireProvider } from "../../hooks/useRequireProvider";
 import * as ImagePicker from "expo-image-picker";
-import { uploadListingImage } from "../../services/storage.service";
+import { uploadListingImageClean as uploadListingImage } from "../../services/storage.clean.service";
 
 export default function EditListing() {
   const navigation = useNavigation<RootStackNavigationProp>();
@@ -65,8 +65,7 @@ export default function EditListing() {
   const [maxAge, setMaxAge] = useState("");
   const [selectedEligibility, setSelectedEligibility] = useState<string[]>([]);
 
-  const isRemote = (uri: string) =>
-    uri.startsWith("http://") || uri.startsWith("https://");
+  const isRemote = (uri: string) => /^https?:\/\//i.test(uri);
 
   useEffect(() => {
     (async () => {
@@ -122,6 +121,13 @@ export default function EditListing() {
         finalImages = finalImages.map((u) =>
           isRemote(u) ? u : uploaded[idx++] || u,
         );
+        // If any local URIs remain, block save to avoid persisting file:// paths
+        const stillLocal = finalImages.some((u) => !isRemote(u));
+        if (stillLocal) {
+          throw new Error(
+            "Photos are still uploading. Please wait a moment and tap Save again.",
+          );
+        }
       }
       updates.images = finalImages;
       if (Object.keys(availabilityDays).length > 0) {

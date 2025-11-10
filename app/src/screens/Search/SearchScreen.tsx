@@ -20,10 +20,7 @@ import EmptyState from "../../components/EmptyState";
 import OfflineBanner from "../../components/OfflineBanner";
 import FiltersSheet from "./FiltersSheet";
 import { useFilterStore } from "../../state/useFilterStore";
-import {
-  generateMockListings,
-  filterListingsByQuick,
-} from "../../data/mockListings";
+import { supabase } from "../../lib/supabase";
 import { sortListings, SORT_OPTIONS } from "../../utils/sortListings";
 import { usePerformance } from "../../utils/perf";
 import type { Listing } from "../../types/listing";
@@ -78,7 +75,7 @@ export default function SearchScreen() {
   const [showFilters, setShowFilters] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
-  const [listings, setListings] = useState<Listing[]>([]);
+  const [listings, setListings] = useState<any[]>([]);
 
   // Performance tracking
   const searchPerf = usePerformance("search");
@@ -90,31 +87,103 @@ export default function SearchScreen() {
     setIsOffline(false);
   }, []);
 
-  // Load and filter listings
+  // Load listings from Supabase and map to card model
   useEffect(() => {
-    searchPerf.start();
+    let cancelled = false;
+    (async () => {
+      try {
+        searchPerf.start();
+        const { data, error } = await supabase
+          .from("listings")
+          .select(
+            "id,title,description,address,city,state,zip_code,images,verified,availability,cost,eligibility,services"
+          )
+          .eq("is_active", true)
+          .limit(100);
+        if (error) {
+          console.error("Fetch listings error:", error);
+          return;
+        }
+        // Normalize images to public https URLs
+        const toArray = (v: any) => (Array.isArray(v) ? v : v ? [v] : []);
+        const toStringVal = (v: any) => {
+          if (v == null) return null;
+          if (typeof v === 'string') return v.trim();
+          if (typeof v === 'object' && (v as any).url) return String((v as any).url).trim();
+          try { return String(v).trim(); } catch { return null; }
+        };
+        const toPublicUrl = (p: string | null) => {
+          if (!p) return null;
+          if (/^https?:\/\//i.test(p)) return p;
+          const { data: pub } = supabase.storage.from('listing-images').getPublicUrl(p);
+          return pub?.publicUrl || null;
+        };
 
-    const allListings = generateMockListings(30);
-    let filtered = filterListingsByQuick(allListings, quickFilters);
+        const mapped = (data || []).map((row: any) => {
+          const normalizedImages: string[] = toArray(row.images)
+            .map(toStringVal)
+            .filter(Boolean)
+            .map((s) => toPublicUrl(s as string))
+            .filter((u): u is string => !!u && /^https?:\/\//i.test(u));
+          const coverImage = normalizedImages[0] || undefined;
+          try {
+            console.log('[Search] listing', row.id, 'images:', normalizedImages);
+          } catch {}
+          const price = {
+            isFree: row?.cost?.free === true || !row?.cost?.monthly,
+            min: row?.cost?.monthly || 0,
+            max: row?.cost?.monthly || 0,
+            acceptsVouchers: Array.isArray(row?.cost?.accepts) && row.cost.accepts.includes("vouchers"),
+          };
+          const avail = row?.availability || {};
+          const bedsToday = Number(avail?.beds_today || 0);
+          let availability: "available" | "waitlist" | "full" | "unknown" = "unknown";
+          if (bedsToday > 0) availability = "available";
+          else if (avail?.waitlist > 0) availability = "waitlist";
+          else availability = "full";
+          const features = {
+            acceptsFamilies: Array.isArray(row?.eligibility?.family_status) ? row.eligibility.family_status.includes("families") : false,
+            acceptsVeterans: row?.eligibility?.veterans === true,
+            wheelchairAccessible: Array.isArray(row?.accessibility?.mobility) ? row.accessibility.mobility.includes("wheelchair") : false,
+            petsAllowed: row?.rules?.pets === "allowed",
+          };
+          return {
+            id: row.id,
+            name: row.title,
+            provider: row.city ? `${row.city}, ${row.state}` : "",
+            coverImage,
+            images: normalizedImages,
+            verified: !!row.verified,
+            distance: undefined,
+            price,
+            rating: undefined,
+            features,
+            availability,
+            bedsAvailable: bedsToday,
+          };
+        });
 
-    // Apply search query filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (l) =>
-          l.name.toLowerCase().includes(query) ||
-          l.description.toLowerCase().includes(query) ||
-          l.address.city.toLowerCase().includes(query) ||
-          l.provider.toLowerCase().includes(query)
-      );
-    }
+        // Text filter
+        const query = (searchQuery || "").toLowerCase();
+        let filtered = !query
+          ? mapped
+          : mapped.filter((l: any) =>
+              (l.name || "").toLowerCase().includes(query) ||
+              (l.provider || "").toLowerCase().includes(query)
+            );
 
-    // Apply sorting
-    const sorted = sortListings(filtered, sortBy);
-    setListings(sorted);
+        // TODO: Apply quickFilters mapping to DB fields if needed
 
-    searchPerf.end();
-  }, [quickFilters, searchQuery, sortBy]); // Removed searchPerf from dependencies
+        const sorted = sortListings(filtered, sortBy);
+        if (!cancelled) setListings(sorted);
+      } finally {
+        searchPerf.end();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [quickFilters, searchQuery, sortBy]);
 
   // Handle search
   const handleSearch = useCallback(() => {

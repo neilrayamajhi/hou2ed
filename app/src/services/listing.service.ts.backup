@@ -23,11 +23,6 @@ export interface CreateListingInput {
   availableBeds?: number;
   price?: number;
   description?: string;
-  // Optional: Pre-geocoded coordinates (skips geocoding if provided)
-  coordinates?: {
-    lat: number;
-    lng: number;
-  };
   // New fields for amenities, services, rules, eligibility
   amenities?: string[];
   services?: string[];
@@ -336,38 +331,23 @@ export async function createListing(
       }
     }
 
-    // Use provided coordinates or geocode the address
-    let lat: number;
-    let lng: number;
+    // Geocode the address to get coordinates
+    let lat = 34.0522; // Default LA coordinates as fallback
+    let lng = -118.2437;
 
-    if (listingData.coordinates) {
-      // Coordinates provided from autocomplete - no need to geocode!
-      lat = listingData.coordinates.lat;
-      lng = listingData.coordinates.lng;
-      console.log("✅ Using pre-geocoded coordinates:", { lat, lng });
+    const geocodeResult = await geocodeAddress({
+      street: listingData.address,
+      city: listingData.city || null,
+      state: listingData.state || null,
+      zip: listingData.zip_code || null,
+    });
+
+    if (geocodeResult) {
+      lat = geocodeResult.lat;
+      lng = geocodeResult.lng;
+      console.log("✅ Geocoded address:", { address: listingData.address, lat, lng });
     } else {
-      // No coordinates provided, geocode the address
-      lat = 34.0522; // Default LA coordinates as fallback
-      lng = -118.2437;
-
-      const geocodeResult = await geocodeAddress({
-        street: listingData.address,
-        city: listingData.city || null,
-        state: listingData.state || null,
-        zip: listingData.zip_code || null,
-      });
-
-      if (geocodeResult) {
-        lat = geocodeResult.lat;
-        lng = geocodeResult.lng;
-        console.log("✅ Geocoded address:", {
-          address: listingData.address,
-          lat,
-          lng,
-        });
-      } else {
-        console.warn("⚠️ Geocoding failed, using default LA coordinates");
-      }
+      console.warn("⚠️ Geocoding failed, using default LA coordinates");
     }
 
     // Prepare the data for Supabase

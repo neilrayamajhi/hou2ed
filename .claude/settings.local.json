@@ -1,7 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Read(//c/Users/samso/Documents/My Code, Projects, etc/**)"
+      "Read(//c/Users/samso/Documents/My Code, Projects, etc/**)",
+      "Bash(npx prettier:*)",
+      "Bash(npm test:*)",
+      "Bash(npx tsc:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(npm install:*)",
+      "Bash(winget:*)",
+      "Bash(scoop:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []
