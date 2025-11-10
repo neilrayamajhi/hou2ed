@@ -22,6 +22,8 @@ import AddListing from "../screens/Provider/AddListing";
 import EditListing from "../screens/Provider/EditListing";
 import AvailabilityUpdater from "../screens/Provider/AvailabilityUpdater";
 import ListingWizard from "../screens/Provider/ListingWizard";
+import GeoTest from "../screens/Provider/GeoTest";
+import AddressPicker from "../screens/Provider/AddressPicker";
 import ApplicationsInbox from "../screens/Provider/ApplicationsInbox";
 import ApplicationDetail from "../screens/Provider/ApplicationDetail";
 import { RootStackParamList } from "./types";
@@ -98,6 +100,8 @@ export default function RootNavigator() {
           component={AvailabilityUpdater}
         />
         <Stack.Screen name="ListingWizard" component={ListingWizard} />
+        <Stack.Screen name="GeoTest" component={GeoTest} />
+        <Stack.Screen name="AddressPicker" component={AddressPicker} />
         <Stack.Screen name="ApplicationsInbox" component={ApplicationsInbox} />
         <Stack.Screen name="ApplicationDetail" component={ApplicationDetail} />
       </Stack.Navigator>

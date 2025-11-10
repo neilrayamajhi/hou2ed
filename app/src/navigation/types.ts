@@ -25,6 +25,7 @@ export type RootStackParamList = {
   DevMenu: undefined;
   ProviderDashboard: undefined;
   AddListing: undefined;
+  AddressPicker: undefined;
   EditListing: {
     listingId: string;
     listingData?: {
@@ -38,6 +39,7 @@ export type RootStackParamList = {
   };
   AvailabilityUpdater: undefined;
   ListingWizard: undefined;
+  GeoTest: undefined;
   ApplicationsInbox: undefined;
   ApplicationDetail: { applicationId: string };
   ProviderListingDetails: { listingId: string };

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -15,98 +15,26 @@ import { MapView, Marker } from "../../components/MapView";
 import PhotoCarousel from "../../components/patterns/PhotoCarousel";
 import Badge from "../../components/ui/Badge";
 import { colors, spacing, radius } from "../../theme/tokens";
-import { fetchShelterDetails } from "../../services/shelterDetailsService";
-import useSavedStore from "../../state/useSavedStore";
-import { messageService } from "../../services/messageService";
-import { useAuthStore } from "../../state/useAuthStore";
+import { supabase } from "../../lib/supabase";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-
-// Mock data for the listing
-const mockListing = {
-  id: "1",
-  title: "Safe Haven Recovery House",
-  providerName: "Hope Foundation",
-  isVerified: true,
-  isDVSensitive: false,
-  images: [
-    "https://via.placeholder.com/400x300/1a1a1a/D4AF37?text=House+Front",
-    "https://via.placeholder.com/400x300/1a1a1a/D4AF37?text=Living+Room",
-    "https://via.placeholder.com/400x300/1a1a1a/D4AF37?text=Bedroom",
-    "https://via.placeholder.com/400x300/1a1a1a/D4AF37?text=Kitchen",
-  ],
-  bedsAvailable: 3,
-  bedsTotal: 8,
-  costPerMonth: 650,
-  intakeMethod: "Call first",
-  lastUpdated: "2 hours ago",
-  overview:
-    "A supportive transitional housing program focused on recovery and reintegration. We provide a structured environment with peer support and case management services. Our residents typically stay 6-12 months while working on their recovery goals.",
-  amenities: [
-    "WiFi",
-    "Laundry",
-    "Kitchen access",
-    "Computer lab",
-    "Group meeting space",
-    "Parking",
-    "Wheelchair accessible",
-    "Pet friendly (ESA only)",
-  ],
-  services: [
-    "Case management",
-    "Group therapy",
-    "Job placement assistance",
-    "Life skills training",
-    "Medication management",
-    "Transportation vouchers",
-  ],
-  rules: [
-    "No alcohol or drugs",
-    "Curfew 10 PM weekdays, midnight weekends",
-    "Mandatory house meetings",
-    "Weekly drug testing",
-    "Must be employed or in treatment",
-    "30-day probation period",
-  ],
-  eligibility: [
-    "18+ years old",
-    "In recovery (min 30 days clean)",
-    "Valid ID required",
-    "Income verification",
-    "Background check required",
-    "No violent felonies",
-  ],
-  location: {
-    latitude: 34.0522,
-    longitude: -118.2437,
-    address: "1234 Recovery Way",
-    city: "Los Angeles",
-    state: "CA",
-    zip: "90001",
-  },
-};
-
-interface CollapsibleSectionProps {
-  title: string;
-  children: React.ReactNode;
-  defaultExpanded?: boolean;
-}
 
 function CollapsibleSection({
   title,
   children,
   defaultExpanded = false,
-}: CollapsibleSectionProps) {
+}: {
+  title: string;
+  children: React.ReactNode;
+  defaultExpanded?: boolean;
+}) {
   const [expanded, setExpanded] = useState(defaultExpanded);
-
   return (
     <View style={styles.section}>
       <TouchableOpacity
         style={styles.sectionHeader}
-        onPress={() => setExpanded(!expanded)}
+        onPress={() => setExpanded((e) => !e)}
         activeOpacity={0.7}
-        accessibilityRole="button"
-        accessibilityLabel={`${title} section, ${expanded ? "expanded" : "collapsed"}`}
       >
         <Text style={styles.sectionTitle}>{title}</Text>
         <Ionicons
@@ -120,304 +48,213 @@ function CollapsibleSection({
   );
 }
 
+function toStringArray(v: any): string[] {
+  try {
+    if (Array.isArray(v)) return v.filter(Boolean).map(String);
+    if (v && typeof v === "object") {
+      return Object.entries(v as Record<string, any>)
+        .filter(([, val]) => !!val)
+        .map(([key]) => String(key));
+    }
+    if (typeof v === "string" && v.trim()) return [v.trim()];
+  } catch {}
+  return [];
+}
+
+function normalizeImageUrls(input: any): string[] {
+  const arr = Array.isArray(input) ? input : input ? [input] : [];
+  return arr
+    .filter(Boolean)
+    .map((u: any) => {
+      const s = String(u).trim();
+      // Drop any bad entries that include a device file path
+      if (s.includes("file://")) return "";
+      if (/^https?:\/\//i.test(s)) return s;
+      // If looks like a storage path, convert to public URL
+      try {
+        const { data } = supabase.storage
+          .from("listing-images")
+          .getPublicUrl(s);
+        return data.publicUrl || s;
+      } catch {
+        return s;
+      }
+    })
+    .filter((u: string) => !!u && /^https?:\/\//i.test(u));
+}
+
 export default function ListingDetailsScreen() {
   const navigation = useNavigation();
-  const route = useRoute();
-  const { isListingSaved, toggleListing } = useSavedStore();
-  const { user } = useAuthStore();
-  const [isLoadingDetails, setIsLoadingDetails] = useState(true);
-  const [shelterDetails, setShelterDetails] = useState<any>(null);
-  const [isCreatingThread, setIsCreatingThread] = useState(false);
+  const route = useRoute<any>();
+  const listingFromParams = route.params?.listing || {};
 
-  // Get listing from navigation params, fallback to mock data
-  const listingFromParams = route.params?.listing;
-  const baseListing =
-    listingFromParams && typeof listingFromParams === "object"
-      ? {
-          id: listingFromParams.id,
-          providerId: listingFromParams.provider_id,
-          title: listingFromParams.name || "Safe Haven Recovery House",
-          providerName: listingFromParams.provider || "Hope Foundation",
-          isVerified: listingFromParams.verified || false,
-          isDVSensitive: false,
-          images: listingFromParams.images || mockListing.images,
-          bedsAvailable: listingFromParams.bedsAvailable || 3,
-          bedsTotal: listingFromParams.bedsTotal || 8,
-          costPerMonth: listingFromParams.price?.min || 650,
-          intakeMethod: "Call first",
-          lastUpdated: "2 hours ago",
-          type: listingFromParams.type,
-          location: {
-            latitude:
-              listingFromParams.coordinates?.latitude ||
-              mockListing.location.latitude,
-            longitude:
-              listingFromParams.coordinates?.longitude ||
-              mockListing.location.longitude,
-            address:
-              listingFromParams.address?.street || mockListing.location.address,
-            city: listingFromParams.address?.city || mockListing.location.city,
-            state:
-              listingFromParams.address?.state || mockListing.location.state,
-            zip: listingFromParams.address?.zipCode || mockListing.location.zip,
-          },
-        }
-      : mockListing;
+  const [dbListing, setDbListing] = useState<any>(null);
+  const [loadingDb, setLoadingDb] = useState(false);
 
-  // Combine base listing with fetched details
-  const listing = shelterDetails
-    ? {
-        ...baseListing,
-        overview: shelterDetails.overview || baseListing.overview,
-        amenities: shelterDetails.amenities || mockListing.amenities,
-        services: shelterDetails.services || mockListing.services,
-        rules: shelterDetails.rules || mockListing.rules,
-        eligibility: shelterDetails.eligibility || mockListing.eligibility,
-        intakeMethod: shelterDetails.intakeProcess || baseListing.intakeMethod,
-      }
-    : {
-        ...baseListing,
-        overview: mockListing.overview,
-        amenities: mockListing.amenities,
-        services: mockListing.services,
-        rules: mockListing.rules,
-        eligibility: mockListing.eligibility,
-      };
-
-  // Fetch detailed shelter information
   useEffect(() => {
-    async function loadShelterDetails() {
-      setIsLoadingDetails(true);
+    const id = listingFromParams?.id;
+    if (!id) return;
+    let cancelled = false;
+    (async () => {
       try {
-        const details = await fetchShelterDetails(
-          baseListing.title,
-          baseListing.type,
-          {
-            city: baseListing.location.city,
-            state: baseListing.location.state,
-          },
-        );
-        setShelterDetails(details);
-      } catch (error) {
-        console.error("Error loading shelter details:", error);
-        // Fall back to mock data on error
+        setLoadingDb(true);
+        const { data, error } = await supabase
+          .from("listings")
+          .select(
+            "id,title,description,amenities,services,rules,eligibility,images,address,city,state,zip_code,lat,lng",
+          )
+          .eq("id", id)
+          .maybeSingle();
+        if (!cancelled) {
+          if (error)
+            console.warn("Failed to fetch listing by id:", error.message);
+          setDbListing(data || null);
+        }
       } finally {
-        setIsLoadingDetails(false);
+        if (!cancelled) setLoadingDb(false);
       }
-    }
-
-    loadShelterDetails();
-  }, [
-    baseListing.title,
-    baseListing.type,
-    baseListing.location.city,
-    baseListing.location.state,
-  ]);
-
-  // Check if listing is saved
-  const isSaved = isListingSaved(baseListing.id);
-
-  const handleSave = useCallback(() => {
-    // Create SavedListing object for the store
-    const savedListing = {
-      id: baseListing.id,
-      title: baseListing.title,
-      address: baseListing.location?.fullAddress || "Address not available",
-      rent: baseListing.costPerMonth,
-      bedrooms: baseListing.bedsTotal || 0,
-      bathrooms: 1, // Default value as it's not in the data
-      sqft: 0, // Default value as it's not in the data
-      imageUrl: baseListing.images?.[0] || "",
-      savedAt: new Date(),
-      availableUnits: baseListing.bedsAvailable,
-      propertyType: baseListing.type,
+    })();
+    return () => {
+      cancelled = true;
     };
-    toggleListing(savedListing);
-  }, [baseListing, toggleListing]);
+  }, [listingFromParams?.id]);
 
-  const handleApply = useCallback(() => {
-    // Navigate to application flow
-    // @ts-ignore
-    navigation.navigate("ApplyWizard", { listingId: listing.id });
-  }, [navigation, listing.id]);
+  const merged = useMemo(() => {
+    const base = {
+      id: listingFromParams.id,
+      title: listingFromParams.name || listingFromParams.title || "",
+      providerName: listingFromParams.provider || "",
+      isVerified: !!listingFromParams.verified,
+      isDVSensitive: !!listingFromParams.isDVSensitive,
+      images: normalizeImageUrls(
+        listingFromParams.images ||
+          (listingFromParams.coverImage ? [listingFromParams.coverImage] : []),
+      ),
+      bedsAvailable: listingFromParams.bedsAvailable ?? 0,
+      bedsTotal: listingFromParams.bedsTotal ?? 0,
+      costPerMonth:
+        listingFromParams.price?.min ?? listingFromParams.price ?? 0,
+      intakeMethod: listingFromParams.intakeMethod || "",
+      lastUpdated: listingFromParams.lastUpdated || "",
+      overview:
+        listingFromParams.overview || listingFromParams.description || "",
+      amenities: listingFromParams.amenities ?? [],
+      services: listingFromParams.services ?? [],
+      rules: listingFromParams.rules ?? [],
+      eligibility: listingFromParams.eligibility ?? [],
+      location: {
+        latitude:
+          listingFromParams.coordinates?.latitude ?? listingFromParams.lat,
+        longitude:
+          listingFromParams.coordinates?.longitude ?? listingFromParams.lng,
+        address: listingFromParams.address?.street ?? listingFromParams.address,
+        city: listingFromParams.address?.city ?? listingFromParams.city,
+        state: listingFromParams.address?.state ?? listingFromParams.state,
+        zip: listingFromParams.address?.zipCode ?? listingFromParams.zip,
+      },
+    };
 
-  const handleMessage = useCallback(async () => {
-    if (!user) {
-      // Navigate to sign in if not authenticated
-      // @ts-ignore
-      navigation.navigate("Auth", { screen: "SignIn" });
-      return;
-    }
+    if (!dbListing) return base;
+    return {
+      ...base,
+      title: dbListing.title || base.title,
+      overview: dbListing.description || base.overview,
+      amenities: dbListing.amenities ?? base.amenities,
+      services: dbListing.services ?? base.services,
+      rules: dbListing.rules ?? base.rules,
+      eligibility: dbListing.eligibility ?? base.eligibility,
+      images: normalizeImageUrls(dbListing.images ?? base.images),
+      location: {
+        latitude: (dbListing as any).lat ?? base.location.latitude,
+        longitude: (dbListing as any).lng ?? base.location.longitude,
+        address: dbListing.address ?? base.location.address,
+        city: dbListing.city ?? base.location.city,
+        state: dbListing.state ?? base.location.state,
+        zip: (dbListing as any).zip_code ?? base.location.zip,
+      },
+    };
+  }, [listingFromParams, dbListing]);
 
-    if (!baseListing.providerId) {
-      alert("Unable to message provider. Provider information missing.");
-      return;
-    }
+  const amenitiesList = toStringArray(merged.amenities);
+  const servicesList = toStringArray(merged.services);
+  const rulesList = toStringArray(merged.rules);
+  const eligibilityList = toStringArray(merged.eligibility);
 
-    // Validate that providerId looks like a UUID
-    const uuidRegex =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(baseListing.providerId)) {
-      console.error("Invalid provider ID format:", baseListing.providerId);
-      alert("Unable to message provider. Invalid provider ID format.");
-      return;
-    }
+  // Images are already normalized in the merged object
+  const imageUrls: string[] = merged.images;
+  // TEMP debug to verify what seeker sees
+  try {
+    // eslint-disable-next-line no-console
+    console.log("[ListingDetails] raw images:", (merged as any).images);
+    // eslint-disable-next-line no-console
+    console.log("[ListingDetails] imageUrls:", imageUrls);
+  } catch {}
 
-    setIsCreatingThread(true);
-    try {
-      // Initialize message service if needed
-      await messageService.initialize();
-
-      // Create or find existing thread with provider
-      const thread = await messageService.createThread(
-        [baseListing.providerId], // Wrap in array as createThread expects string[]
-        `Inquiry about ${baseListing.title}`,
-        baseListing.id, // listing_id for context
-      );
-
-      // Navigate to thread screen
-      // @ts-ignore
-      navigation.navigate("Thread", {
-        threadId: thread.id,
-        propertyTitle: baseListing.title,
-        senderName: baseListing.providerName,
-        participantId: baseListing.providerId,
-      });
-    } catch (error) {
-      console.error("Error creating message thread:", error);
-      alert("Unable to start conversation. Please try again.");
-    } finally {
-      setIsCreatingThread(false);
-    }
-  }, [user, baseListing, navigation]);
+  const isSaved = false;
+  const handleBack = () => (navigation as any).goBack?.();
+  const handleSave = () => {};
+  const handleApply = () => {};
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header with Back Button */}
-      <View style={styles.headerBar}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-          accessibilityLabel="Go back"
-        >
-          <Ionicons name="chevron-back" size={24} color={colors.gold} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={handleSave}
-          style={styles.saveButton}
-          accessibilityLabel={isSaved ? "Remove from saved" : "Save listing"}
-        >
-          <Ionicons
-            name={isSaved ? "bookmark" : "bookmark-outline"}
-            size={24}
-            color={colors.gold}
-          />
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
+        <Ionicons name="arrow-back" size={24} color={colors.white} />
+      </TouchableOpacity>
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
       >
-        {/* Photo Carousel */}
-        <PhotoCarousel images={listing.images} height={250} />
-
-        {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>{listing.title}</Text>
+          <Text style={styles.title}>{merged.title || "Listing"}</Text>
           <View style={styles.providerRow}>
-            <Text style={styles.providerName}>{listing.providerName}</Text>
-            {listing.isVerified && <Badge type="verified" label="Verified" />}
-            {listingFromParams?.verified &&
-              listingFromParams?.verificationStatus && (
-                <Text style={styles.verificationStatus}>
-                  {listingFromParams.verificationStatus}
-                </Text>
-              )}
+            {merged.isVerified && <Badge text="Verified" />}
+            {!!merged.providerName && (
+              <Text style={styles.providerName}>{merged.providerName}</Text>
+            )}
           </View>
         </View>
 
-        {/* Quick Stats Row */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.statsRow}
-        >
-          <View
-            style={[
-              styles.statCard,
-              listing.bedsAvailable > 0 && styles.statCardAvailable,
-            ]}
-          >
-            <Ionicons
-              name="bed-outline"
-              size={20}
-              color={listing.bedsAvailable > 0 ? colors.green : colors.gold}
-            />
-            <Text
-              style={[
-                styles.statValue,
-                listing.bedsAvailable > 0 && styles.statValueAvailable,
-              ]}
-            >
-              {listing.bedsAvailable}/{listing.bedsTotal}
-            </Text>
-            <Text style={styles.statLabel}>Beds</Text>
-          </View>
+        {/* Always render the carousel; it shows a nice placeholder when empty */}
+        <PhotoCarousel images={imageUrls} />
 
-          <View style={styles.statCard}>
-            <Ionicons name="cash-outline" size={20} color={colors.gold} />
-            <Text style={styles.statValue}>${listing.costPerMonth}</Text>
-            <Text style={styles.statLabel}>Per month</Text>
-          </View>
-
-          <View style={styles.statCard}>
-            <Ionicons name="call-outline" size={20} color={colors.gold} />
-            <Text style={styles.statValue}>{listing.intakeMethod}</Text>
-            <Text style={styles.statLabel}>Intake</Text>
-          </View>
-
-          <View style={styles.statCard}>
-            <Ionicons name="time-outline" size={20} color={colors.gold} />
-            <Text style={styles.statValue}>{listing.lastUpdated}</Text>
-            <Text style={styles.statLabel}>Updated</Text>
-          </View>
-        </ScrollView>
-
-        {/* Collapsible Sections */}
-        <CollapsibleSection title="Overview" defaultExpanded={true}>
-          {isLoadingDetails ? (
+        <CollapsibleSection title="Overview" defaultExpanded>
+          {loadingDb ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color={colors.gold} />
-              <Text style={styles.loadingText}>Loading shelter details...</Text>
+              <Text style={styles.loadingText}>Loading details…</Text>
             </View>
           ) : (
-            <Text style={styles.bodyText}>{listing.overview}</Text>
+            <Text style={styles.bodyText}>
+              {merged.overview || "No overview provided."}
+            </Text>
           )}
         </CollapsibleSection>
 
         <CollapsibleSection title="Amenities">
-          {isLoadingDetails ? (
+          {loadingDb ? (
             <ActivityIndicator size="small" color={colors.gold} />
           ) : (
             <View style={styles.tagContainer}>
-              {listing.amenities.map((amenity, index) => (
-                <View key={index} style={styles.tag}>
+              {amenitiesList.map((amenity, i) => (
+                <View key={i} style={styles.tag}>
                   <Text style={styles.tagText}>{amenity}</Text>
                 </View>
               ))}
+              {amenitiesList.length === 0 && (
+                <Text style={styles.bodyText}>Not provided</Text>
+              )}
             </View>
           )}
         </CollapsibleSection>
 
         <CollapsibleSection title="Services">
-          {isLoadingDetails ? (
+          {loadingDb ? (
             <ActivityIndicator size="small" color={colors.gold} />
           ) : (
             <View style={styles.listContainer}>
-              {listing.services.map((service, index) => (
-                <View key={index} style={styles.listItem}>
+              {servicesList.map((service, i) => (
+                <View key={i} style={styles.listItem}>
                   <Ionicons
                     name="checkmark-circle"
                     size={16}
@@ -426,129 +263,99 @@ export default function ListingDetailsScreen() {
                   <Text style={styles.listText}>{service}</Text>
                 </View>
               ))}
+              {servicesList.length === 0 && (
+                <Text style={styles.bodyText}>Not provided</Text>
+              )}
             </View>
           )}
         </CollapsibleSection>
 
         <CollapsibleSection title="Rules & Eligibility">
-          {isLoadingDetails ? (
+          {loadingDb ? (
             <ActivityIndicator size="small" color={colors.gold} />
           ) : (
             <>
               <Text style={styles.subheading}>House Rules</Text>
               <View style={styles.listContainer}>
-                {listing.rules.map((rule, index) => (
-                  <View key={index} style={styles.listItem}>
-                    <Text style={styles.bulletPoint}>•</Text>
+                {rulesList.map((rule, i) => (
+                  <View key={i} style={styles.listItem}>
+                    <Text style={styles.bulletPoint}>-</Text>
                     <Text style={styles.listText}>{rule}</Text>
                   </View>
                 ))}
+                {rulesList.length === 0 && (
+                  <Text style={styles.bodyText}>Not provided</Text>
+                )}
               </View>
 
               <Text style={[styles.subheading, { marginTop: spacing.lg }]}>
                 Eligibility Requirements
               </Text>
               <View style={styles.listContainer}>
-                {listing.eligibility.map((req, index) => (
-                  <View key={index} style={styles.listItem}>
-                    <Text style={styles.bulletPoint}>•</Text>
+                {eligibilityList.map((req, i) => (
+                  <View key={i} style={styles.listItem}>
+                    <Text style={styles.bulletPoint}>-</Text>
                     <Text style={styles.listText}>{req}</Text>
                   </View>
                 ))}
+                {eligibilityList.length === 0 && (
+                  <Text style={styles.bodyText}>Not provided</Text>
+                )}
               </View>
             </>
           )}
         </CollapsibleSection>
 
         <CollapsibleSection title="Location">
-          {listing.isDVSensitive ? (
+          {merged.isDVSensitive ? (
             <View style={styles.sensitiveLocation}>
               <Ionicons name="lock-closed" size={24} color={colors.gold} />
               <Text style={styles.sensitiveLocationText}>
-                Sensitive location — hidden for safety
+                Sensitive location - hidden for safety
               </Text>
             </View>
           ) : (
-            <View style={styles.mapContainer}>
-              <MapView
-                style={styles.map}
-                initialRegion={{
-                  latitude: listing.location.latitude,
-                  longitude: listing.location.longitude,
-                  latitudeDelta: 0.01,
-                  longitudeDelta: 0.01,
-                }}
-                customMapStyle={darkMapStyle}
-              >
-                <Marker
-                  coordinate={{
-                    latitude: listing.location.latitude,
-                    longitude: listing.location.longitude,
-                  }}
-                  pinColor={colors.gold}
-                />
-              </MapView>
+            <>
+              {merged.location?.latitude && merged.location?.longitude ? (
+                <View style={styles.mapContainer}>
+                  <MapView
+                    style={styles.map}
+                    initialRegion={{
+                      latitude: merged.location.latitude,
+                      longitude: merged.location.longitude,
+                      latitudeDelta: 0.01,
+                      longitudeDelta: 0.01,
+                    }}
+                  >
+                    <Marker
+                      coordinate={{
+                        latitude: merged.location.latitude!,
+                        longitude: merged.location.longitude!,
+                      }}
+                    />
+                  </MapView>
+                </View>
+              ) : null}
               <Text style={styles.addressText}>
-                {listing.location.address}, {listing.location.city},{" "}
-                {listing.location.state} {listing.location.zip}
+                {merged.location?.address} {merged.location?.city}{" "}
+                {merged.location?.state} {merged.location?.zip}
               </Text>
-            </View>
+            </>
           )}
         </CollapsibleSection>
 
-        <CollapsibleSection title="Reviews">
-          <View style={styles.reviewsPlaceholder}>
-            <Ionicons name="star-outline" size={32} color={colors.gray} />
-            <Text style={styles.placeholderText}>Reviews coming soon</Text>
-          </View>
-        </CollapsibleSection>
-
-        {/* Bottom padding for sticky bar */}
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Sticky Bottom Bar */}
       <View style={styles.bottomBar}>
-        <TouchableOpacity
-          style={styles.saveButton}
-          onPress={handleSave}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel={isSaved ? "Remove from saved" : "Save listing"}
-        >
+        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
           <Ionicons
             name={isSaved ? "bookmark" : "bookmark-outline"}
             size={24}
             color={colors.white}
           />
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.messageButton}
-          onPress={handleMessage}
-          activeOpacity={0.7}
-          disabled={isCreatingThread}
-          accessibilityRole="button"
-          accessibilityLabel="Message provider"
-        >
-          {isCreatingThread ? (
-            <ActivityIndicator size="small" color={colors.white} />
-          ) : (
-            <Ionicons
-              name="chatbubble-outline"
-              size={24}
-              color={colors.white}
-            />
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.applyButton}
-          onPress={handleApply}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel="Apply now"
-        >
+        <TouchableOpacity style={styles.applyButton} onPress={handleApply}>
           <Text style={styles.applyButtonText}>Apply Now</Text>
         </TouchableOpacity>
       </View>
@@ -556,78 +363,12 @@ export default function ListingDetailsScreen() {
   );
 }
 
-// Dark map style
-const darkMapStyle = [
-  { elementType: "geometry", stylers: [{ color: "#212121" }] },
-  { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#212121" }] },
-  {
-    featureType: "administrative",
-    elementType: "geometry",
-    stylers: [{ color: "#757575" }],
-  },
-  {
-    featureType: "poi",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#757575" }],
-  },
-  {
-    featureType: "road",
-    elementType: "geometry.fill",
-    stylers: [{ color: "#2c2c2c" }],
-  },
-  {
-    featureType: "water",
-    elementType: "geometry",
-    stylers: [{ color: "#000000" }],
-  },
-];
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.black,
-  },
-  headerBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    position: "absolute",
-    top: 40,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-  },
-  backButton: {
-    padding: spacing.xs,
-  },
-  saveButton: {
-    padding: spacing.xs,
-  },
-  loadingContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: spacing.md,
-  },
-  loadingText: {
-    marginLeft: spacing.sm,
-    color: colors.gray,
-    fontSize: 14,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  header: {
-    padding: spacing.lg,
-    paddingBottom: 0,
-  },
+  container: { flex: 1, backgroundColor: colors.black },
+  backBtn: { position: "absolute", top: 40, left: 16, zIndex: 10 },
+  scrollView: { flex: 1 },
+  scrollContent: { paddingBottom: 140 },
+  header: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
   title: {
     fontSize: 24,
     fontWeight: "bold",
@@ -640,46 +381,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     flexWrap: "wrap",
   },
-  verificationStatus: {
-    fontSize: 10,
-    color: colors.green,
-    fontStyle: "italic",
-  },
-  providerName: {
-    fontSize: 16,
-    color: colors.white,
-  },
-  statsRow: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  statCard: {
-    backgroundColor: colors.black,
-    borderWidth: 1,
-    borderColor: colors.gold,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginRight: spacing.sm,
-    minWidth: 100,
-    alignItems: "center",
-  },
-  statCardAvailable: {
-    borderColor: colors.green,
-  },
-  statValue: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.white,
-    marginTop: spacing.xs,
-  },
-  statValueAvailable: {
-    color: colors.green,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: colors.gray,
-    marginTop: 2,
-  },
+  providerName: { fontSize: 16, color: colors.white },
   section: {
     marginHorizontal: spacing.lg,
     marginTop: spacing.lg,
@@ -692,30 +394,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: spacing.md,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: colors.gold,
-  },
-  sectionContent: {
-    paddingBottom: spacing.md,
-  },
-  bodyText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: colors.white,
-  },
+  sectionTitle: { fontSize: 18, fontWeight: "600", color: colors.gold },
+  sectionContent: { paddingBottom: spacing.md },
+  bodyText: { fontSize: 14, lineHeight: 20, color: colors.white },
   subheading: {
     fontSize: 16,
     fontWeight: "600",
     color: colors.gold,
     marginBottom: spacing.sm,
   },
-  tagContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.xs,
-  },
+  tagContainer: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
   tag: {
     backgroundColor: colors.black,
     borderWidth: 1,
@@ -724,41 +412,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
   },
-  tagText: {
-    fontSize: 12,
-    color: colors.white,
-  },
-  listContainer: {
-    gap: spacing.sm,
-  },
-  listItem: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing.sm,
-  },
-  listText: {
-    fontSize: 14,
-    color: colors.white,
-    flex: 1,
-  },
-  bulletPoint: {
-    fontSize: 14,
-    color: colors.gold,
-    width: 15,
-  },
-  mapContainer: {
-    marginTop: spacing.sm,
-  },
+  tagText: { fontSize: 12, color: colors.white },
+  listContainer: { gap: spacing.sm },
+  listItem: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
+  listText: { fontSize: 14, color: colors.white, flex: 1 },
+  bulletPoint: { fontSize: 14, color: colors.gold, width: 15 },
+  mapContainer: { marginTop: spacing.sm },
   map: {
     width: SCREEN_WIDTH - spacing.lg * 2,
     height: 200,
     borderRadius: radius.md,
     marginBottom: spacing.sm,
   },
-  addressText: {
-    fontSize: 14,
-    color: colors.white,
-  },
+  addressText: { fontSize: 14, color: colors.white },
   sensitiveLocation: {
     flexDirection: "row",
     alignItems: "center",
@@ -767,19 +433,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.darkGray,
     borderRadius: radius.md,
   },
-  sensitiveLocationText: {
-    fontSize: 14,
-    color: colors.gold,
-  },
-  reviewsPlaceholder: {
-    alignItems: "center",
-    padding: spacing.xl,
-  },
-  placeholderText: {
-    fontSize: 14,
-    color: colors.gray,
-    marginTop: spacing.sm,
-  },
+  sensitiveLocationText: { fontSize: 14, color: colors.gold },
   bottomBar: {
     position: "absolute",
     bottom: 0,
@@ -803,16 +457,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  messageButton: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.white,
-    justifyContent: "center",
-    alignItems: "center",
-    marginLeft: spacing.xs,
-  },
   applyButton: {
     flex: 1,
     height: 48,
@@ -820,11 +464,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: spacing.xs,
   },
-  applyButtonText: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: colors.black,
-  },
+  applyButtonText: { fontSize: 16, fontWeight: "bold", color: colors.black },
 });

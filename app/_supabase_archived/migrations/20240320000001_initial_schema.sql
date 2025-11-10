@@ -238,3 +238,4 @@ CREATE INDEX idx_saved_listings_user_id ON public.saved_listings(user_id);
 CREATE INDEX idx_messages_application_id ON public.messages(application_id);
 CREATE INDEX idx_profiles_username ON public.profiles(username);
 CREATE INDEX idx_profiles_role ON public.profiles(role);
+-- [ARCHIVED] Legacy migration. Not used. Use root `supabase/migrations`.

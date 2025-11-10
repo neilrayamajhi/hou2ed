@@ -26,7 +26,8 @@ import {
 } from "../../services/listing.service";
 import { useRequireProvider } from "../../hooks/useRequireProvider";
 import * as ImagePicker from "expo-image-picker";
-import { uploadListingImage } from "../../services/storage.service";
+// Use clean uploader that works on all platforms
+import { uploadListingImageClean as uploadListingImage } from "../../services/storage.clean.service";
 
 export default function EditListing() {
   const navigation = useNavigation<RootStackNavigationProp>();
@@ -65,8 +66,7 @@ export default function EditListing() {
   const [maxAge, setMaxAge] = useState("");
   const [selectedEligibility, setSelectedEligibility] = useState<string[]>([]);
 
-  const isRemote = (uri: string) =>
-    uri.startsWith("http://") || uri.startsWith("https://");
+  const isRemote = (uri: string) => /^https?:\/\//i.test(uri);
 
   useEffect(() => {
     (async () => {
@@ -105,37 +105,32 @@ export default function EditListing() {
       if (availableBeds !== "") updates.availableBeds = Number(availableBeds);
 
       // Handle photo uploads (replace local URIs with uploaded URLs, keep order and deletions)
-      let finalImages: string[] = [];
-      const remoteImages = images.filter((u) => isRemote(u));
-      const localImages = images.filter((u) => !isRemote(u));
-
-      // Keep existing remote images
-      finalImages = [...remoteImages];
-
-      // Upload local images
-      if (localImages.length > 0) {
-        console.log(`📸 Uploading ${localImages.length} new image(s)...`);
-        for (let i = 0; i < localImages.length; i++) {
-          const localUri = localImages[i];
-          console.log(`📤 Uploading image ${i + 1}/${localImages.length}`);
+      let finalImages = [...images];
+      const locals = finalImages.filter((u) => !isRemote(u));
+      if (locals.length > 0) {
+        const uploaded: string[] = [];
+        for (const localUri of locals) {
           const res = await uploadListingImage(
             localUri,
             route.params.listingId!,
             { resize: "full" },
           );
-          if (res.success && res.url) {
-            console.log(`✅ Image ${i + 1} uploaded successfully`);
-            finalImages.push(res.url);
-          } else {
-            console.error(`❌ Failed to upload image ${i + 1}:`, res.error);
-            // Don't add failed uploads to finalImages - skip them
-            showToast(`Failed to upload image ${i + 1}: ${res.error}`, "error");
-          }
+          if (res.success && res.url) uploaded.push(res.url);
+        }
+        // Replace local placeholders with uploaded URLs in order
+        let idx = 0;
+        finalImages = finalImages.map((u) =>
+          isRemote(u) ? u : uploaded[idx++] || u,
+        );
+        // If any local URIs remain, block save to avoid persisting file:// paths
+        const stillLocal = finalImages.some((u) => !isRemote(u));
+        if (stillLocal) {
+          throw new Error(
+            "Photos are still uploading. Please wait a moment and tap Save again.",
+          );
         }
       }
-
       updates.images = finalImages;
-      console.log(`💾 Saving ${finalImages.length} image URL(s) to database`);
       if (Object.keys(availabilityDays).length > 0) {
         updates.availabilityDays = availabilityDays;
       }

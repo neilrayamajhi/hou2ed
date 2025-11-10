@@ -38,9 +38,8 @@ export default function PhotoCarousel({
 }: PhotoCarouselProps) {
   const scrollViewRef = useRef<ScrollView>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [loadingStates, setLoadingStates] = useState<Record<number, boolean>>(
-    {},
-  );
+  const [loadingStates, setLoadingStates] = useState<Record<number, boolean>>({});
+  const [errorStates, setErrorStates] = useState<Record<number, boolean>>({});
 
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -86,6 +85,11 @@ export default function PhotoCarousel({
     setLoadingStates((prev) => ({ ...prev, [index]: false }));
   }, []);
 
+  const handleImageError = useCallback((index: number) => {
+    setLoadingStates((prev) => ({ ...prev, [index]: false }));
+    setErrorStates((prev) => ({ ...prev, [index]: true }));
+  }, []);
+
   // Empty state with skeleton
   if (images.length === 0) {
     return (
@@ -129,8 +133,14 @@ export default function PhotoCarousel({
               resizeMode="cover"
               onLoadStart={() => handleImageLoadStart(index)}
               onLoadEnd={() => handleImageLoadEnd(index)}
+              onError={() => handleImageError(index)}
               accessibilityLabel={`Image ${index + 1} of ${images.length}`}
             />
+            {((!imageUri || imageUri.length === 0) || errorStates[index]) && (
+              <View style={styles.loader}>
+                <Ionicons name="image-outline" size={48} color={colors.gray} />
+              </View>
+            )}
           </View>
         ))}
       </ScrollView>

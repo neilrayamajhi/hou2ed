@@ -7,6 +7,7 @@ const envSchema = z.object({
   MAPS_PROVIDER: z.enum(["google", "apple"]).optional().default("google"),
   MAPS_IOS_API_KEY: z.string().optional(),
   MAPS_ANDROID_API_KEY: z.string().optional(),
+  MAPBOX_TOKEN: z.string().optional(),
   SENTRY_DSN: z.string().url().optional(),
   POSTHOG_KEY: z.string().optional(),
 });
@@ -21,6 +22,7 @@ const rawEnv = {
     | undefined,
   MAPS_IOS_API_KEY: process.env.EXPO_PUBLIC_MAPS_IOS_API_KEY,
   MAPS_ANDROID_API_KEY: process.env.EXPO_PUBLIC_MAPS_ANDROID_API_KEY,
+  MAPBOX_TOKEN: process.env.EXPO_PUBLIC_MAPBOX_TOKEN,
   SENTRY_DSN: process.env.EXPO_PUBLIC_SENTRY_DSN,
   POSTHOG_KEY: process.env.EXPO_PUBLIC_POSTHOG_KEY,
 };
@@ -69,6 +71,10 @@ export const env = (() => {
       console.log("✅ Environment Configuration Loaded:");
       console.log("  Supabase URL:", parsed.SUPABASE_URL);
       console.log("  Maps Provider:", parsed.MAPS_PROVIDER);
+      console.log(
+        "  Mapbox:",
+        parsed.MAPBOX_TOKEN ? "Configured" : "Not configured",
+      );
       console.log(
         "  Sentry:",
         parsed.SENTRY_DSN ? "Configured" : "Not configured",

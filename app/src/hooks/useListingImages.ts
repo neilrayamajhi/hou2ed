@@ -2,13 +2,8 @@ import { useState, useCallback, useEffect } from 'react';
 import { Image } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
-import {
-  uploadListingImage,
-  uploadMultipleImages,
-  deleteListingImage,
-  prefetchImages,
-  cacheImage,
-} from '../services/storage.service';
+import { uploadListingImageClean as uploadListingImage } from '../services/storage.clean.service';
+import { prefetchImages, cacheImage, deleteListingImage } from '../services/storage.service';
 import { supabase } from '../lib/supabase';
 
 interface UseListingImagesOptions {
@@ -76,7 +71,7 @@ export function useListingImages({
   // Upload single image mutation
   const uploadMutation = useMutation({
     mutationFn: async (uri: string) => {
-      return uploadListingImage(uri, listingId, { resize: 'full' });
+      return uploadListingImage(uri, listingId, { resize: 'full' } as any);
     },
     onSuccess: (result, uri) => {
       if (result.success && result.url) {
@@ -168,11 +163,13 @@ export function useListingImages({
     setIsLoading(true);
 
     try {
-      const results = await uploadMultipleImages(
-        uris,
-        listingId,
-        (progress) => onUploadProgress?.(progress)
-      );
+      const results: Array<{ success: boolean; url?: string; path?: string; error?: string }> = [];
+      for (let i = 0; i < uris.length; i++) {
+        const res = await uploadListingImage(uris[i], listingId, { resize: 'full' } as any);
+        results.push(res as any);
+        const progress = (i + 1) / uris.length;
+        onUploadProgress?.(progress);
+      }
 
       const newImages: ImageItem[] = results
         .filter(r => r.success && r.url)
@@ -188,7 +185,6 @@ export function useListingImages({
         updateListingImages(updatedImages);
       }
 
-      // Report any errors
       const errors = results.filter(r => !r.success);
       if (errors.length > 0) {
         onError?.(`${errors.length} image(s) failed to upload`);

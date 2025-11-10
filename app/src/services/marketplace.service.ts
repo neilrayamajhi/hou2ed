@@ -86,6 +86,25 @@ function transformToMarketplace(
   userLat?: number,
   userLng?: number,
 ): MarketplaceListing {
+  // Normalize images to public URLs (handles paths/objects/strings)
+  const toArray = (v: any) => (Array.isArray(v) ? v : v ? [v] : []);
+  const toString = (v: any) => {
+    if (v == null) return null;
+    if (typeof v === "string") return v.trim();
+    if (typeof v === "object" && (v as any).url) return String((v as any).url).trim();
+    try { return String(v).trim(); } catch { return null; }
+  };
+  const toPublicUrl = (p: string | null) => {
+    if (!p) return null;
+    if (/^https?:\/\//i.test(p)) return p;
+    const { data } = supabase.storage.from("listing-images").getPublicUrl(p);
+    return data?.publicUrl || p;
+  };
+  const imageUrls = toArray((dbListing as any).images)
+    .map(toString)
+    .filter(Boolean)
+    .map((s) => toPublicUrl(s as string))
+    .filter((u): u is string => !!u && /^https?:\/\//i.test(u));
   // Calculate total beds from unit_beds
   const totalBeds = Object.values(dbListing.unit_beds || {}).reduce(
     (sum, count) => sum + (count || 0),
@@ -168,7 +187,7 @@ function transformToMarketplace(
     name: dbListing.title,
     type: dbListing.housing_type || "shelter",
     description: dbListing.description || "Housing placement available.",
-    coverImage: dbListing.images?.[0] || "https://via.placeholder.com/400x300",
+    coverImage: imageUrls[0] || "https://via.placeholder.com/400x300",
     coordinates: {
       latitude: dbListing.lat,
       longitude: dbListing.lng,

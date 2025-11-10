@@ -1,29 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node test-supabase-connection.js:*)",
-      "Bash(brew upgrade:*)",
-      "Bash(node check-all-listings.js:*)",
-      "Bash(node test-marketplace-listings.js:*)",
-      "Bash(node test-rpc-function.js:*)",
-      "Bash(node apply-listings-fix.js:*)",
-      "Bash(node apply-fix-via-api.js:*)",
-      "Bash(npx expo:*)",
-      "Bash(ngrok version:*)",
-      "Bash(ngrok config check:*)",
-      "Bash(chmod:*)",
+      "Read(//c/Users/samso/Documents/My Code, Projects, etc/**)",
+      "Bash(npx prettier:*)",
+      "Bash(npm test:*)",
+      "Bash(npx tsc:*)",
+      "mcp__ide__getDiagnostics",
       "Bash(npm install:*)",
-      "Bash(docker:*)",
+      "Bash(winget:*)",
+      "Bash(scoop:*)",
       "Bash(curl:*)",
-      "Bash(PGPASSWORD=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpeGlvZmx0enB0d2Fpd3hoaGxmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODM4OTg4NiwiZXhwIjoyMDczOTY1ODg2fQ.J9Oc77ZR1E435SqDsngt8ey4_WVOeTE6UASlYo17Gbc\" psql:*)",
-      "Bash(node test-messaging.js:*)",
-      "Bash(node test-messaging-simple.js:*)",
-      "Bash(node:*)",
-      "Bash(supabase db push:*)",
-      "Bash(PGPASSWORD=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpeGlvZmx0enB0d2Fpd3hoaGxmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODM4OTg4NiwiZXhwIjoyMDczOTY1ODg2fQ.J9Oc77ZR1E435SqDsngt8ey4_WVOeTE6UASlYo17Gbc\" /opt/homebrew/opt/postgresql@14/bin/psql:*)",
-      "Bash(git add:*)",
-      "Bash(cat:*)",
-      "Bash(xargs:*)"
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

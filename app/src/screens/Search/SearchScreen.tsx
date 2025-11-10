@@ -20,15 +20,11 @@ import EmptyState from "../../components/EmptyState";
 import OfflineBanner from "../../components/OfflineBanner";
 import FiltersSheet from "./FiltersSheet";
 import { useFilterStore } from "../../state/useFilterStore";
-import {
-  generateMockListings,
-  filterListingsByQuick,
-} from "../../data/mockListings";
+import { supabase } from "../../lib/supabase";
 import { sortListings, SORT_OPTIONS } from "../../utils/sortListings";
 import { usePerformance } from "../../utils/perf";
 import type { Listing } from "../../types/listing";
 import type { SortOption } from "../../types/filters";
-import { useI18n } from "../../i18n";
 
 type ViewMode = "list" | "map";
 
@@ -59,17 +55,6 @@ const MAP_DARK_STYLE = [
 
 export default function SearchScreen() {
   const navigation = useNavigation();
-  const i18n = useI18n();
-
-  // Create translated SORT_OPTIONS
-  const translatedSortOptions = useMemo(
-    () =>
-      SORT_OPTIONS.map((option) => ({
-        value: option.value,
-        label: i18n.t(`search.sortOptions.${option.value}`),
-      })),
-    [i18n],
-  );
 
   // Store state
   const {
@@ -90,7 +75,7 @@ export default function SearchScreen() {
   const [showFilters, setShowFilters] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
-  const [listings, setListings] = useState<Listing[]>([]);
+  const [listings, setListings] = useState<any[]>([]);
 
   // Performance tracking
   const searchPerf = usePerformance("search");
@@ -102,31 +87,103 @@ export default function SearchScreen() {
     setIsOffline(false);
   }, []);
 
-  // Load and filter listings
+  // Load listings from Supabase and map to card model
   useEffect(() => {
-    searchPerf.start();
+    let cancelled = false;
+    (async () => {
+      try {
+        searchPerf.start();
+        const { data, error } = await supabase
+          .from("listings")
+          .select(
+            "id,title,description,address,city,state,zip_code,images,verified,availability,cost,eligibility,services"
+          )
+          .eq("is_active", true)
+          .limit(100);
+        if (error) {
+          console.error("Fetch listings error:", error);
+          return;
+        }
+        // Normalize images to public https URLs
+        const toArray = (v: any) => (Array.isArray(v) ? v : v ? [v] : []);
+        const toStringVal = (v: any) => {
+          if (v == null) return null;
+          if (typeof v === 'string') return v.trim();
+          if (typeof v === 'object' && (v as any).url) return String((v as any).url).trim();
+          try { return String(v).trim(); } catch { return null; }
+        };
+        const toPublicUrl = (p: string | null) => {
+          if (!p) return null;
+          if (/^https?:\/\//i.test(p)) return p;
+          const { data: pub } = supabase.storage.from('listing-images').getPublicUrl(p);
+          return pub?.publicUrl || null;
+        };
 
-    const allListings = generateMockListings(30);
-    let filtered = filterListingsByQuick(allListings, quickFilters);
+        const mapped = (data || []).map((row: any) => {
+          const normalizedImages: string[] = toArray(row.images)
+            .map(toStringVal)
+            .filter(Boolean)
+            .map((s) => toPublicUrl(s as string))
+            .filter((u): u is string => !!u && /^https?:\/\//i.test(u));
+          const coverImage = normalizedImages[0] || undefined;
+          try {
+            console.log('[Search] listing', row.id, 'images:', normalizedImages);
+          } catch {}
+          const price = {
+            isFree: row?.cost?.free === true || !row?.cost?.monthly,
+            min: row?.cost?.monthly || 0,
+            max: row?.cost?.monthly || 0,
+            acceptsVouchers: Array.isArray(row?.cost?.accepts) && row.cost.accepts.includes("vouchers"),
+          };
+          const avail = row?.availability || {};
+          const bedsToday = Number(avail?.beds_today || 0);
+          let availability: "available" | "waitlist" | "full" | "unknown" = "unknown";
+          if (bedsToday > 0) availability = "available";
+          else if (avail?.waitlist > 0) availability = "waitlist";
+          else availability = "full";
+          const features = {
+            acceptsFamilies: Array.isArray(row?.eligibility?.family_status) ? row.eligibility.family_status.includes("families") : false,
+            acceptsVeterans: row?.eligibility?.veterans === true,
+            wheelchairAccessible: Array.isArray(row?.accessibility?.mobility) ? row.accessibility.mobility.includes("wheelchair") : false,
+            petsAllowed: row?.rules?.pets === "allowed",
+          };
+          return {
+            id: row.id,
+            name: row.title,
+            provider: row.city ? `${row.city}, ${row.state}` : "",
+            coverImage,
+            images: normalizedImages,
+            verified: !!row.verified,
+            distance: undefined,
+            price,
+            rating: undefined,
+            features,
+            availability,
+            bedsAvailable: bedsToday,
+          };
+        });
 
-    // Apply search query filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (l) =>
-          l.name.toLowerCase().includes(query) ||
-          l.description.toLowerCase().includes(query) ||
-          l.address.city.toLowerCase().includes(query) ||
-          l.provider.toLowerCase().includes(query),
-      );
-    }
+        // Text filter
+        const query = (searchQuery || "").toLowerCase();
+        let filtered = !query
+          ? mapped
+          : mapped.filter((l: any) =>
+              (l.name || "").toLowerCase().includes(query) ||
+              (l.provider || "").toLowerCase().includes(query)
+            );
 
-    // Apply sorting
-    const sorted = sortListings(filtered, sortBy);
-    setListings(sorted);
+        // TODO: Apply quickFilters mapping to DB fields if needed
 
-    searchPerf.end();
-  }, [quickFilters, searchQuery, sortBy]); // Removed searchPerf from dependencies
+        const sorted = sortListings(filtered, sortBy);
+        if (!cancelled) setListings(sorted);
+      } finally {
+        searchPerf.end();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [quickFilters, searchQuery, sortBy]);
 
   // Handle search
   const handleSearch = useCallback(() => {
@@ -151,14 +208,11 @@ export default function SearchScreen() {
   }, []);
 
   // Open details
-  const openDetails = useCallback(
-    (listing: Listing) => {
-      console.log("Open details:", listing.id);
-      // @ts-ignore - Navigation types will be updated
-      navigation.navigate("ListingDetails", { listingId: listing.id, listing });
-    },
-    [navigation],
-  );
+  const openDetails = useCallback((listing: Listing) => {
+    console.log("Open details:", listing.id);
+    // @ts-ignore - Navigation types will be updated
+    navigation.navigate("ListingDetails", { listingId: listing.id, listing });
+  }, [navigation]);
 
   // Render listing item
   const renderListingItem = useCallback(
@@ -167,7 +221,7 @@ export default function SearchScreen() {
         <ListingCard listing={item} onPress={() => openDetails(item)} />
       </View>
     ),
-    [openDetails],
+    [openDetails]
   );
 
   // List key extractor
@@ -186,10 +240,14 @@ export default function SearchScreen() {
       <View style={styles.header}>
         {/* Search Bar */}
         <View style={styles.searchBar}>
-          <Ionicons name="search-outline" size={20} color={"#4B5563"} />
+          <Ionicons
+            name="search-outline"
+            size={20}
+            color={"#4B5563"}
+          />
           <TextInput
             style={styles.searchInput}
-            placeholder={i18n.t("search.placeholder")}
+            placeholder="Search location or shelter..."
             placeholderTextColor={"#4B5563"}
             value={searchText}
             onChangeText={setSearchText}
@@ -197,16 +255,11 @@ export default function SearchScreen() {
             returnKeyType="search"
           />
           <TouchableOpacity onPress={handleSearch} style={styles.searchButton}>
-            <Text style={styles.searchButtonText}>
-              {i18n.t("search.searchButton")}
-            </Text>
+            <Text style={styles.searchButtonText}>Search</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={openFilters} style={styles.filterButton}>
             <Ionicons name="options-outline" size={20} color={"#D4AF37"} />
-            <Text style={styles.filterButtonText}>
-              {i18n.t("search.filtersButton")}
-              {filterCountText}
-            </Text>
+            <Text style={styles.filterButtonText}>Filters{filterCountText}</Text>
           </TouchableOpacity>
         </View>
 
@@ -232,7 +285,7 @@ export default function SearchScreen() {
                   viewMode === "map" && styles.toggleTextActive,
                 ]}
               >
-                {i18n.t("search.map")}
+                Map
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -253,7 +306,7 @@ export default function SearchScreen() {
                   viewMode === "list" && styles.toggleTextActive,
                 ]}
               >
-                {i18n.t("search.list")}
+                List
               </Text>
             </TouchableOpacity>
           </View>
@@ -269,10 +322,13 @@ export default function SearchScreen() {
               color={"#FFFFFF"}
             />
             <Text style={styles.sortText}>
-              {translatedSortOptions.find((o) => o.value === sortBy)?.label ||
-                i18n.t("search.sort")}
+              {SORT_OPTIONS.find((o) => o.value === sortBy)?.label || "Sort"}
             </Text>
-            <Ionicons name="chevron-down-outline" size={16} color={"#4B5563"} />
+            <Ionicons
+              name="chevron-down-outline"
+              size={16}
+              color={"#4B5563"}
+            />
           </TouchableOpacity>
         </View>
       </View>
@@ -283,19 +339,15 @@ export default function SearchScreen() {
       {/* Results Count */}
       <View style={styles.resultsCount}>
         <Text style={styles.resultsText}>
-          {listings.length}{" "}
-          {listings.length === 1
-            ? i18n.t("search.place")
-            : i18n.t("search.places")}{" "}
-          {i18n.t("search.found")}
+          {listings.length} {listings.length === 1 ? "place" : "places"} found
         </Text>
       </View>
 
       {/* Content */}
       {listings.length === 0 ? (
         <EmptyState
-          message={i18n.t("search.noMatches")}
-          subMessage={i18n.t("search.tryAdjusting")}
+          message="No matches found"
+          subMessage="Try adjusting your filters or expanding your search area"
           onClearFilters={hasActiveFilters() ? clearAll : undefined}
           showClearButton={hasActiveFilters()}
         />
@@ -344,9 +396,7 @@ export default function SearchScreen() {
                   ]}
                 >
                   <Text style={styles.markerText}>
-                    {listing.price.isFree
-                      ? i18n.t("home.free").toUpperCase()
-                      : `$${listing.price.min}`}
+                    {listing.price.isFree ? "FREE" : `$${listing.price.min}`}
                   </Text>
                 </View>
               </Marker>
@@ -369,13 +419,13 @@ export default function SearchScreen() {
         >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{i18n.t("search.sortBy")}</Text>
+              <Text style={styles.modalTitle}>Sort By</Text>
               <TouchableOpacity onPress={() => setShowSortModal(false)}>
                 <Ionicons name="close" size={24} color={"#FFFFFF"} />
               </TouchableOpacity>
             </View>
             <ScrollView>
-              {translatedSortOptions.map((option) => (
+              {SORT_OPTIONS.map((option) => (
                 <TouchableOpacity
                   key={option.value}
                   style={[
@@ -396,7 +446,11 @@ export default function SearchScreen() {
                     {option.label}
                   </Text>
                   {sortBy === option.value && (
-                    <Ionicons name="checkmark" size={20} color={"#D4AF37"} />
+                    <Ionicons
+                      name="checkmark"
+                      size={20}
+                      color={"#D4AF37"}
+                    />
                   )}
                 </TouchableOpacity>
               ))}
@@ -406,10 +460,7 @@ export default function SearchScreen() {
       </Modal>
 
       {/* Filters Sheet */}
-      <FiltersSheet
-        visible={showFilters}
-        onClose={() => setShowFilters(false)}
-      />
+      <FiltersSheet visible={showFilters} onClose={() => setShowFilters(false)} />
     </SafeAreaView>
   );
 }

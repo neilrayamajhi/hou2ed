@@ -1,26 +1,27 @@
-import { supabase } from '../lib/supabase';
-import { Platform } from 'react-native';
+import { supabase } from "../lib/supabase";
+import { Platform } from "react-native";
 // Avoid importing native-only modules at top-level so web bundler doesn't choke
 // We'll require them lazily only on native platforms
-// Using the legacy API as a quick fix for the deprecated methods
 let FileSystem: any = null;
 let ImageManipulator: any = null;
-if (Platform.OS !== 'web') {
+if (Platform.OS !== "web") {
+  // Use legacy API to avoid deprecation warnings
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  FileSystem = require('expo-file-system/legacy');
+  FileSystem = require("expo-file-system/legacy");
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  ImageManipulator = require('expo-image-manipulator');
+  ImageManipulator = require("expo-image-manipulator");
 }
 
 // Constants
-const LISTING_IMAGES_BUCKET = 'listing-images';
-const APPLICATION_DOCS_BUCKET = 'application-docs';
+const LISTING_IMAGES_BUCKET = "listing-images";
+const APPLICATION_DOCS_BUCKET = "application-docs";
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_DOC_SIZE = 10 * 1024 * 1024; // 10MB
 const IMAGE_QUALITY = 0.8;
-const CACHE_DIR = Platform.OS !== 'web' && FileSystem?.cacheDirectory
-  ? FileSystem.cacheDirectory + 'images/'
-  : '/tmp/images/';
+const CACHE_DIR =
+  Platform.OS !== "web" && FileSystem?.cacheDirectory
+    ? FileSystem.cacheDirectory + "images/"
+    : "/tmp/images/";
 
 // Image dimensions
 const IMAGE_SIZES = {
@@ -46,7 +47,7 @@ interface ImageUploadOptions {
  * Ensure cache directory exists
  */
 async function ensureCacheDir() {
-  if (Platform.OS === 'web' || !FileSystem) return; // no-op on web
+  if (Platform.OS === "web" || !FileSystem) return; // no-op on web
   try {
     await FileSystem.makeDirectoryAsync(CACHE_DIR, { intermediates: true });
   } catch (error) {
@@ -68,21 +69,25 @@ function generateFileName(prefix: string, extension: string): string {
  */
 async function processImage(
   uri: string,
-  options: ImageUploadOptions
+  options: ImageUploadOptions,
 ): Promise<string> {
-  if (Platform.OS === 'web' || !ImageManipulator) return uri;
+  if (Platform.OS === "web" || !ImageManipulator) return uri;
   try {
     const manipulatorOptions: any[] = [];
     if (options.resize && IMAGE_SIZES[options.resize]) {
       manipulatorOptions.push({ resize: IMAGE_SIZES[options.resize] });
     }
-    const result = await ImageManipulator.manipulateAsync(uri, manipulatorOptions, {
-      compress: options.quality || IMAGE_QUALITY,
-      format: ImageManipulator.SaveFormat.JPEG,
-    });
+    const result = await ImageManipulator.manipulateAsync(
+      uri,
+      manipulatorOptions,
+      {
+        compress: options.quality || IMAGE_QUALITY,
+        format: ImageManipulator.SaveFormat.JPEG,
+      },
+    );
     return result.uri;
   } catch (error) {
-    console.error('Image processing error:', error);
+    console.error("Image processing error:", error);
     return uri;
   }
 }
@@ -93,20 +98,20 @@ async function processImage(
 export async function uploadListingImage(
   uri: string,
   listingId: string,
-  options: ImageUploadOptions = {}
+  options: ImageUploadOptions = {},
 ): Promise<UploadResult> {
   try {
-    console.log('📤 Starting image upload:', { uri, listingId, options });
+    console.log("📤 Starting image upload:", { uri, listingId, options });
 
     // Process image
     const processedUri = await processImage(uri, options);
-    console.log('✅ Image processed:', processedUri);
+    console.log("✅ Image processed:", processedUri);
 
     // Read file - different approach for React Native vs Web
     let fileData: any;
     let fileSize: number;
 
-    if (Platform.OS === 'web') {
+    if (Platform.OS === "web") {
       // Web: use blob
       const response = await fetch(processedUri);
       const blob = await response.blob();
@@ -115,17 +120,17 @@ export async function uploadListingImage(
     } else {
       // React Native: Read file as ArrayBuffer
       if (!FileSystem) {
-        throw new Error('Cannot read image file - FileSystem not available');
+        throw new Error("Cannot read image file - FileSystem not available");
       }
 
-      console.log('📱 Reading file for React Native upload...');
+      console.log("📱 Reading file for React Native upload...");
 
       // Read file as base64 (no need for getInfoAsync - deprecated)
       const base64String = await FileSystem.readAsStringAsync(processedUri, {
-        encoding: 'base64',
+        encoding: "base64",
       });
 
-      console.log('✅ File read as base64, length:', base64String.length);
+      console.log("✅ File read as base64, length:", base64String.length);
 
       // Convert base64 to ArrayBuffer
       const binaryString = atob(base64String);
@@ -138,10 +143,10 @@ export async function uploadListingImage(
       fileData = bytes.buffer;
       fileSize = bytes.length;
 
-      console.log('✅ Converted to ArrayBuffer, size:', fileSize);
+      console.log("✅ Converted to ArrayBuffer, size:", fileSize);
     }
 
-    console.log('✅ File loaded, size:', fileSize);
+    console.log("✅ File loaded, size:", fileSize);
 
     // Check file size
     if (fileSize > MAX_IMAGE_SIZE) {
@@ -152,45 +157,36 @@ export async function uploadListingImage(
     }
 
     // Generate unique filename
-    const fileName = generateFileName(`listing_${listingId}`, 'jpg');
+    const fileName = generateFileName(`listing_${listingId}`, "jpg");
     const filePath = `${listingId}/${fileName}`;
 
-    console.log('📁 Uploading to:', filePath);
+    console.log("📁 Uploading to:", filePath);
 
     // Upload to Supabase
-    console.log('🚀 Attempting Supabase storage upload...');
-    console.log('   Bucket:', LISTING_IMAGES_BUCKET);
-    console.log('   Path:', filePath);
-    console.log('   Data type:', typeof fileData);
-    console.log('   Data size:', fileSize, 'bytes');
-
     const { data, error } = await supabase.storage
       .from(LISTING_IMAGES_BUCKET)
       .upload(filePath, fileData, {
-        contentType: 'image/jpeg',
-        cacheControl: '3600',
+        contentType: "image/jpeg",
+        cacheControl: "3600",
         upsert: false,
       });
 
     if (error) {
-      console.error('❌ Supabase upload error:', error);
-      console.error('   Error message:', error.message);
-      console.error('   Error name:', error.name);
-      console.error('   Full error:', JSON.stringify(error, null, 2));
+      console.error("❌ Upload error:", error);
       return {
         success: false,
         error: error.message,
       };
     }
 
-    console.log('✅ Upload successful to Supabase:', data);
+    console.log("✅ Upload successful:", data);
 
     // Get public URL
-    const { data: { publicUrl } } = supabase.storage
-      .from(LISTING_IMAGES_BUCKET)
-      .getPublicUrl(filePath);
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from(LISTING_IMAGES_BUCKET).getPublicUrl(filePath);
 
-    console.log('✅ Public URL:', publicUrl);
+    console.log("✅ Public URL:", publicUrl);
 
     return {
       success: true,
@@ -198,15 +194,10 @@ export async function uploadListingImage(
       path: filePath,
     };
   } catch (error) {
-    console.error('❌ Upload listing image error:', error);
-    console.error('Error details:', {
-      name: error instanceof Error ? error.name : 'Unknown',
-      message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+    console.error("❌ Upload listing image error:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Upload failed',
+      error: error instanceof Error ? error.message : "Upload failed",
     };
   }
 }
@@ -217,14 +208,14 @@ export async function uploadListingImage(
 export async function uploadMultipleImages(
   uris: string[],
   listingId: string,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
 ): Promise<UploadResult[]> {
   const results: UploadResult[] = [];
   const total = uris.length;
 
   for (let i = 0; i < uris.length; i++) {
     const result = await uploadListingImage(uris[i], listingId, {
-      resize: 'full',
+      resize: "full",
     });
     results.push(result);
 
@@ -242,7 +233,7 @@ export async function uploadMultipleImages(
 export async function uploadApplicationDocument(
   uri: string,
   applicationId: string,
-  documentType: string
+  documentType: string,
 ): Promise<UploadResult> {
   try {
     // Read file
@@ -258,7 +249,7 @@ export async function uploadApplicationDocument(
     }
 
     // Determine file extension from URI or MIME type
-    const extension = uri.split('.').pop() || 'pdf';
+    const extension = uri.split(".").pop() || "pdf";
     const fileName = generateFileName(`doc_${documentType}`, extension);
     const filePath = `${applicationId}/${fileName}`;
 
@@ -266,13 +257,13 @@ export async function uploadApplicationDocument(
     const { data, error } = await supabase.storage
       .from(APPLICATION_DOCS_BUCKET)
       .upload(filePath, blob, {
-        contentType: blob.type || 'application/pdf',
-        cacheControl: '3600',
+        contentType: blob.type || "application/pdf",
+        cacheControl: "3600",
         upsert: false,
       });
 
     if (error) {
-      console.error('Document upload error:', error);
+      console.error("Document upload error:", error);
       return {
         success: false,
         error: error.message,
@@ -284,10 +275,10 @@ export async function uploadApplicationDocument(
       path: filePath,
     };
   } catch (error) {
-    console.error('Upload document error:', error);
+    console.error("Upload document error:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Upload failed',
+      error: error instanceof Error ? error.message : "Upload failed",
     };
   }
 }
@@ -297,7 +288,7 @@ export async function uploadApplicationDocument(
  */
 export async function getDocumentSignedUrl(
   path: string,
-  expiresIn: number = 3600
+  expiresIn: number = 3600,
 ): Promise<string | null> {
   try {
     const { data, error } = await supabase.storage
@@ -305,13 +296,13 @@ export async function getDocumentSignedUrl(
       .createSignedUrl(path, expiresIn);
 
     if (error) {
-      console.error('Signed URL error:', error);
+      console.error("Signed URL error:", error);
       return null;
     }
 
     return data.signedUrl;
   } catch (error) {
-    console.error('Get signed URL error:', error);
+    console.error("Get signed URL error:", error);
     return null;
   }
 }
@@ -326,13 +317,13 @@ export async function deleteListingImage(path: string): Promise<boolean> {
       .remove([path]);
 
     if (error) {
-      console.error('Delete image error:', error);
+      console.error("Delete image error:", error);
       return false;
     }
 
     return true;
   } catch (error) {
-    console.error('Delete image error:', error);
+    console.error("Delete image error:", error);
     return false;
   }
 }
@@ -342,7 +333,7 @@ export async function deleteListingImage(path: string): Promise<boolean> {
  */
 export async function cacheImage(url: string): Promise<string | null> {
   try {
-    if (Platform.OS === 'web' || !FileSystem) {
+    if (Platform.OS === "web" || !FileSystem) {
       // Caching not needed on web
       return url;
     }
@@ -350,7 +341,7 @@ export async function cacheImage(url: string): Promise<string | null> {
     await ensureCacheDir();
 
     // Generate cache file path
-    const filename = url.split('/').pop() || 'image.jpg';
+    const filename = url.split("/").pop() || "image.jpg";
     const fileUri = CACHE_DIR + filename;
 
     // Try to download (will skip if file exists)
@@ -359,11 +350,11 @@ export async function cacheImage(url: string): Promise<string | null> {
       return downloadResult.uri;
     } catch (downloadError) {
       // File might already exist or download failed
-      console.log('Cache download info:', downloadError);
+      console.log("Cache download info:", downloadError);
       return fileUri; // Return the path anyway
     }
   } catch (error) {
-    console.error('Cache image error:', error);
+    console.error("Cache image error:", error);
     return null;
   }
 }
@@ -376,7 +367,7 @@ export async function clearImageCache(): Promise<void> {
     await FileSystem.deleteAsync(CACHE_DIR, { idempotent: true });
     await ensureCacheDir();
   } catch (error) {
-    console.error('Clear cache error:', error);
+    console.error("Clear cache error:", error);
   }
 }
 
@@ -384,28 +375,30 @@ export async function clearImageCache(): Promise<void> {
  * Prefetch images for better performance
  */
 export async function prefetchImages(urls: string[]): Promise<void> {
-  if (Platform.OS === 'web') {
+  if (Platform.OS === "web") {
     // For web, use browser's image preloading
-    urls.forEach(url => {
+    urls.forEach((url) => {
       const img = new Image();
       img.src = url;
     });
   } else {
     // For native, cache images
-    await Promise.all(urls.map(url => cacheImage(url)));
+    await Promise.all(urls.map((url) => cacheImage(url)));
   }
 }
 
 /**
  * Get image dimensions from URI
  */
-export async function getImageDimensions(uri: string): Promise<{ width: number; height: number } | null> {
+export async function getImageDimensions(
+  uri: string,
+): Promise<{ width: number; height: number } | null> {
   try {
     // This requires expo-image or similar library for getting dimensions
     // For now, returning null as placeholder
     return null;
   } catch (error) {
-    console.error('Get dimensions error:', error);
+    console.error("Get dimensions error:", error);
     return null;
   }
 }
@@ -413,13 +406,16 @@ export async function getImageDimensions(uri: string): Promise<{ width: number; 
 /**
  * Validate image file
  */
-export function validateImageFile(file: { type?: string; size?: number }): { valid: boolean; error?: string } {
-  const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+export function validateImageFile(file: { type?: string; size?: number }): {
+  valid: boolean;
+  error?: string;
+} {
+  const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
 
   if (file.type && !validTypes.includes(file.type)) {
     return {
       valid: false,
-      error: 'Invalid file type. Please upload JPEG, PNG, or WebP images.',
+      error: "Invalid file type. Please upload JPEG, PNG, or WebP images.",
     };
   }
 
@@ -436,20 +432,23 @@ export function validateImageFile(file: { type?: string; size?: number }): { val
 /**
  * Validate document file
  */
-export function validateDocumentFile(file: { type?: string; size?: number }): { valid: boolean; error?: string } {
+export function validateDocumentFile(file: { type?: string; size?: number }): {
+  valid: boolean;
+  error?: string;
+} {
   const validTypes = [
-    'application/pdf',
-    'image/jpeg',
-    'image/jpg',
-    'image/png',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    "application/pdf",
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ];
 
   if (file.type && !validTypes.includes(file.type)) {
     return {
       valid: false,
-      error: 'Invalid file type. Please upload PDF, images, or Word documents.',
+      error: "Invalid file type. Please upload PDF, images, or Word documents.",
     };
   }
 

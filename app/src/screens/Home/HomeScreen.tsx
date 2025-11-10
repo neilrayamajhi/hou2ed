@@ -1,10 +1,4 @@
-import React, {
-  useState,
-  useRef,
-  useEffect,
-  useCallback,
-  useMemo,
-} from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -21,17 +15,18 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MapView, Marker, PROVIDER_GOOGLE } from "../../components/MapView";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { theme } from "../../theme";
 import ListingCard from "../../components/ListingCard";
 import FiltersSheet from "../Search/FiltersSheet";
 import { useFilterStore } from "../../state/useFilterStore";
 import { useLocation } from "../../hooks/useLocation";
-import { useMarketplaceListings } from "../../hooks/useMarketplaceListings";
+import { filterListingsByQuick } from "../../data/mockListings";
+import { fetchRealShelters } from "../../services/shelterService";
+import { getMarketplaceListings, type MarketplaceListing } from "../../services/marketplace.service";
 import { usePerformance } from "../../utils/perf";
-import type { MarketplaceListing } from "../../services/marketplace.service";
+import type { Listing } from "../../types/listing";
 import type { RootStackNavigationProp } from "../../navigation/types";
-import { useI18n } from "../../i18n";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
@@ -72,7 +67,6 @@ export default function HomeScreen() {
   const mapRef = useRef<MapView>(null);
   const listRef = useRef<FlatList>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
-  const i18n = useI18n();
 
   // Get user location
   const { location, loading: locationLoading, refreshLocation } = useLocation();
@@ -82,9 +76,13 @@ export default function HomeScreen() {
     useFilterStore();
 
   // Local state
+  const [listings, setListings] = useState<Listing[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [showListView, setShowListView] = useState(false);
+  const [loadingData, setLoadingData] = useState(false);
+  const [isRealData, setIsRealData] = useState(false);
+  const [dataSource, setDataSource] = useState('Mock Data');
   const [mapRegion, setMapRegion] = useState<Region>({
     latitude: 37.7749,
     longitude: -122.4194,
@@ -95,27 +93,51 @@ export default function HomeScreen() {
 
   // Performance tracking
   const mapPerf = usePerformance("mapUpdate");
+  const listingLoadPerf = usePerformance("listingLoad");
 
-  // Use the marketplace listings hook to get real data from Supabase
-  const {
-    data: listings = [],
-    isLoading: loadingData,
-    refetch,
-    isRefetching,
-  } = useMarketplaceListings();
+  // Load real listings from database or fall back to mock data
+  useEffect(() => {
+    async function loadListings() {
+      setLoadingData(true);
+      listingLoadPerf.start();
+      try {
+        // Fetch real listings from Supabase database
+        const dbListings = await getMarketplaceListings(
+          location?.latitude,
+          location?.longitude,
+          50 // 50 mile radius
+        );
 
-  // Refetch listings when screen gains focus to ensure fresh data
-  useFocusEffect(
-    useCallback(() => {
-      console.log("🏠 HomeScreen focused - refreshing listings");
-      refetch();
-    }, [refetch]),
-  );
+        let allListings: Listing[];
 
-  // Determine if we have real data (not mock)
-  const isRealData =
-    listings.length > 0 && !listings[0]?.id?.startsWith("mock-");
-  const dataSource = isRealData ? "Database" : "Mock Data";
+        if (dbListings && dbListings.length > 0) {
+          // Use database listings
+          allListings = dbListings as any;
+          console.log(`✅ Found ${dbListings.length} real listings from database`);
+          setIsRealData(true);
+          setDataSource('Live Database');
+        } else {
+          // No database listings — show empty list (no mock)
+          console.log('No database listings found');
+          allListings = [] as any;
+          setIsRealData(true);
+          setDataSource('Live Database');
+        }
+
+        const filtered = filterListingsByQuick(allListings, quickFilters);
+        setListings(filtered);
+      } catch (error) {
+        console.error('Error loading listings:', error);
+        // On error, show empty list (no mock)
+        setListings([]);
+      } finally {
+        listingLoadPerf.end();
+        setLoadingData(false);
+      }
+    }
+
+    loadListings();
+  }, [quickFilters, location]);
 
   // Update map region when user location is loaded
   useEffect(() => {
@@ -163,7 +185,7 @@ export default function HomeScreen() {
 
   // Navigate to listing details
   const openDetails = useCallback(
-    (listing: MarketplaceListing) => {
+    (listing: Listing) => {
       console.log("Opening details for:", listing.name);
       // @ts-ignore - Navigation types will be updated
       navigation.navigate("ListingDetails", { listingId: listing.id, listing });
@@ -196,44 +218,8 @@ export default function HomeScreen() {
     }
   }, [location, refreshLocation]);
 
-  // Memoize markers to prevent re-rendering on every state change
-  const mapMarkers = useMemo(() => {
-    return listings.map((listing, index) => (
-      <Marker
-        key={listing.id}
-        coordinate={listing.coordinates}
-        onPress={() => handleMarkerPress(index)}
-        tracksViewChanges={false} // Disable automatic view tracking to prevent re-renders
-      >
-        <View
-          style={[
-            styles.mapMarker,
-            listing.availability === "available"
-              ? styles.markerAvailable
-              : styles.markerFull,
-            activeIndex === index && styles.markerActive,
-          ]}
-        >
-          <Text style={styles.markerText} numberOfLines={1}>
-            {listing.price.isFree
-              ? "FREE"
-              : listing.price.min > 0
-                ? `$${listing.price.min}`
-                : "Contact"}
-          </Text>
-        </View>
-      </Marker>
-    ));
-  }, [listings, activeIndex, handleMarkerPress]);
-
   // Render listing item for list view
-  const renderListItem = ({
-    item,
-    index,
-  }: {
-    item: MarketplaceListing;
-    index: number;
-  }) => (
+  const renderListItem = ({ item, index }: { item: Listing; index: number }) => (
     <TouchableOpacity
       style={styles.listItem}
       onPress={() => openDetails(item)}
@@ -242,40 +228,27 @@ export default function HomeScreen() {
       <View style={styles.listItemContent}>
         <View style={styles.listItemHeader}>
           <Text style={styles.listItemTitle}>{item.name}</Text>
-          <View
-            style={[
-              styles.availabilityBadge,
-              item.availability === "available"
-                ? styles.availableBadge
-                : styles.fullBadge,
-            ]}
-          >
+          <View style={[styles.availabilityBadge,
+            item.availability === 'available' ? styles.availableBadge : styles.fullBadge
+          ]}>
             <Text style={styles.badgeText}>
-              {item.availability === "available"
-                ? `${item.bedsAvailable || 0} ${(item.bedsAvailable || 0) === 1 ? i18n.t("home.bed") : i18n.t("home.beds")}`
-                : i18n.t("home.full")}
+              {item.availability === 'available' ? `${item.bedsAvailable} beds` : 'Full'}
             </Text>
           </View>
         </View>
 
         <Text style={styles.listItemAddress}>
-          <Ionicons name="location" size={14} color="#8a8a8a" />{" "}
-          {`${item.address.street}, ${item.address.city}`}
+          <Ionicons name="location" size={14} color="#8a8a8a" />
+          {' '}{item.address.street}, {item.address.city}
         </Text>
 
         <View style={styles.listItemFooter}>
           <Text style={styles.listItemPrice}>
-            {item.price.isFree
-              ? i18n.t("home.free").toUpperCase()
-              : item.price.min > 0
-                ? `$${item.price.min}/mo`
-                : "Contact for pricing"}
+            {item.price.isFree ? 'FREE' : `$${item.price.min}/mo`}
           </Text>
           <View style={styles.listItemDistance}>
             <Ionicons name="navigate" size={14} color="#D4AF37" />
-            <Text style={styles.distanceText}>
-              {item.distance || 0.5} {i18n.t("home.mi")}
-            </Text>
+            <Text style={styles.distanceText}>{item.distance || 0.5} mi</Text>
           </View>
         </View>
       </View>
@@ -285,15 +258,12 @@ export default function HomeScreen() {
 
   const renderQuickFilter = (
     key: keyof typeof quickFilters,
-    translationKey: string,
+    label: string,
     icon: string,
   ) => (
     <TouchableOpacity
       key={key}
-      style={[
-        styles.quickFilter,
-        quickFilters[key] && styles.quickFilterActive,
-      ]}
+      style={[styles.quickFilter, quickFilters[key] && styles.quickFilterActive]}
       onPress={() => toggleQuickFilter(key)}
       activeOpacity={0.7}
     >
@@ -308,7 +278,7 @@ export default function HomeScreen() {
           quickFilters[key] && styles.quickFilterTextActive,
         ]}
       >
-        {i18n.t(translationKey)}
+        {label}
       </Text>
     </TouchableOpacity>
   );
@@ -320,9 +290,7 @@ export default function HomeScreen() {
         <View style={styles.realDataBanner}>
           <Ionicons name="checkmark-circle" size={16} color="#21C55D" />
           <Text style={styles.realDataText}>{dataSource}</Text>
-          <Text style={styles.realDataSubtext}>
-            {i18n.t("home.liveUpdates")}
-          </Text>
+          <Text style={styles.realDataSubtext}>Live Updates</Text>
         </View>
       )}
 
@@ -332,7 +300,7 @@ export default function HomeScreen() {
           <Ionicons name="search" size={20} color="#8a8a8a" />
           <TextInput
             style={styles.searchInput}
-            placeholder={i18n.t("home.searchPlaceholder")}
+            placeholder="Search by location or name"
             placeholderTextColor="#6a6a6a"
             value={searchText}
             onChangeText={setSearchText}
@@ -357,11 +325,11 @@ export default function HomeScreen() {
           style={styles.quickFiltersScroll}
           contentContainerStyle={styles.quickFiltersContent}
         >
-          {renderQuickFilter("immediate", "home.availableNow", "flash")}
-          {renderQuickFilter("free", "home.free", "gift")}
-          {renderQuickFilter("veterans", "home.veterans", "shield-checkmark")}
-          {renderQuickFilter("families", "home.families", "people")}
-          {renderQuickFilter("nearMe", "home.nearMe", "location")}
+          {renderQuickFilter("immediate", "Available Now", "flash")}
+          {renderQuickFilter("free", "Free", "gift")}
+          {renderQuickFilter("veterans", "Veterans", "shield-checkmark")}
+          {renderQuickFilter("families", "Families", "people")}
+          {renderQuickFilter("nearMe", "Near Me", "location")}
         </ScrollView>
       </View>
 
@@ -374,15 +342,35 @@ export default function HomeScreen() {
             provider={PROVIDER_GOOGLE}
             customMapStyle={MAP_DARK_STYLE}
             initialRegion={mapRegion}
-            region={mapRegion}
+            onRegionChangeComplete={(region) => {
+              mapPerf.start();
+              setMapRegion(region);
+              mapPerf.end();
+            }}
             showsUserLocation
             showsMyLocationButton={false}
-            scrollEnabled={true}
-            zoomEnabled={true}
-            rotateEnabled={false} // Disable rotation to reduce complexity
-            pitchEnabled={false} // Disable 3D view
           >
-            {mapMarkers}
+            {listings.map((listing, index) => (
+              <Marker
+                key={listing.id}
+                coordinate={listing.coordinates}
+                onPress={() => handleMarkerPress(index)}
+              >
+                <View
+                  style={[
+                    styles.mapMarker,
+                    listing.availability === "available"
+                      ? styles.markerAvailable
+                      : styles.markerFull,
+                    activeIndex === index && styles.markerActive,
+                  ]}
+                >
+                  <Text style={styles.markerText}>
+                    {listing.price.isFree ? "FREE" : `$${listing.price.min}`}
+                  </Text>
+                </View>
+              </Marker>
+            ))}
           </MapView>
 
           {/* Floating Map Controls */}
@@ -407,14 +395,12 @@ export default function HomeScreen() {
             styles.listViewContainer,
             {
               opacity: slideAnim,
-              transform: [
-                {
-                  translateY: slideAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [50, 0],
-                  }),
-                },
-              ],
+              transform: [{
+                translateY: slideAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [50, 0],
+                }),
+              }],
             },
           ]}
         >
@@ -438,12 +424,8 @@ export default function HomeScreen() {
               <ActivityIndicator size="small" color="#D4AF37" />
             ) : (
               <>
-                <Text style={styles.resultsCount}>
-                  {listings.length} {i18n.t("home.places")}
-                </Text>
-                <Text style={styles.resultsSubtext}>
-                  {i18n.t("home.inThisArea")}
-                </Text>
+                <Text style={styles.resultsCount}>{listings.length} places</Text>
+                <Text style={styles.resultsSubtext}>in this area</Text>
               </>
             )}
           </View>
@@ -459,7 +441,7 @@ export default function HomeScreen() {
               color="#000"
             />
             <Text style={styles.viewToggleText}>
-              {showListView ? i18n.t("home.map") : i18n.t("home.list")}
+              {showListView ? "Map" : "List"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -476,21 +458,17 @@ export default function HomeScreen() {
                 {listings[activeIndex].name}
               </Text>
               <Text style={styles.miniCardAddress} numberOfLines={1}>
-                {`${listings[activeIndex].address.street}, ${listings[activeIndex].address.city}`}
+                {listings[activeIndex].address.street}, {listings[activeIndex].address.city}
               </Text>
               <View style={styles.miniCardFooter}>
                 <Text style={styles.miniCardPrice}>
-                  {listings[activeIndex].price.isFree
-                    ? i18n.t("home.free").toUpperCase()
-                    : listings[activeIndex].price.min > 0
-                      ? `$${listings[activeIndex].price.min}/mo`
-                      : "Contact for pricing"}
+                  {listings[activeIndex].price.isFree ? 'FREE' : `$${listings[activeIndex].price.min}/mo`}
                 </Text>
                 <View style={styles.miniCardBadge}>
                   <Text style={styles.miniCardBadgeText}>
-                    {listings[activeIndex].availability === "available"
-                      ? `${listings[activeIndex].bedsAvailable || 0} ${(listings[activeIndex].bedsAvailable || 0) === 1 ? i18n.t("home.bed") : i18n.t("home.beds")}`
-                      : i18n.t("home.full")}
+                    {listings[activeIndex].availability === 'available'
+                      ? `${listings[activeIndex].bedsAvailable} beds`
+                      : 'Full'}
                   </Text>
                 </View>
               </View>
@@ -501,10 +479,7 @@ export default function HomeScreen() {
       </View>
 
       {/* Filters Sheet */}
-      <FiltersSheet
-        visible={showFilters}
-        onClose={() => setShowFilters(false)}
-      />
+      <FiltersSheet visible={showFilters} onClose={() => setShowFilters(false)} />
     </SafeAreaView>
   );
 }
@@ -612,7 +587,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   mapMarker: {
-    minWidth: 70, // Fixed minimum width to prevent resizing
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -621,8 +595,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3,
     elevation: 3,
-    alignItems: "center", // Center the text
-    justifyContent: "center",
   },
   markerAvailable: {
     backgroundColor: "#D4AF37",
@@ -631,17 +603,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#6a6a6a",
   },
   markerActive: {
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-    shadowOpacity: 0.5,
-    shadowRadius: 6,
-    elevation: 6,
+    transform: [{ scale: 1.1 }],
+    shadowOpacity: 0.4,
+    shadowRadius: 5,
+    elevation: 5,
   },
   markerText: {
     fontSize: 12,
     fontWeight: "bold",
     color: "#000000",
-    textAlign: "center", // Center text alignment
   },
   myLocationButton: {
     position: "absolute",
