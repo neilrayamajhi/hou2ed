@@ -9,9 +9,15 @@ import {
   TextInput,
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import AddressAutocompleteClean, {
+  type AddressData,
+} from "../../components/forms/AddressAutocompleteClean";
+import MapView, { Marker } from "react-native-maps";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
 import { RootStackNavigationProp } from "../../navigation/types";
 import { useToast } from "../../components/ui/Toast";
@@ -21,7 +27,8 @@ import {
   getCurrentProviderId,
 } from "../../services/listing.service";
 import * as ImagePicker from "expo-image-picker";
-import { uploadListingImage } from "../../services/storage.service";
+// Use clean uploader that works on all platforms
+import { uploadListingImageClean as uploadListingImage } from "../../services/storage.clean.service";
 import { useRequireProvider } from "../../hooks/useRequireProvider";
 import { DocumentRequirement } from "../../types/listing";
 import { PREDEFINED_DOCUMENT_TYPES } from "../../constants/documents";
@@ -65,7 +72,9 @@ export default function ListingWizard() {
 
   // Form state (MVP subset)
   const [title, setTitle] = useState("");
+  const [overview, setOverview] = useState("");
   const [address, setAddress] = useState("");
+  const [locationSel, setLocationSel] = useState<AddressData | null>(null);
   const [totalBeds, setTotalBeds] = useState("");
   const [availableBeds, setAvailableBeds] = useState("");
   const [price, setPrice] = useState("");
@@ -76,9 +85,11 @@ export default function ListingWizard() {
 
   // Amenities state
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
+  const [customAmenities, setCustomAmenities] = useState("");
 
   // Services state
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [customServices, setCustomServices] = useState("");
 
   // Rules state
   const [curfew, setCurfew] = useState("");
@@ -86,19 +97,20 @@ export default function ListingWizard() {
   const [petsPolicy, setPetsPolicy] = useState<
     "allowed" | "not_allowed" | "service_only"
   >("not_allowed");
+  const [customRules, setCustomRules] = useState("");
 
   // Eligibility state
   const [minAge, setMinAge] = useState("");
   const [maxAge, setMaxAge] = useState("");
   const [selectedEligibility, setSelectedEligibility] = useState<string[]>([]);
+  const [customEligibility, setCustomEligibility] = useState("");
 
   // Document Requirements state
   const [documentRequirements, setDocumentRequirements] = useState<
     DocumentRequirement[]
   >([]);
   const [customDocumentName, setCustomDocumentName] = useState("");
-  const [customDocumentDescription, setCustomDocumentDescription] =
-    useState("");
+  const [customDocumentDescription, setCustomDocumentDescription] = useState("");
 
   const { mutate: submit, isPending } = useMutation({
     mutationFn: async () => {
@@ -109,21 +121,56 @@ export default function ListingWizard() {
         ? Number(availableBeds)
         : undefined;
       const priceNum = price ? Number(price) : undefined;
+      // Prepare custom fields (split by comma or newline)
+      const customAmenitiesArray = customAmenities
+        .split(/[,\n]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const customServicesArray = customServices
+        .split(/[,\n]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const customRulesArray = customRules
+        .split(/[,\n]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const customEligibilityArray = customEligibility
+        .split(/[,\n]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+
       const created = await createListing(providerId, {
         title: title.trim(),
-        address: address.trim(),
+        description:
+          overview && overview.trim().length > 0 ? overview.trim() : undefined,
+        address: (locationSel?.street || address).trim(),
+        city: locationSel?.city,
+        state: locationSel?.state,
+        zip_code: locationSel?.zipCode,
         totalBeds: totalBedsNum,
         availableBeds: availableBedsNum,
         price: priceNum,
+        coordinates: locationSel
+          ? { lat: locationSel.latitude, lng: locationSel.longitude }
+          : undefined,
         amenities: selectedAmenities.length > 0 ? selectedAmenities : undefined,
+        customAmenities:
+          customAmenitiesArray.length > 0 ? customAmenitiesArray : undefined,
         services: selectedServices.length > 0 ? selectedServices : undefined,
+        customServices:
+          customServicesArray.length > 0 ? customServicesArray : undefined,
         curfew: curfew.trim() || undefined,
         visitorsPolicy: visitorsPolicy.trim() || undefined,
         petsPolicy: petsPolicy !== "not_allowed" ? petsPolicy : undefined,
+        customRules: customRulesArray.length > 0 ? customRulesArray : undefined,
         minAge: minAge ? Number(minAge) : undefined,
         maxAge: maxAge ? Number(maxAge) : undefined,
         eligibility:
           selectedEligibility.length > 0 ? selectedEligibility : undefined,
+        customEligibility:
+          customEligibilityArray.length > 0
+            ? customEligibilityArray
+            : undefined,
         documentsRequired:
           documentRequirements.length > 0 ? documentRequirements : undefined,
       });
@@ -131,39 +178,32 @@ export default function ListingWizard() {
       if (created.success && created.listingId) {
         // Upload photos if any
         if (photos.length > 0) {
-          console.log(
-            `📸 Uploading ${photos.length} photo(s) for listing ${created.listingId}`,
-          );
           const urls: string[] = [];
-          for (let i = 0; i < photos.length; i++) {
-            const uri = photos[i];
-            console.log(`📤 Uploading photo ${i + 1}/${photos.length}: ${uri}`);
+          for (const uri of photos) {
             const res = await uploadListingImage(uri, created.listingId, {
               resize: "full",
             });
-            if (res.success && res.url) {
-              console.log(
-                `✅ Photo ${i + 1} uploaded successfully: ${res.url}`,
-              );
-              urls.push(res.url);
-            } else {
-              console.error(`❌ Photo ${i + 1} upload failed:`, res.error);
-            }
+            if (res.success && res.url) urls.push(res.url);
           }
           if (urls.length > 0) {
-            console.log(`💾 Saving ${urls.length} image URL(s) to database`);
             const { updateListing } = await import(
               "../../services/listing.service"
             );
-            const updateResult = await updateListing(created.listingId, {
+            const res = await updateListing(created.listingId, {
               images: urls,
             });
-            console.log("📝 Update listing result:", updateResult);
-          } else {
-            console.warn("⚠️ No images were successfully uploaded");
+            if (!res.success) {
+              console.warn(
+                "[ListingWizard] Failed to persist images:",
+                res.error,
+              );
+            }
+          } else if (photos.length > 0 && urls.length === 0) {
+            // All uploads failed — avoid saving file:// paths by not writing images
+            console.warn(
+              "[ListingWizard] All photo uploads failed; not saving images field",
+            );
           }
-        } else {
-          console.log("📷 No photos selected for this listing");
         }
         // Persist per-day availability (calendar) if provided
         if (Object.keys(availabilityDays).length > 0) {
@@ -196,96 +236,21 @@ export default function ListingWizard() {
     [stepIndex, steps.length],
   );
 
-  // Check if current step is valid without showing alerts (for button state)
-  const isStepValid = (): boolean => {
-    switch (currentStep) {
-      case "Basics":
-        return !!(
-          title.trim() &&
-          address.trim() &&
-          totalBeds &&
-          Number(totalBeds) > 0 &&
-          (!availableBeds || Number(availableBeds) <= Number(totalBeds))
-        );
-      case "Pricing":
-        return !price || Number(price) >= 0;
-      case "Review":
-        return !!(title.trim() && address.trim() && totalBeds);
-      default:
-        return true;
-    }
-  };
-
-  const validateStep = (): boolean => {
-    switch (currentStep) {
-      case "Basics":
-        if (!title.trim()) {
-          Alert.alert("Missing Information", "Property name is required");
-          return false;
-        }
-        if (!address.trim()) {
-          Alert.alert("Missing Information", "Address is required");
-          return false;
-        }
-        if (!totalBeds || Number(totalBeds) <= 0) {
-          Alert.alert(
-            "Missing Information",
-            "Total beds must be greater than 0",
-          );
-          return false;
-        }
-        if (availableBeds && Number(availableBeds) > Number(totalBeds)) {
-          Alert.alert(
-            "Invalid Information",
-            "Available beds cannot exceed total beds",
-          );
-          return false;
-        }
-        return true;
-
-      case "Location":
-        // No required fields for location step (just informational)
-        return true;
-
-      case "Photos":
-        // Photos are optional, so always allow proceeding
-        return true;
-
-      case "AmenitiesRules":
-        // All amenities and rules are optional
-        return true;
-
-      case "Pricing":
-        // Price is optional (can be free)
-        if (price && Number(price) < 0) {
-          Alert.alert("Invalid Information", "Price cannot be negative");
-          return false;
-        }
-        return true;
-
-      case "Availability":
-        // Availability calendar is optional
-        return true;
-
-      case "Review":
-        // Final review - check all required fields again
-        if (!title.trim() || !address.trim() || !totalBeds) {
-          Alert.alert(
-            "Missing Required Information",
-            "Please go back and fill in all required fields:\n• Property name\n• Address\n• Total beds",
-          );
-          return false;
-        }
-        return true;
-
-      default:
-        return true;
-    }
-  };
-
   const next = () => {
-    if (!validateStep()) {
-      return;
+    if (currentStep === "Basics") {
+      if (!title.trim() || !totalBeds) {
+        Alert.alert("Missing info", "Title and total beds are required");
+        return;
+      }
+    }
+    if (currentStep === "Location") {
+      if (!locationSel) {
+        Alert.alert(
+          "Missing address",
+          "Please select an address and location.",
+        );
+        return;
+      }
     }
     setStepIndex((i) => Math.min(i + 1, steps.length - 1));
   };
@@ -302,14 +267,17 @@ export default function ListingWizard() {
         placeholderTextColor={colors.gray[500]}
       />
 
-      <Text style={styles.label}>Address *</Text>
+      <Text style={styles.label}>Overview (optional)</Text>
       <TextInput
-        style={styles.input}
-        value={address}
-        onChangeText={setAddress}
-        placeholder="e.g. 123 Main St, City"
+        style={[styles.input, { height: 100, textAlignVertical: "top" }]}
+        value={overview}
+        onChangeText={setOverview}
+        placeholder="Describe your program, services, and who you support."
         placeholderTextColor={colors.gray[500]}
+        multiline
       />
+
+      {/* Address moved to Location step */}
 
       <Text style={styles.label}>Total beds *</Text>
       <TextInput
@@ -378,20 +346,10 @@ export default function ListingWizard() {
               mediaTypes: ImagePicker.MediaTypeOptions.Images,
               allowsEditing: false,
               quality: 0.9,
-              allowsMultipleSelection: false,
             });
-            if (!result.canceled && result.assets && result.assets[0]) {
-              const uri = result.assets[0].uri;
-              console.log("📷 Image picked:", uri);
-              if (uri) {
-                setPhotos((prev) => {
-                  const newPhotos = [...prev, uri];
-                  console.log(`📸 Total photos selected: ${newPhotos.length}`);
-                  return newPhotos;
-                });
-              }
-            } else {
-              console.log("📷 Image picker cancelled or no image selected");
+            if (!result.canceled) {
+              const uri = result.assets?.[0]?.uri;
+              if (uri) setPhotos((prev) => [...prev, uri]);
             }
           }}
           accessibilityLabel="Add photo"
@@ -418,6 +376,71 @@ export default function ListingWizard() {
       setArray([...array, item]);
     }
   };
+
+  // New richer Location step UI (address + map)
+  const renderLocation2 = () => (
+    <View style={{ gap: spacing.lg }}>
+      <View>
+        <Text style={styles.label}>Address & Location *</Text>
+        <Text style={styles.sectionDescription}>
+          Search for your address, then confirm the pin on the map.
+        </Text>
+      </View>
+
+      {/* Search card */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Search for an address</Text>
+        <AddressAutocompleteClean
+          onAddressSelect={(addr) => setLocationSel(addr)}
+          placeholder="Start typing..."
+        />
+      </View>
+
+      {/* Selected address card */}
+      {locationSel ? (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Selected address</Text>
+          <Text style={{ color: colors.gray[100], fontWeight: "600" }}>
+            {locationSel.street}
+          </Text>
+          <Text style={{ color: colors.gray[400], marginTop: 4 }}>
+            {locationSel.city}, {locationSel.state} {locationSel.zipCode}
+          </Text>
+        </View>
+      ) : (
+        <Text style={styles.helper}>No address selected yet.</Text>
+      )}
+
+      {/* Map preview */}
+      {locationSel && (
+        <View
+          style={{
+            borderRadius: radius.md,
+            overflow: "hidden",
+            borderWidth: 1,
+            borderColor: colors.gray[800],
+          }}
+        >
+          <MapView
+            style={{ height: 240, width: "100%" }}
+            initialRegion={{
+              latitude: locationSel.latitude,
+              longitude: locationSel.longitude,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            }}
+          >
+            <Marker
+              coordinate={{
+                latitude: locationSel.latitude,
+                longitude: locationSel.longitude,
+              }}
+            />
+          </MapView>
+        </View>
+      )}
+    </View>
+  );
 
   const renderAmenities = () => {
     const amenitiesOptions = [
@@ -490,6 +513,18 @@ export default function ListingWizard() {
           ))}
         </View>
 
+        <Text style={[styles.label, { marginTop: spacing.md }]}>
+          Other Amenities (Optional)
+        </Text>
+        <TextInput
+          style={[styles.input, { height: 80, textAlignVertical: "top" }]}
+          value={customAmenities}
+          onChangeText={setCustomAmenities}
+          placeholder="e.g., Garden area, Pet-friendly outdoor space, Computer lab"
+          placeholderTextColor={colors.gray[500]}
+          multiline
+        />
+
         {/* Services Section */}
         <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>
           Services
@@ -525,6 +560,18 @@ export default function ListingWizard() {
             </TouchableOpacity>
           ))}
         </View>
+
+        <Text style={[styles.label, { marginTop: spacing.md }]}>
+          Other Services (Optional)
+        </Text>
+        <TextInput
+          style={[styles.input, { height: 80, textAlignVertical: "top" }]}
+          value={customServices}
+          onChangeText={setCustomServices}
+          placeholder="e.g., Childcare, Language classes, Financial counseling"
+          placeholderTextColor={colors.gray[500]}
+          multiline
+        />
 
         {/* Rules Section */}
         <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>
@@ -601,6 +648,18 @@ export default function ListingWizard() {
           </TouchableOpacity>
         </View>
 
+        <Text style={[styles.label, { marginTop: spacing.md }]}>
+          Other Rules (Optional)
+        </Text>
+        <TextInput
+          style={[styles.input, { height: 80, textAlignVertical: "top" }]}
+          value={customRules}
+          onChangeText={setCustomRules}
+          placeholder="e.g., No smoking indoors, Quiet hours 10PM-7AM, Must attend weekly meetings"
+          placeholderTextColor={colors.gray[500]}
+          multiline
+        />
+
         {/* Eligibility Section */}
         <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>
           Who Can Apply
@@ -668,6 +727,18 @@ export default function ListingWizard() {
             </TouchableOpacity>
           ))}
         </View>
+
+        <Text style={[styles.label, { marginTop: spacing.md }]}>
+          Other Eligibility Requirements (Optional)
+        </Text>
+        <TextInput
+          style={[styles.input, { height: 80, textAlignVertical: "top" }]}
+          value={customEligibility}
+          onChangeText={setCustomEligibility}
+          placeholder="e.g., Must have valid ID, Clean background check required, No active warrants"
+          placeholderTextColor={colors.gray[500]}
+          multiline
+        />
 
         {/* Document Requirements Section */}
         <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>
@@ -1015,8 +1086,39 @@ export default function ListingWizard() {
           <Text style={styles.reviewKey}>Name:</Text> {title || "-"}
         </Text>
         <Text style={styles.reviewItem}>
-          <Text style={styles.reviewKey}>Address:</Text> {address || "-"}
+          <Text style={styles.reviewKey}>Address:</Text>{" "}
+          {locationSel
+            ? `${locationSel.street}, ${locationSel.city}, ${locationSel.state} ${locationSel.zipCode}`
+            : address || "-"}
         </Text>
+        {locationSel && (
+          <View
+            style={{
+              marginTop: spacing.sm,
+              borderRadius: radius.md,
+              overflow: "hidden",
+              borderWidth: 1,
+              borderColor: colors.gray[800],
+            }}
+          >
+            <MapView
+              style={{ height: 160, width: "100%" }}
+              initialRegion={{
+                latitude: locationSel.latitude,
+                longitude: locationSel.longitude,
+                latitudeDelta: 0.01,
+                longitudeDelta: 0.01,
+              }}
+            >
+              <Marker
+                coordinate={{
+                  latitude: locationSel.latitude,
+                  longitude: locationSel.longitude,
+                }}
+              />
+            </MapView>
+          </View>
+        )}
         <Text style={styles.reviewItem}>
           <Text style={styles.reviewKey}>Total beds:</Text> {totalBeds || "-"}
         </Text>
@@ -1102,7 +1204,7 @@ export default function ListingWizard() {
       case "Basics":
         return renderBasics();
       case "Location":
-        return renderLocation();
+        return renderLocation2();
       case "Photos":
         return renderPhotos();
       case "AmenitiesRules":
@@ -1137,13 +1239,23 @@ export default function ListingWizard() {
         />
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-      >
-        <Text style={styles.stepTitle}>{stepTitles[currentStep]}</Text>
-        {body()}
-      </ScrollView>
+      {currentStep === "Location" ? (
+        <KeyboardAvoidingView
+          style={styles.locationContainer}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <Text style={styles.stepTitle}>{stepTitles[currentStep]}</Text>
+          {body()}
+        </KeyboardAvoidingView>
+      ) : (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <Text style={styles.stepTitle}>{stepTitles[currentStep]}</Text>
+          {body()}
+        </ScrollView>
+      )}
 
       <View style={styles.bottomBar}>
         {stepIndex > 0 ? (
@@ -1179,22 +1291,8 @@ export default function ListingWizard() {
                 <Text style={styles.secondaryText}>Skip Calendar</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity
-              style={[
-                styles.primaryBtn,
-                !isStepValid() && styles.primaryBtnDisabled,
-              ]}
-              onPress={next}
-              disabled={!isStepValid()}
-            >
-              <Text
-                style={[
-                  styles.primaryText,
-                  !isStepValid() && styles.primaryTextDisabled,
-                ]}
-              >
-                Next
-              </Text>
+            <TouchableOpacity style={styles.primaryBtn} onPress={next}>
+              <Text style={styles.primaryText}>Next</Text>
             </TouchableOpacity>
           </>
         )}
@@ -1226,11 +1324,24 @@ const styles = StyleSheet.create({
   progressBarFill: { height: 4, backgroundColor: colors.primary[500] },
   scroll: { flex: 1 },
   scrollContent: { padding: spacing.lg, paddingBottom: 120 },
+  locationContainer: { flex: 1, padding: spacing.lg, paddingBottom: 120 },
   stepTitle: {
     fontSize: typography.sizes.xl,
     fontWeight: "600",
     color: colors.gray[50],
     marginBottom: spacing.lg,
+  },
+  card: {
+    backgroundColor: colors.gray[900],
+    borderWidth: 1,
+    borderColor: colors.gray[800],
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  cardTitle: {
+    color: colors.gray[200],
+    fontSize: typography.sizes.sm,
+    marginBottom: spacing.sm,
   },
   sectionDescription: {
     fontSize: typography.sizes.sm,
@@ -1354,13 +1465,6 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.md,
     fontWeight: "600",
   },
-  primaryBtnDisabled: {
-    backgroundColor: colors.gray[800],
-    opacity: 0.5,
-  },
-  primaryTextDisabled: {
-    color: colors.gray[500],
-  },
   sectionTitle: {
     fontSize: typography.sizes.lg,
     fontWeight: "600",
@@ -1391,42 +1495,41 @@ const styles = StyleSheet.create({
   // Document Requirements styles
   documentItem: {
     backgroundColor: colors.gray[850],
+    borderRadius: radius.md,
     padding: spacing.md,
     marginBottom: spacing.sm,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.gray[700],
   },
   documentTitle: {
     fontSize: typography.sizes.md,
-    fontWeight: "500",
+    fontWeight: "600",
     color: colors.gray[50],
   },
   documentDescription: {
     fontSize: typography.sizes.sm,
     color: colors.gray[400],
     marginTop: spacing.xs,
-    marginLeft: 32,
+    marginLeft: spacing.lg + spacing.sm,
   },
   requiredToggle: {
     flexDirection: "row",
-    gap: spacing.sm,
+    gap: spacing.xs,
     marginTop: spacing.sm,
-    marginLeft: 32,
+    marginLeft: spacing.lg + spacing.sm,
   },
   requiredChip: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    borderRadius: radius.full,
+    borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: colors.gray[700],
+    backgroundColor: colors.gray[800],
   },
   requiredChipActive: {
     backgroundColor: colors.primary[500],
     borderColor: colors.primary[500],
   },
   requiredChipText: {
-    fontSize: typography.sizes.sm,
+    fontSize: typography.sizes.xs,
     color: colors.gray[400],
   },
   requiredChipTextActive: {
@@ -1438,30 +1541,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: spacing.sm,
-    backgroundColor: colors.gray[850],
-    borderWidth: 1,
-    borderColor: colors.primary[500],
+    backgroundColor: colors.primary[500],
     borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    marginTop: spacing.md,
+    paddingVertical: spacing.sm,
+    marginTop: spacing.sm,
   },
   addCustomButtonDisabled: {
+    backgroundColor: colors.gray[700],
     opacity: 0.5,
-    borderColor: colors.gray[700],
   },
   addCustomButtonText: {
-    fontSize: typography.sizes.md,
-    fontWeight: "500",
     color: colors.gray[50],
+    fontSize: typography.sizes.sm,
+    fontWeight: "600",
   },
   customDocumentItem: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.gray[850],
-    padding: spacing.md,
-    marginBottom: spacing.sm,
     borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.gray[700],
+    padding: spacing.md,
+    marginTop: spacing.sm,
   },
 });

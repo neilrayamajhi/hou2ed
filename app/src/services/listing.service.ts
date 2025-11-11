@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import { DocumentRequirement } from "../types/listing";
+import { geocodeAddress } from "../lib/geocoding";
 
 // Type for a simplified listing (what providers see in dashboard)
 export interface ProviderListing {
@@ -23,16 +23,25 @@ export interface CreateListingInput {
   availableBeds?: number;
   price?: number;
   description?: string;
+  // Optional: Pre-geocoded coordinates (skips geocoding if provided)
+  coordinates?: {
+    lat: number;
+    lng: number;
+  };
   // New fields for amenities, services, rules, eligibility
   amenities?: string[];
+  customAmenities?: string[];
   services?: string[];
+  customServices?: string[];
   curfew?: string;
   visitorsPolicy?: string;
   petsPolicy?: "allowed" | "not_allowed" | "service_only";
+  customRules?: string[];
   minAge?: number;
   maxAge?: number;
   eligibility?: string[];
-  documentsRequired?: DocumentRequirement[];
+  customEligibility?: string[];
+  documentsRequired?: any; // DocumentRequirement[] but avoiding circular import
 }
 
 // Type for updating a listing
@@ -47,13 +56,17 @@ export interface UpdateListingInput {
   availabilityDays?: Record<string, number>; // YYYY-MM-DD -> beds
   // Amenities, services, rules, eligibility
   amenities?: string[];
+  customAmenities?: string[];
   services?: string[];
+  customServices?: string[];
   curfew?: string;
   visitorsPolicy?: string;
   petsPolicy?: "allowed" | "not_allowed" | "service_only";
+  customRules?: string[];
   minAge?: number;
   maxAge?: number;
   eligibility?: string[];
+  customEligibility?: string[];
 }
 
 /**
@@ -65,33 +78,6 @@ export async function getProviderListings(
 ): Promise<ProviderListing[]> {
   console.log("🔵 START getProviderListings for:", providerId);
   try {
-    // CRITICAL: Verify the current session before fetching
-    // This ensures we're using the correct auth context after account switches
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
-
-    if (sessionError) {
-      console.error("❌ Session error:", sessionError);
-      throw new Error("Authentication required");
-    }
-
-    if (!session) {
-      console.error("❌ No active session");
-      throw new Error("Please log in to view listings");
-    }
-
-    // Verify this is the correct user
-    if (session.user.id !== providerId) {
-      console.error("❌ Session mismatch:", {
-        sessionUserId: session.user.id,
-        requestedProviderId: providerId,
-      });
-      throw new Error("Session user mismatch");
-    }
-
-    console.log("✅ Session validated for provider:", providerId);
     console.log("📋 Fetching listings for provider:", providerId);
 
     // Create a timeout promise
@@ -100,7 +86,6 @@ export async function getProviderListings(
     );
 
     // Race between the query and timeout
-    // Use the validated session's access token for the query
     const queryPromise = supabase
       .from("listings")
       .select(
@@ -306,6 +291,9 @@ export async function createListing(
     if (listingData.amenities && listingData.amenities.length > 0) {
       amenitiesObj.basic = listingData.amenities;
     }
+    if (listingData.customAmenities && listingData.customAmenities.length > 0) {
+      amenitiesObj.custom = listingData.customAmenities;
+    }
 
     // Build services object from array
     const servicesObj: any = {};
@@ -326,6 +314,9 @@ export async function createListing(
         servicesObj.transportation = ["assistance"];
       if (listingData.services.includes("legal")) servicesObj.legal = true;
     }
+    if (listingData.customServices && listingData.customServices.length > 0) {
+      servicesObj.custom = listingData.customServices;
+    }
 
     // Build rules object
     const rulesObj: any = {};
@@ -333,6 +324,9 @@ export async function createListing(
     if (listingData.visitorsPolicy)
       rulesObj.visitors = listingData.visitorsPolicy;
     if (listingData.petsPolicy) rulesObj.pets = listingData.petsPolicy;
+    if (listingData.customRules && listingData.customRules.length > 0) {
+      rulesObj.custom = listingData.customRules;
+    }
 
     // Build eligibility object
     const eligibilityObj: any = {};
@@ -359,14 +353,45 @@ export async function createListing(
         eligibilityObj.veterans = true;
       }
     }
-
-    // Build intake object with document requirements
-    const intakeObj: any = {};
     if (
-      listingData.documentsRequired &&
-      listingData.documentsRequired.length > 0
+      listingData.customEligibility &&
+      listingData.customEligibility.length > 0
     ) {
-      intakeObj.documents_required = listingData.documentsRequired;
+      eligibilityObj.custom = listingData.customEligibility;
+    }
+
+    // Use provided coordinates or geocode the address
+    let lat: number;
+    let lng: number;
+
+    if (listingData.coordinates) {
+      // Coordinates provided from autocomplete - no need to geocode!
+      lat = listingData.coordinates.lat;
+      lng = listingData.coordinates.lng;
+      console.log("✅ Using pre-geocoded coordinates:", { lat, lng });
+    } else {
+      // No coordinates provided, geocode the address
+      lat = 34.0522; // Default LA coordinates as fallback
+      lng = -118.2437;
+
+      const geocodeResult = await geocodeAddress({
+        street: listingData.address,
+        city: listingData.city || null,
+        state: listingData.state || null,
+        zip: listingData.zip_code || null,
+      });
+
+      if (geocodeResult) {
+        lat = geocodeResult.lat;
+        lng = geocodeResult.lng;
+        console.log("✅ Geocoded address:", {
+          address: listingData.address,
+          lat,
+          lng,
+        });
+      } else {
+        console.warn("⚠️ Geocoding failed, using default LA coordinates");
+      }
     }
 
     // Prepare the data for Supabase
@@ -378,8 +403,8 @@ export async function createListing(
       city: listingData.city || "Los Angeles",
       state: listingData.state || "CA",
       zip_code: listingData.zip_code || "90001",
-      lat: 34.0522, // Default LA coordinates (would normally geocode the address)
-      lng: -118.2437,
+      lat,
+      lng,
       housing_type: "emergency_shelter", // Default type
       unit_beds: {
         shared_dorm: listingData.totalBeds,
@@ -394,7 +419,9 @@ export async function createListing(
       cost: listingData.price
         ? { monthly: listingData.price }
         : { is_free: true },
-      intake: intakeObj,
+      intake: listingData.documentsRequired
+        ? { documents_required: listingData.documentsRequired }
+        : {},
       availability: {
         beds_today: listingData.availableBeds || listingData.totalBeds,
         beds_week: listingData.totalBeds,
@@ -465,8 +492,38 @@ export async function updateListing(
     };
 
     if (updates.title) updateData.title = updates.title;
-    if (updates.address) updateData.address = updates.address;
     if (updates.description) updateData.description = updates.description;
+
+    // If address changes, re-geocode to get new coordinates
+    if (updates.address) {
+      updateData.address = updates.address;
+
+      // Get current listing data for city, state, zip if not in updates
+      const { data: currentListing } = await supabase
+        .from("listings")
+        .select("city, state, zip_code")
+        .eq("id", listingId)
+        .single();
+
+      const geocodeResult = await geocodeAddress({
+        street: updates.address,
+        city: currentListing?.city || null,
+        state: currentListing?.state || null,
+        zip: currentListing?.zip_code || null,
+      });
+
+      if (geocodeResult) {
+        updateData.lat = geocodeResult.lat;
+        updateData.lng = geocodeResult.lng;
+        console.log("✅ Re-geocoded address:", {
+          address: updates.address,
+          lat: geocodeResult.lat,
+          lng: geocodeResult.lng,
+        });
+      } else {
+        console.warn("⚠️ Geocoding failed, coordinates not updated");
+      }
+    }
 
     // Update unit_beds if totalBeds changed
     if (updates.totalBeds !== undefined) {
@@ -506,8 +563,6 @@ export async function updateListing(
 
     // Update images if provided
     if (updates.images !== undefined) {
-      console.log("🖼️ Updating images for listing:", listingId);
-      console.log("   New images array:", updates.images);
       updateData.images = updates.images;
     }
 
@@ -590,39 +645,17 @@ export async function updateListing(
       updateData.eligibility = eligibilityObj;
     }
 
-    console.log("📝 Updating listing with data:", {
-      listingId,
-      updateFields: Object.keys(updateData),
-      hasImages: "images" in updateData,
-      imageCount: updateData.images ? updateData.images.length : 0,
-    });
-
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("listings")
       .update(updateData)
-      .eq("id", listingId)
-      .select();
+      .eq("id", listingId);
 
     if (error) {
-      console.error("❌ Error updating listing:", error);
-      console.error("   Error details:", {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-      });
+      console.error("Error updating listing:", error);
       return {
         success: false,
         error: error.message || "Failed to update listing",
       };
-    }
-
-    console.log("✅ Listing updated successfully");
-    if (data && data[0]) {
-      console.log(
-        "   Updated listing has images:",
-        Array.isArray(data[0].images) ? data[0].images.length : "none",
-      );
     }
 
     return { success: true };

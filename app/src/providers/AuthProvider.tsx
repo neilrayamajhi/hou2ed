@@ -51,9 +51,13 @@ export default function AuthProvider({
 
         // Handle different auth events
         if (event === "SIGNED_OUT") {
+          // Don't trigger full logout flow on SIGNED_OUT event
+          // This can happen on initial load when there's no session
+          // Just clear the local state without clearing caches or calling logout
+          console.log("📝 Auth event SIGNED_OUT - clearing local session only");
           setSession(null);
           setUser(null);
-          await logout();
+          // Don't call logout() here as it causes unnecessary cache clearing on startup
           return;
         }
 

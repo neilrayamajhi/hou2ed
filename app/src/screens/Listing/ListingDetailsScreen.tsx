@@ -16,6 +16,12 @@ import PhotoCarousel from "../../components/patterns/PhotoCarousel";
 import Badge from "../../components/ui/Badge";
 import { colors, spacing, radius } from "../../theme/tokens";
 import { supabase } from "../../lib/supabase";
+import {
+  parseAmenities,
+  parseServices,
+  parseRules,
+  parseEligibility,
+} from "../../constants/listingOptions";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -175,10 +181,11 @@ export default function ListingDetailsScreen() {
     };
   }, [listingFromParams, dbListing]);
 
-  const amenitiesList = toStringArray(merged.amenities);
-  const servicesList = toStringArray(merged.services);
-  const rulesList = toStringArray(merged.rules);
-  const eligibilityList = toStringArray(merged.eligibility);
+  // Use the new parsing functions that convert codes to nice labels
+  const amenitiesList = parseAmenities(merged.amenities);
+  const servicesList = parseServices(merged.services);
+  const rulesList = parseRules(merged.rules);
+  const eligibilityList = parseEligibility(merged.eligibility);
 
   // Images are already normalized in the merged object
   const imageUrls: string[] = merged.images;
