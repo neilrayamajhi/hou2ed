@@ -229,12 +229,25 @@ export default function ListingDetailsScreen() {
   }, [merged, toggleListing]);
 
   const handleApply = useCallback(() => {
+    console.log("🔵 Apply Now clicked");
+    console.log("User:", user);
+    console.log("Listing ID:", merged.id);
+    console.log("Merged object:", merged);
+
     if (!user) {
+      console.log("❌ No user - navigating to sign in");
       // Navigate to sign in if not authenticated
       // @ts-ignore
       navigation.navigate("Auth", { screen: "SignIn" });
       return;
     }
+
+    if (!merged.id) {
+      console.error("❌ No listing ID available!");
+      return;
+    }
+
+    console.log("✅ Navigating to ApplyWizard with listingId:", merged.id);
     // Navigate to application flow
     // @ts-ignore
     navigation.navigate("ApplyWizard", { listingId: merged.id });

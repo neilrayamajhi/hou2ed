@@ -22,6 +22,8 @@ import Step1Info from "./Step1Info";
 import Step2Eligibility from "./Step2Eligibility";
 import Step3Documents from "./Step3Documents";
 import Step4Review from "./Step4Review";
+import { useAuthStore } from "../../state/useAuthStore";
+import { supabase } from "../../lib/supabase";
 
 // Types for application data
 export interface ApplicationDraft {
@@ -55,6 +57,9 @@ export default function ApplyWizard() {
   const route = useRoute<ApplyWizardRouteProp>();
   const listingId = route.params?.listingId;
 
+  // Get auth state
+  const { user } = useAuthStore();
+
   const [currentStep, setCurrentStep] = useState(1);
   const [draft, setDraft] = useState<ApplicationDraft>({
     listingId,
@@ -67,6 +72,15 @@ export default function ApplyWizard() {
   useEffect(() => {
     loadDraft();
   }, []);
+
+  // Check auth on mount
+  useEffect(() => {
+    if (!user) {
+      console.warn("⚠️ ApplyWizard: No user found in auth store on mount");
+    } else {
+      console.log("✅ ApplyWizard: User found in auth store:", user.email);
+    }
+  }, [user]);
 
   // Save draft whenever it changes
   useEffect(() => {
@@ -144,17 +158,17 @@ export default function ApplyWizard() {
 
   const handleSubmit = async () => {
     try {
-      // Get current user
-      const { supabase } = await import("../../lib/supabase");
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+      // Check if user is authenticated
+      console.log("🔵 Submitting application - checking auth");
+      console.log("User from store:", user);
 
-      if (userError || !user) {
+      if (!user || !user.id) {
+        console.error("❌ No user found in auth store");
         Alert.alert("Error", "You must be logged in to submit an application");
         return;
       }
+
+      console.log("✅ User authenticated, ID:", user.id);
 
       if (!draft.listingId) {
         Alert.alert("Error", "Invalid listing. Please try again.");
