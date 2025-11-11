@@ -236,46 +236,105 @@ export async function uploadApplicationDocument(
   documentType: string,
 ): Promise<UploadResult> {
   try {
-    // Read file
-    const response = await fetch(uri);
-    const blob = await response.blob();
+    console.log("📤 Starting document upload:", { uri, applicationId, documentType });
+
+    // Read file - different approach for React Native vs Web
+    let fileData: any;
+    let fileSize: number;
+    let contentType: string = "application/pdf";
+
+    if (Platform.OS === "web") {
+      // Web: use blob
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      fileData = blob;
+      fileSize = blob.size;
+      contentType = blob.type || "application/pdf";
+    } else {
+      // React Native: Read file as ArrayBuffer
+      if (!FileSystem) {
+        throw new Error("Cannot read document file - FileSystem not available");
+      }
+
+      console.log("📱 Reading file for React Native upload...");
+
+      // Read file as base64
+      const base64String = await FileSystem.readAsStringAsync(uri, {
+        encoding: "base64",
+      });
+
+      console.log("✅ File read as base64, length:", base64String.length);
+
+      // Convert base64 to ArrayBuffer
+      const binaryString = atob(base64String);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // Use the ArrayBuffer directly
+      fileData = bytes.buffer;
+      fileSize = bytes.length;
+
+      // Determine content type from extension
+      const extension = uri.split(".").pop()?.toLowerCase();
+      if (extension === "pdf") {
+        contentType = "application/pdf";
+      } else if (extension === "jpg" || extension === "jpeg") {
+        contentType = "image/jpeg";
+      } else if (extension === "png") {
+        contentType = "image/png";
+      } else if (extension === "doc") {
+        contentType = "application/msword";
+      } else if (extension === "docx") {
+        contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      }
+
+      console.log("✅ Converted to ArrayBuffer, size:", fileSize);
+    }
+
+    console.log("✅ File loaded, size:", fileSize);
 
     // Check file size
-    if (blob.size > MAX_DOC_SIZE) {
+    if (fileSize > MAX_DOC_SIZE) {
       return {
         success: false,
         error: `Document size exceeds ${MAX_DOC_SIZE / 1024 / 1024}MB limit`,
       };
     }
 
-    // Determine file extension from URI or MIME type
+    // Determine file extension from URI
     const extension = uri.split(".").pop() || "pdf";
     const fileName = generateFileName(`doc_${documentType}`, extension);
     const filePath = `${applicationId}/${fileName}`;
 
+    console.log("📁 Uploading to:", filePath);
+
     // Upload to Supabase (private bucket)
     const { data, error } = await supabase.storage
       .from(APPLICATION_DOCS_BUCKET)
-      .upload(filePath, blob, {
-        contentType: blob.type || "application/pdf",
+      .upload(filePath, fileData, {
+        contentType,
         cacheControl: "3600",
         upsert: false,
       });
 
     if (error) {
-      console.error("Document upload error:", error);
+      console.error("❌ Document upload error:", error);
       return {
         success: false,
         error: error.message,
       };
     }
 
+    console.log("✅ Document uploaded successfully:", data);
+
     return {
       success: true,
       path: filePath,
     };
   } catch (error) {
-    console.error("Upload document error:", error);
+    console.error("❌ Upload document error:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Upload failed",
