@@ -42,24 +42,34 @@ class MessageServiceFix {
 
   /**
    * Initialize the service with current user
+   * @param userId - Optional user ID to use. If not provided, will try to get from Supabase auth
    */
-  async initialize(): Promise<string | null> {
+  async initialize(userId?: string): Promise<string | null> {
     try {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser();
+      // If userId is provided, use it directly
+      if (userId) {
+        console.log("✅ Initializing message service with provided userId:", userId);
+        this.userId = userId;
+      } else {
+        // Otherwise, try to get from Supabase auth
+        console.log("📝 Attempting to get user from Supabase auth...");
+        const {
+          data: { user },
+          error,
+        } = await supabase.auth.getUser();
 
-      if (error) {
-        console.error("Failed to get current user:", error);
-        throw new Error("Authentication required");
+        if (error) {
+          console.error("Failed to get current user:", error);
+          throw new Error("Authentication required");
+        }
+
+        if (!user) {
+          throw new Error("User not authenticated");
+        }
+
+        this.userId = user.id;
+        console.log("✅ Got user from Supabase auth:", this.userId);
       }
-
-      if (!user) {
-        throw new Error("User not authenticated");
-      }
-
-      this.userId = user.id;
 
       // Check which table name to use
       await this.detectThreadTableName();

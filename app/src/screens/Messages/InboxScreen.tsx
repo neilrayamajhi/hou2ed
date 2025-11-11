@@ -21,6 +21,7 @@ import {
 } from "../../services/messageService";
 import { supabase } from "../../lib/supabase";
 import { useI18n } from "../../i18n";
+import { useAuthStore } from "../../state/useAuthStore";
 
 function formatTimestamp(date: Date | string): string {
   const dateObj = typeof date === "string" ? new Date(date) : date;
@@ -55,6 +56,7 @@ function getInitials(name: string): string {
 
 export default function InboxScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
+  const { user } = useAuthStore(); // Get user from auth store
   const [threads, setThreads] = useState<ThreadWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -65,8 +67,15 @@ export default function InboxScreen() {
   // Initialize and fetch threads
   const loadThreads = useCallback(async () => {
     try {
-      // Initialize message service
-      const userId = await messageService.initialize();
+      // Check if user exists
+      if (!user || !user.id) {
+        console.warn("No user found in auth store for InboxScreen");
+        setLoading(false);
+        return;
+      }
+
+      // Initialize message service with user ID from store
+      const userId = await messageService.initialize(user.id);
       setCurrentUserId(userId);
 
       // Fetch threads
@@ -83,7 +92,7 @@ export default function InboxScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [user]);
 
   // Load threads on mount and when screen focuses
   useFocusEffect(

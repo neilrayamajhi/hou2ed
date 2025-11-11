@@ -36,6 +36,7 @@ import {
 } from "../../services/messageService";
 import { attachmentService } from "../../services/attachmentService";
 import { supabase } from "../../lib/supabase";
+import { useAuthStore } from "../../state/useAuthStore";
 
 interface Attachment {
   id: string;
@@ -76,6 +77,7 @@ function formatFileSize(bytes: number): string {
 export default function ThreadScreen() {
   const route = useRoute<RootStackRouteProp<"Thread">>();
   const navigation = useNavigation<RootStackNavigationProp>();
+  const { user } = useAuthStore(); // Get user from auth store
   const flatListRef = useRef<FlatList>(null);
 
   const [thread, setThread] = useState<ThreadWithDetails | null>(null);
@@ -97,8 +99,15 @@ export default function ThreadScreen() {
   useEffect(() => {
     async function loadThread() {
       try {
-        // Initialize message service and attachment service
-        const userId = await messageService.initialize();
+        // Check if user exists
+        if (!user || !user.id) {
+          console.warn("No user found in auth store for ThreadScreen");
+          setLoading(false);
+          return;
+        }
+
+        // Initialize message service with user ID from store
+        const userId = await messageService.initialize(user.id);
         await attachmentService.initialize();
         setCurrentUserId(userId);
 
@@ -141,7 +150,7 @@ export default function ThreadScreen() {
     }
 
     loadThread();
-  }, [threadId, participantId, propertyTitle]);
+  }, [threadId, participantId, propertyTitle, user]);
 
   // Subscribe to real-time messages
   useEffect(() => {
