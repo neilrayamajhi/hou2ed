@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -22,6 +22,8 @@ import {
   parseRules,
   parseEligibility,
 } from "../../constants/listingOptions";
+import useSavedStore from "../../state/useSavedStore";
+import { useAuthStore } from "../../state/useAuthStore";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -197,10 +199,46 @@ export default function ListingDetailsScreen() {
     console.log("[ListingDetails] imageUrls:", imageUrls);
   } catch {}
 
-  const isSaved = false;
+  // Get auth state
+  const { user } = useAuthStore();
+
+  // Get saved store functions
+  const { toggleListing, isListingSaved } = useSavedStore();
+
+  // Check if listing is saved
+  const isSaved = isListingSaved(merged.id);
+
   const handleBack = () => (navigation as any).goBack?.();
-  const handleSave = () => {};
-  const handleApply = () => {};
+
+  const handleSave = useCallback(() => {
+    // Create SavedListing object for the store
+    const savedListing = {
+      id: merged.id,
+      title: merged.title,
+      address: merged.location?.address || "Address not available",
+      rent: merged.costPerMonth,
+      bedrooms: merged.bedsTotal || 0,
+      bathrooms: 1, // Default value as it's not in the data
+      sqft: 0, // Default value as it's not in the data
+      imageUrl: merged.images?.[0] || "",
+      savedAt: new Date(),
+      availableUnits: merged.bedsAvailable,
+      propertyType: "shelter", // Default type
+    };
+    toggleListing(savedListing);
+  }, [merged, toggleListing]);
+
+  const handleApply = useCallback(() => {
+    if (!user) {
+      // Navigate to sign in if not authenticated
+      // @ts-ignore
+      navigation.navigate("Auth", { screen: "SignIn" });
+      return;
+    }
+    // Navigate to application flow
+    // @ts-ignore
+    navigation.navigate("ApplyWizard", { listingId: merged.id });
+  }, [navigation, merged.id, user]);
 
   return (
     <SafeAreaView style={styles.container}>
