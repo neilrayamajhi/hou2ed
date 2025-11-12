@@ -1,11 +1,42 @@
 import { User } from "@supabase/supabase-js";
+import { supabase } from "../lib/supabase";
 
 /**
  * Transform Supabase user to app user format
  * Eliminates code duplication across auth components
  */
-export const transformUserData = (user: User) => {
+export const transformUserData = async (user: User) => {
   console.log("Transforming user data. Raw metadata:", user.user_metadata);
+
+  // Fetch profile data including avatar_url
+  let avatar_url: string | undefined;
+  try {
+    console.log("[transformUserData] Fetching profile for user:", user.id);
+    const { data: profile, error } = await Promise.race([
+      supabase.from("profiles").select("avatar_url").eq("id", user.id).single(),
+      // Add a timeout to prevent hanging
+      new Promise<{ data: null; error: Error }>((resolve) =>
+        setTimeout(
+          () => resolve({ data: null, error: new Error("Timeout") }),
+          5000,
+        ),
+      ),
+    ]);
+
+    if (error) {
+      console.warn(
+        "[transformUserData] Failed to fetch avatar_url:",
+        error.message,
+      );
+    } else {
+      avatar_url = profile?.avatar_url || undefined;
+      console.log("[transformUserData] Fetched avatar_url:", avatar_url);
+    }
+  } catch (error) {
+    console.warn("[transformUserData] Error fetching avatar_url:", error);
+    // Don't fail the entire login process if avatar fetch fails
+  }
+
   const transformed = {
     id: user.id,
     email: user.email || "",
@@ -14,6 +45,7 @@ export const transformUserData = (user: User) => {
     role: (user.user_metadata?.role as "seeker" | "provider") || "seeker",
     isVerified: user.email_confirmed_at !== null,
     createdAt: user.created_at || new Date().toISOString(),
+    avatar_url,
   };
   console.log("Transformed user data:", transformed);
   return transformed;

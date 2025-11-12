@@ -6,6 +6,7 @@ import { useAuthStore } from "../state/useAuthStore";
 import { theme } from "../theme";
 import { transformUserData, retryWithBackoff } from "../utils/auth";
 import { ERROR_MESSAGES } from "../constants/messages";
+import { queryClient } from "./QueryProvider";
 
 interface AuthContextType {
   session: Session | null;
@@ -41,7 +42,12 @@ export default function AuthProvider({
     // Listen for auth state changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log("Auth event:", event, "Session:", session ? "exists" : "null");
+        console.log(
+          "Auth event:",
+          event,
+          "Session:",
+          session ? "exists" : "null",
+        );
 
         // Handle different auth events
         if (event === "SIGNED_OUT") {
@@ -56,16 +62,29 @@ export default function AuthProvider({
           setUser(session?.user || null);
 
           if (session?.user) {
-            const userData = transformUserData(session.user);
+            const userData = await transformUserData(session.user);
             setStoreUser(userData);
+
+            // CRITICAL FIX: Invalidate all queries after login so they refetch with new user
+            console.log(
+              "[AuthProvider] Login successful - invalidating all queries to refetch fresh data",
+            );
+            await queryClient.invalidateQueries();
+            console.log("[AuthProvider] Query invalidation complete");
           }
         } else if (event === "INITIAL_SESSION") {
           // Handle initial session carefully
           if (session) {
             setSession(session);
             setUser(session.user);
-            const userData = transformUserData(session.user);
+            const userData = await transformUserData(session.user);
             setStoreUser(userData);
+
+            // Invalidate queries on app load with existing session
+            console.log(
+              "[AuthProvider] App loaded with session - invalidating queries",
+            );
+            await queryClient.invalidateQueries();
           } else {
             // No initial session, but don't call logout
             // Just set the state to not authenticated
@@ -98,8 +117,14 @@ export default function AuthProvider({
         setUser(existingSession.user);
 
         // Update store with user data
-        const userData = transformUserData(existingSession.user);
+        const userData = await transformUserData(existingSession.user);
         setStoreUser(userData);
+
+        // Invalidate queries to fetch fresh data for the session
+        console.log(
+          "[AuthProvider] Existing session found - invalidating queries",
+        );
+        await queryClient.invalidateQueries();
       }
     } catch (error) {
       console.error(ERROR_MESSAGES.AUTH.SESSION_ERROR, error);

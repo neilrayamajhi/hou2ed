@@ -4,7 +4,6 @@ import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import HomeScreen from "../screens/Home/HomeScreen";
-import SearchScreen from "../screens/Search/SearchScreen";
 import InboxScreen from "../screens/Messages/InboxScreen";
 import SavedScreen from "../screens/Saved/SavedScreen";
 import ProfileScreen from "../screens/Profile/ProfileScreen";
@@ -14,9 +13,6 @@ import { RootStackNavigationProp } from "./types";
 
 // Create a bottom tab navigator - this is what creates the tab bar at the bottom
 const Tab = createBottomTabNavigator();
-
-
-
 
 // Main TabNavigator component that sets up all 5 tabs
 export default function TabNavigator() {
@@ -94,17 +90,7 @@ export default function TabNavigator() {
               tabBarIcon: ({ color, size }) => (
                 <Ionicons name="home-outline" size={size} color={color} />
               ),
-              tabBarAccessibilityLabel: "Home tab",
-            }}
-          />
-          <Tab.Screen
-            name="Search"
-            component={SearchScreen}
-            options={{
-              tabBarIcon: ({ color, size }) => (
-                <Ionicons name="search-outline" size={size} color={color} />
-              ),
-              tabBarAccessibilityLabel: "Search listings tab",
+              tabBarAccessibilityLabel: "Home tab with search and map",
             }}
           />
           <Tab.Screen

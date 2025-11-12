@@ -22,6 +22,7 @@ import {
   parseRules,
   parseEligibility,
 } from "../../constants/listingOptions";
+import { useSavedListings } from "../../hooks/useSavedItems";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -94,11 +95,21 @@ export default function ListingDetailsScreen() {
   const route = useRoute<any>();
   const listingFromParams = route.params?.listing || {};
 
+  // Support both route.params.listing.id AND route.params.listingId
+  const routeListingId = route.params?.listingId || listingFromParams?.id;
+
+  console.log("[ListingDetails] Route params:", {
+    listingId: route.params?.listingId,
+    hasListing: !!route.params?.listing,
+    listingId_from_listing: listingFromParams?.id,
+    resolved: routeListingId,
+  });
+
   const [dbListing, setDbListing] = useState<any>(null);
   const [loadingDb, setLoadingDb] = useState(false);
 
   useEffect(() => {
-    const id = listingFromParams?.id;
+    const id = routeListingId;
     if (!id) return;
     let cancelled = false;
     (async () => {
@@ -123,11 +134,11 @@ export default function ListingDetailsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [listingFromParams?.id]);
+  }, [routeListingId]);
 
   const merged = useMemo(() => {
     const base = {
-      id: listingFromParams.id,
+      id: routeListingId || listingFromParams.id,
       title: listingFromParams.name || listingFromParams.title || "",
       providerName: listingFromParams.provider || "",
       isVerified: !!listingFromParams.verified,
@@ -179,7 +190,7 @@ export default function ListingDetailsScreen() {
         zip: (dbListing as any).zip_code ?? base.location.zip,
       },
     };
-  }, [listingFromParams, dbListing]);
+  }, [listingFromParams, dbListing, routeListingId]);
 
   // Use the new parsing functions that convert codes to nice labels
   const amenitiesList = parseAmenities(merged.amenities);
@@ -197,9 +208,46 @@ export default function ListingDetailsScreen() {
     console.log("[ListingDetails] imageUrls:", imageUrls);
   } catch {}
 
-  const isSaved = false;
+  // Bookmark functionality
+  const { isSaved: isListingSaved, toggleSave, isSaving } = useSavedListings();
+
+  // Ensure listingId is a string, not an object
+  const listingId =
+    typeof merged.id === "string"
+      ? merged.id
+      : (merged.id as any)?.toString?.() || String(merged.id);
+
+  const isSaved = listingId ? isListingSaved(listingId) : false;
+
   const handleBack = () => (navigation as any).goBack?.();
-  const handleSave = () => {};
+
+  const handleSave = async () => {
+    if (!listingId || typeof listingId !== "string") {
+      console.error("[ListingDetails] Cannot save: invalid listing ID", {
+        listingId,
+        type: typeof listingId,
+        mergedId: merged.id,
+      });
+      return;
+    }
+
+    // Validate UUID format
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(listingId)) {
+      console.error("[ListingDetails] Invalid UUID format", { listingId });
+      return;
+    }
+
+    try {
+      console.log("[ListingDetails] Saving listing", { listingId });
+      await toggleSave(listingId);
+      console.log("[ListingDetails] Listing saved successfully");
+    } catch (error) {
+      console.error("[ListingDetails] Save listing error:", error);
+    }
+  };
+
   const handleApply = () => {};
 
   return (
@@ -355,12 +403,20 @@ export default function ListingDetailsScreen() {
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Ionicons
-            name={isSaved ? "bookmark" : "bookmark-outline"}
-            size={24}
-            color={colors.white}
-          />
+        <TouchableOpacity
+          style={styles.saveButton}
+          onPress={handleSave}
+          disabled={isSaving}
+        >
+          {isSaving ? (
+            <ActivityIndicator size="small" color={colors.white} />
+          ) : (
+            <Ionicons
+              name={isSaved ? "bookmark" : "bookmark-outline"}
+              size={24}
+              color={colors.white}
+            />
+          )}
         </TouchableOpacity>
         <TouchableOpacity style={styles.applyButton} onPress={handleApply}>
           <Text style={styles.applyButtonText}>Apply Now</Text>

@@ -11,15 +11,19 @@ import {
   Modal,
   TextInput,
   Pressable,
+  Image,
+  ActivityIndicator,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
 import { useAuthStore } from "../../state/useAuthStore";
-import useSavedStore from "../../state/useSavedStore";
+import { useSavedSearches } from "../../hooks/useSavedItems";
 import { RootStackNavigationProp } from "../../navigation/types";
 import { useI18n, LANGUAGES } from "../../i18n";
+import { supabase } from "../../lib/supabase";
+import { transformUserData } from "../../utils/auth";
 
 interface ProfileSection {
   id: string;
@@ -32,11 +36,14 @@ interface ProfileSection {
 
 export default function ProfileScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
-  const { user, logout } = useAuthStore();
-  const { savedListings, savedSearches } = useSavedStore();
+  const { user, logout, setUser } = useAuthStore();
+  const { savedSearches } = useSavedSearches();
   const i18n = useI18n();
 
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [avatarUri, setAvatarUri] = useState<string | null>(
+    user?.avatar_url || null,
+  );
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
@@ -47,17 +54,145 @@ export default function ProfileScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const handleEditAvatar = useCallback(async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      setAvatarUri(result.assets[0].uri);
+    console.log("[ProfileScreen] Starting avatar upload...");
+    if (!user?.id) {
+      Alert.alert(
+        "Error",
+        "You must be logged in to update your profile picture",
+      );
+      return;
     }
-  }, []);
+
+    try {
+      // Pick image
+      console.log("[ProfileScreen] Launching image picker...");
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      console.log("[ProfileScreen] Image picker result:", {
+        canceled: result.canceled,
+        hasAssets: !!result.assets?.[0],
+      });
+
+      if (result.canceled || !result.assets[0]) {
+        console.log("[ProfileScreen] Image selection canceled");
+        return;
+      }
+
+      const asset = result.assets[0];
+      console.log("[ProfileScreen] Selected image:", {
+        uri: asset.uri,
+        width: asset.width,
+        height: asset.height,
+        fileSize: asset.fileSize,
+        mimeType: asset.mimeType,
+      });
+
+      // Validate file size (max 5MB)
+      const MAX_SIZE = 5 * 1024 * 1024;
+      if (asset.fileSize && asset.fileSize > MAX_SIZE) {
+        console.error("[ProfileScreen] Image too large:", asset.fileSize);
+        Alert.alert("Error", "Image must be less than 5MB");
+        return;
+      }
+
+      setUploadingAvatar(true);
+
+      // In React Native, we need to use ArrayBuffer instead of blob
+      console.log("[ProfileScreen] Fetching image data...");
+      const response = await fetch(asset.uri);
+      const arrayBuffer = await response.arrayBuffer();
+      console.log("[ProfileScreen] ArrayBuffer created:", {
+        size: arrayBuffer.byteLength,
+      });
+
+      const fileExt = asset.uri.split(".").pop() || "jpg";
+      const fileName = `${user.id}/avatar-${Date.now()}.${fileExt}`;
+      const filePath = fileName;
+
+      console.log("[ProfileScreen] Uploading to Supabase:", {
+        bucket: "avatars",
+        path: filePath,
+        size: arrayBuffer.byteLength,
+        contentType: asset.mimeType || "image/jpeg",
+      });
+
+      // Upload to Supabase Storage using ArrayBuffer
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, arrayBuffer, {
+          contentType: asset.mimeType || "image/jpeg",
+          upsert: true,
+        });
+
+      console.log("[ProfileScreen] Upload response:", {
+        data: uploadData,
+        error: uploadError,
+      });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      // Get public URL
+      console.log("[ProfileScreen] Getting public URL...");
+      const { data: urlData } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
+
+      console.log("[ProfileScreen] Public URL:", urlData?.publicUrl);
+
+      if (!urlData?.publicUrl) {
+        throw new Error("Failed to get public URL");
+      }
+
+      // Update profile with new avatar URL
+      console.log("[ProfileScreen] Updating profile table...");
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: urlData.publicUrl })
+        .eq("id", user.id);
+
+      console.log("[ProfileScreen] Profile update result:", {
+        error: updateError,
+      });
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      // Update local state
+      setAvatarUri(urlData.publicUrl);
+
+      // Refresh user data to include new avatar_url
+      console.log("[ProfileScreen] Refreshing user data...");
+      const { data: authData } = await supabase.auth.getUser();
+      if (authData.user) {
+        const updatedUserData = await transformUserData(authData.user);
+        setUser(updatedUserData);
+        console.log("[ProfileScreen] User data refreshed with avatar!");
+      }
+
+      console.log("[ProfileScreen] Avatar upload successful!");
+      Alert.alert("Success", "Profile picture updated successfully");
+    } catch (error) {
+      console.error("[ProfileScreen] Avatar upload error:", error);
+      console.error(
+        "[ProfileScreen] Error details:",
+        JSON.stringify(error, null, 2),
+      );
+      Alert.alert(
+        "Error",
+        `Failed to upload profile picture: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }, [user, setUser]);
 
   const handleApplications = useCallback(() => {
     Alert.alert("Applications", "You have 3 active applications");
@@ -459,14 +594,19 @@ export default function ProfileScreen() {
           >
             <View style={styles.avatarRing}>
               <View style={styles.avatar}>
-                {avatarUri ? (
+                {uploadingAvatar ? (
                   <View style={styles.avatarPlaceholder}>
-                    <Ionicons
-                      name="person"
-                      size={40}
-                      color={colors.gray[600]}
+                    <ActivityIndicator
+                      size="large"
+                      color={colors.primary[500]}
                     />
                   </View>
+                ) : avatarUri ? (
+                  <Image
+                    source={{ uri: avatarUri }}
+                    style={styles.avatarImage}
+                    resizeMode="cover"
+                  />
                 ) : (
                   <View style={styles.avatarPlaceholder}>
                     <Ionicons
@@ -658,6 +798,11 @@ const styles = StyleSheet.create({
     borderRadius: 48,
     justifyContent: "center",
     alignItems: "center",
+  },
+  avatarImage: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
   },
   editBadge: {
     position: "absolute",

@@ -10,139 +10,123 @@ import {
   Share,
   Dimensions,
   Pressable,
+  ActivityIndicator,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
-import useSavedStore, { SavedListing } from "../../state/useSavedStore";
+import { useSavedListings } from "../../hooks/useSavedItems";
+import type { SavedListing } from "../../services/saved.service";
 import ListingCard from "../../components/patterns/ListingCard";
 import { RootStackNavigationProp } from "../../navigation/types";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const NUM_COLUMNS = 2;
 const CARD_MARGIN = spacing.sm;
-const CARD_WIDTH = (SCREEN_WIDTH - spacing.lg * 2 - CARD_MARGIN * (NUM_COLUMNS - 1)) / NUM_COLUMNS;
-
-// Mock saved listings for demonstration
-const mockSavedListings: SavedListing[] = [
-  {
-    id: "1",
-    title: "Sunset View Apartments",
-    address: "123 Main St, San Francisco, CA",
-    rent: 2500,
-    bedrooms: 2,
-    bathrooms: 2,
-    sqft: 1200,
-    imageUrl: "https://picsum.photos/400/300?random=1",
-    savedAt: new Date(Date.now() - 86400000),
-    availableUnits: 3,
-    propertyType: "Apartment",
-  },
-  {
-    id: "2",
-    title: "Green Valley Homes",
-    address: "456 Oak Ave, Oakland, CA",
-    rent: 3200,
-    bedrooms: 3,
-    bathrooms: 2.5,
-    sqft: 1800,
-    imageUrl: "https://picsum.photos/400/300?random=2",
-    savedAt: new Date(Date.now() - 172800000),
-    availableUnits: 1,
-    propertyType: "House",
-  },
-  {
-    id: "3",
-    title: "Downtown Lofts",
-    address: "789 Market St, San Francisco, CA",
-    rent: 3800,
-    bedrooms: 1,
-    bathrooms: 1,
-    sqft: 850,
-    imageUrl: "https://picsum.photos/400/300?random=3",
-    savedAt: new Date(Date.now() - 259200000),
-    propertyType: "Loft",
-  },
-  {
-    id: "4",
-    title: "Riverside Commons",
-    address: "321 River Rd, Berkeley, CA",
-    rent: 2100,
-    bedrooms: 2,
-    bathrooms: 1,
-    sqft: 950,
-    imageUrl: "https://picsum.photos/400/300?random=4",
-    savedAt: new Date(Date.now() - 345600000),
-    availableUnits: 5,
-    propertyType: "Apartment",
-  },
-  {
-    id: "5",
-    title: "Oak Park Residences",
-    address: "654 Park Blvd, Alameda, CA",
-    rent: 2800,
-    bedrooms: 3,
-    bathrooms: 2,
-    sqft: 1400,
-    imageUrl: "https://picsum.photos/400/300?random=5",
-    savedAt: new Date(Date.now() - 432000000),
-    availableUnits: 2,
-    propertyType: "Townhouse",
-  },
-  {
-    id: "6",
-    title: "Marina Bay Suites",
-    address: "987 Marina Dr, San Francisco, CA",
-    rent: 4500,
-    bedrooms: 2,
-    bathrooms: 2,
-    sqft: 1300,
-    imageUrl: "https://picsum.photos/400/300?random=6",
-    savedAt: new Date(Date.now() - 518400000),
-    propertyType: "Condo",
-  },
-];
+const CARD_WIDTH =
+  (SCREEN_WIDTH - spacing.lg * 2 - CARD_MARGIN * (NUM_COLUMNS - 1)) /
+  NUM_COLUMNS;
 
 export default function SavedScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
-  const { savedListings, removeListing } = useSavedStore();
+  const { savedListings, unsave, isUnsaving, isLoading } = useSavedListings();
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
 
-  // Use mock data if store is empty
-  const displayListings = savedListings.length > 0 ? savedListings : mockSavedListings;
+  const handleListingPress = useCallback(
+    (listing: SavedListing) => {
+      console.log("[SavedScreen] Navigating to listing:", {
+        listing_id: listing.listing_id,
+        nested_listing_id: listing.listing?.id,
+        full_object: JSON.stringify(listing, null, 2),
+      });
 
-  const handleListingPress = useCallback((listing: SavedListing) => {
-    navigation.navigate("ListingDetails", { listingId: listing.id });
-  }, [navigation]);
+      // Use listing.listing_id first, fallback to nested listing.id
+      const listingId = listing.listing_id || listing.listing?.id;
 
-  const handleListingLongPress = useCallback((listing: SavedListing) => {
-    Alert.alert(
-      "Remove from Saved?",
-      `Remove "${listing.title}" from your saved listings?`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => {
-            removeListing(listing.id);
-            Alert.alert("Removed", "Listing has been removed from your saved items");
+      if (!listingId) {
+        console.error("[SavedScreen] No listing ID found!", listing);
+        Alert.alert("Error", "Cannot open listing - invalid data");
+        return;
+      }
+
+      navigation.navigate("ListingDetails", { listingId });
+    },
+    [navigation],
+  );
+
+  const handleListingLongPress = useCallback(
+    async (listing: SavedListing) => {
+      console.log("[SavedScreen] Attempting to unsave:", {
+        listing_id: listing.listing_id,
+        nested_listing_id: listing.listing?.id,
+        id: listing.id,
+        has_listing: !!listing.listing,
+        full_object: JSON.stringify(listing, null, 2),
+      });
+
+      // Use listing.listing_id first, fallback to nested listing.id
+      const listingId = listing.listing_id || listing.listing?.id;
+
+      if (!listingId) {
+        console.error("[SavedScreen] No listing ID found for unsave!", listing);
+        Alert.alert("Error", "Cannot remove listing - invalid data");
+        return;
+      }
+
+      const listingTitle = listing.listing?.title || "this listing";
+      Alert.alert(
+        "Remove from Saved?",
+        `Remove "${listingTitle}" from your saved listings?`,
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
           },
-        },
-      ]
-    );
-  }, [removeListing]);
+          {
+            text: "Remove",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                console.log("[SavedScreen] Calling unsave with:", listingId);
+                await unsave(listingId);
+                Alert.alert(
+                  "Removed",
+                  "Listing has been removed from your saved items",
+                );
+              } catch (error) {
+                console.error("[SavedScreen] Unsave error:", error);
+                Alert.alert("Error", "Failed to remove listing");
+              }
+            },
+          },
+        ],
+      );
+    },
+    [unsave],
+  );
 
   const handleShare = useCallback(async (listing: SavedListing) => {
+    if (!listing.listing) return;
+
+    // Use listing.listing_id first, fallback to nested listing.id
+    const listingId = listing.listing_id || listing.listing?.id;
+
+    if (!listingId) {
+      Alert.alert("Error", "Cannot share listing - invalid data");
+      return;
+    }
+
     try {
-      const message = `Check out this listing on HOU2ED:\n\n${listing.title}\n${listing.address}\n$${listing.rent}/month\n${listing.bedrooms} bed, ${listing.bathrooms} bath\n\nView more at: hou2ed://listing/${listing.id}`;
+      const listingData = listing.listing;
+      const title = listingData.title || "Housing Listing";
+      const address =
+        `${listingData.address || ""}, ${listingData.city || ""}, ${listingData.state || ""}`.trim();
+
+      const message = `Check out this listing on HOU2ED:\n\n${title}\n${address}\n\nView more at: hou2ed://listing/${listingId}`;
 
       const result = await Share.share({
         message,
-        title: listing.title,
+        title,
       });
 
       if (result.action === Share.sharedAction) {
@@ -153,120 +137,133 @@ export default function SavedScreen() {
     }
   }, []);
 
-  const renderListingSpecs = useCallback((item: SavedListing) => (
-    <View style={styles.specsRow}>
-      <View style={styles.spec}>
-        <Ionicons name="bed-outline" size={14} color={colors.gray[400]} />
-        <Text style={styles.specText}>{item.bedrooms}</Text>
-      </View>
-      <View style={styles.spec}>
-        <Ionicons name="water-outline" size={14} color={colors.gray[400]} />
-        <Text style={styles.specText}>{item.bathrooms}</Text>
-      </View>
-      <View style={styles.spec}>
-        <Ionicons name="resize-outline" size={14} color={colors.gray[400]} />
-        <Text style={styles.specText}>{item.sqft} ft²</Text>
-      </View>
-    </View>
-  ), []);
+  const renderListing = useCallback(
+    ({ item }: { item: SavedListing }) => {
+      if (!item.listing) return null;
 
-  const renderListing = useCallback(({ item }: { item: SavedListing }) => {
-    return (
-      <Pressable
-        style={styles.cardContainer}
-        onPress={() => handleListingPress(item)}
-        onLongPress={() => handleListingLongPress(item)}
-        delayLongPress={500}
-      >
-        <View style={styles.card}>
-          <View style={styles.imageContainer}>
-            <View style={styles.imagePlaceholder}>
-              <Ionicons name="image-outline" size={40} color={colors.gray[400]} />
+      const listingData = item.listing;
+      const title = listingData.title || "Housing Listing";
+      const address =
+        `${listingData.city || ""}, ${listingData.state || ""}`.trim();
+
+      return (
+        <Pressable
+          style={styles.cardContainer}
+          onPress={() => handleListingPress(item)}
+          onLongPress={() => handleListingLongPress(item)}
+          delayLongPress={500}
+        >
+          <View style={styles.card}>
+            <View style={styles.imageContainer}>
+              <View style={styles.imagePlaceholder}>
+                <Ionicons
+                  name="image-outline"
+                  size={40}
+                  color={colors.gray[400]}
+                />
+              </View>
+
+              <TouchableOpacity
+                style={styles.shareButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleShare(item);
+                }}
+                accessibilityLabel="Share listing"
+                accessibilityRole="button"
+              >
+                <Ionicons name="share-outline" size={20} color={colors.white} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.savedIndicator}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleListingLongPress(item);
+                }}
+                accessibilityLabel="Remove from saved"
+                accessibilityRole="button"
+              >
+                <Ionicons
+                  name="bookmark"
+                  size={20}
+                  color={colors.primary[500]}
+                />
+              </TouchableOpacity>
             </View>
 
-            <TouchableOpacity
-              style={styles.shareButton}
-              onPress={(e) => {
-                e.stopPropagation();
-                handleShare(item);
-              }}
-              accessibilityLabel="Share listing"
-              accessibilityRole="button"
-            >
-              <Ionicons name="share-outline" size={20} color={colors.white} />
-            </TouchableOpacity>
+            <View style={styles.cardContent}>
+              <Text style={styles.title} numberOfLines={1}>
+                {title}
+              </Text>
+              <Text style={styles.address} numberOfLines={1}>
+                {address}
+              </Text>
 
-            <TouchableOpacity
-              style={styles.savedIndicator}
-              onPress={(e) => {
-                e.stopPropagation();
-                handleListingLongPress(item);
-              }}
-              accessibilityLabel="Remove from saved"
-              accessibilityRole="button"
-            >
-              <Ionicons name="bookmark" size={20} color={colors.primary[500]} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.cardContent}>
-            <Text style={styles.title} numberOfLines={1}>
-              {item.title}
-            </Text>
-            <Text style={styles.address} numberOfLines={1}>
-              {item.address}
-            </Text>
-
-            <View style={styles.detailsRow}>
-              <Text style={styles.price}>${item.rent}/mo</Text>
-            </View>
-
-            {renderListingSpecs(item)}
-
-            {item.availableUnits && (
               <View style={styles.availabilityRow}>
                 <Text style={styles.availabilityText}>
-                  {item.availableUnits} unit{item.availableUnits > 1 ? "s" : ""} available
+                  Saved {new Date(item.created_at).toLocaleDateString()}
                 </Text>
               </View>
-            )}
+            </View>
           </View>
-        </View>
-      </Pressable>
-    );
-  }, [handleListingPress, handleListingLongPress, handleShare, renderListingSpecs]);
+        </Pressable>
+      );
+    },
+    [handleListingPress, handleListingLongPress, handleShare],
+  );
 
   const keyExtractor = useCallback((item: SavedListing) => item.id, []);
 
-  const EmptyComponent = useCallback(() => (
-    <View style={styles.emptyContainer}>
-      <Ionicons name="bookmark-outline" size={64} color={colors.gray[400]} />
-      <Text style={styles.emptyTitle}>No Saved Listings</Text>
-      <Text style={styles.emptySubtitle}>
-        Listings you save will appear here for easy access
-      </Text>
-      <TouchableOpacity
-        style={styles.browseButton}
-        onPress={() => navigation.navigate("Search" as any)}
-      >
-        <Text style={styles.browseButtonText}>Browse Listings</Text>
-      </TouchableOpacity>
-    </View>
-  ), [navigation]);
+  const EmptyComponent = useCallback(
+    () => (
+      <View style={styles.emptyContainer}>
+        <Ionicons name="bookmark-outline" size={64} color={colors.gray[400]} />
+        <Text style={styles.emptyTitle}>No Saved Listings</Text>
+        <Text style={styles.emptySubtitle}>
+          Listings you save will appear here for easy access
+        </Text>
+        <TouchableOpacity
+          style={styles.browseButton}
+          onPress={() => navigation.navigate("Home" as any)}
+        >
+          <Text style={styles.browseButtonText}>Browse Listings</Text>
+        </TouchableOpacity>
+      </View>
+    ),
+    [navigation],
+  );
 
-  const ListHeader = useCallback(() => (
-    <View style={styles.header}>
-      <Text style={styles.headerTitle}>Saved Listings</Text>
-      <Text style={styles.headerSubtitle}>
-        {displayListings.length} listing{displayListings.length !== 1 ? "s" : ""} saved
-      </Text>
-    </View>
-  ), [displayListings.length]);
+  const ListHeader = useCallback(
+    () => (
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Saved Listings</Text>
+        <Text style={styles.headerSubtitle}>
+          {savedListings.length} listing
+          {savedListings.length !== 1 ? "s" : ""} saved
+        </Text>
+      </View>
+    ),
+    [savedListings.length],
+  );
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={[styles.emptyContainer, { paddingTop: 100 }]}>
+          <ActivityIndicator size="large" color={colors.primary[500]} />
+          <Text style={[styles.emptySubtitle, { marginTop: spacing.lg }]}>
+            Loading saved listings...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <FlatList
-        data={displayListings}
+        data={savedListings}
         renderItem={renderListing}
         keyExtractor={keyExtractor}
         numColumns={NUM_COLUMNS}

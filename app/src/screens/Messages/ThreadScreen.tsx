@@ -1,4 +1,10 @@
-import React, { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import React, {
+  useState,
+  useRef,
+  useCallback,
+  useMemo,
+  useEffect,
+} from "react";
 import {
   View,
   Text,
@@ -16,11 +22,18 @@ import {
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import { RootStackNavigationProp, RootStackRouteProp } from "../../navigation/types";
+import {
+  RootStackNavigationProp,
+  RootStackRouteProp,
+} from "../../navigation/types";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
-import { messageService, MessageWithSender, ThreadWithDetails } from "../../services/messageService";
+import {
+  messageService,
+  MessageWithSender,
+  ThreadWithDetails,
+} from "../../services/messageService";
 import { supabase } from "../../lib/supabase";
 
 interface Attachment {
@@ -32,7 +45,7 @@ interface Attachment {
 }
 
 function formatMessageTime(date: Date | string): string {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  const dateObj = typeof date === "string" ? new Date(date) : date;
   const now = new Date();
   const isToday = dateObj.toDateString() === now.toDateString();
 
@@ -69,12 +82,15 @@ export default function ThreadScreen() {
   const [inputText, setInputText] = useState("");
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportText, setReportText] = useState("");
-  const [selectedAttachments, setSelectedAttachments] = useState<Attachment[]>([]);
+  const [selectedAttachments, setSelectedAttachments] = useState<Attachment[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  const { threadId, participantId, propertyTitle, senderName } = route.params || {};
+  const { threadId, participantId, propertyTitle, senderName } =
+    route.params || {};
 
   // Initialize and load thread
   useEffect(() => {
@@ -82,24 +98,50 @@ export default function ThreadScreen() {
       try {
         // Initialize message service
         const userId = await messageService.initialize();
+        console.log("[ThreadScreen] Initialized with userId:", userId);
         setCurrentUserId(userId);
+
+        if (!userId) {
+          console.error("[ThreadScreen] No user ID after initialization");
+          Alert.alert("Error", "You must be logged in to access messages.");
+          return;
+        }
 
         // If we have a threadId, load the thread
         if (threadId) {
+          console.log("[ThreadScreen] Loading existing thread:", threadId);
           const threadData = await messageService.getThread(threadId);
           if (threadData) {
+            console.log("[ThreadScreen] Thread loaded:", threadData.id);
             setThread(threadData);
             setMessages(threadData.messages || []);
+          } else {
+            console.error("[ThreadScreen] Failed to load thread:", threadId);
+            Alert.alert(
+              "Error",
+              "Failed to load conversation. Please try again.",
+            );
           }
         } else if (participantId && userId) {
           // Create a new thread if needed
+          console.log(
+            "[ThreadScreen] Creating new thread with participant:",
+            participantId,
+          );
           const newThread = await messageService.createThread(
             [userId, participantId],
-            propertyTitle || 'New Conversation'
+            propertyTitle || "New Conversation",
           );
           if (newThread) {
+            console.log("[ThreadScreen] Thread created:", newThread.id);
             setThread({ ...newThread, messages: [], participants: [] });
             setMessages([]);
+          } else {
+            console.error("[ThreadScreen] Failed to create thread");
+            Alert.alert(
+              "Error",
+              "Failed to create conversation. Please ensure messaging tables exist in the database.",
+            );
           }
         }
 
@@ -108,7 +150,10 @@ export default function ThreadScreen() {
           await messageService.markMessagesAsRead(threadId);
         }
       } catch (error) {
-        console.error('Error loading thread:', error);
+        console.error("[ThreadScreen] Error loading thread:", error);
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        Alert.alert("Error", `Failed to load conversation: ${errorMessage}`);
       } finally {
         setLoading(false);
       }
@@ -124,9 +169,9 @@ export default function ThreadScreen() {
     const unsubscribe = messageService.subscribeToThread(
       threadId,
       (newMessage: MessageWithSender) => {
-        setMessages(prev => {
+        setMessages((prev) => {
           // Check if message already exists (update) or is new
-          const existingIndex = prev.findIndex(m => m.id === newMessage.id);
+          const existingIndex = prev.findIndex((m) => m.id === newMessage.id);
           if (existingIndex >= 0) {
             // Update existing message
             const updated = [...prev];
@@ -147,7 +192,7 @@ export default function ThreadScreen() {
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, 100);
-      }
+      },
     );
 
     return () => {
@@ -157,113 +202,145 @@ export default function ThreadScreen() {
 
   const handleSend = useCallback(async () => {
     if (!inputText.trim() && selectedAttachments.length === 0) return;
+
+    // Validate thread exists
     if (!thread?.id) {
-      Alert.alert('Error', 'Unable to send message. Thread not initialized.');
+      console.error("[ThreadScreen] Cannot send: thread.id is undefined", {
+        thread,
+      });
+      Alert.alert(
+        "Error",
+        "Unable to send message. Thread not initialized. Please try reopening the conversation.",
+      );
+      return;
+    }
+
+    // Validate user is authenticated
+    if (!currentUserId) {
+      console.error("[ThreadScreen] Cannot send: currentUserId is undefined");
+      Alert.alert("Error", "You must be logged in to send messages.");
       return;
     }
 
     setSending(true);
     try {
       // Upload attachments if any (in a real app)
-      const attachmentUrls = selectedAttachments.length > 0
-        ? selectedAttachments.map(a => a.uri)
-        : undefined;
+      const attachmentUrls =
+        selectedAttachments.length > 0
+          ? selectedAttachments.map((a) => a.uri)
+          : undefined;
+
+      // Log attempt for debugging
+      console.log("[ThreadScreen] Sending message:", {
+        threadId: thread.id,
+        senderId: currentUserId,
+        bodyLength: inputText.trim().length,
+        hasAttachments: !!attachmentUrls,
+      });
 
       // Send message
       const sentMessage = await messageService.sendMessage(
         thread.id,
         inputText.trim(),
-        attachmentUrls
+        attachmentUrls,
       );
 
       if (sentMessage) {
         // Clear input
         setInputText("");
         setSelectedAttachments([]);
+        console.log(
+          "[ThreadScreen] Message sent successfully:",
+          sentMessage.id,
+        );
 
         // Message will be added via real-time subscription
       } else {
-        Alert.alert('Error', 'Failed to send message. Please try again.');
+        console.error("[ThreadScreen] sendMessage returned null");
+        Alert.alert(
+          "Error",
+          "Failed to send message. This may be a database issue. Please check that messaging tables exist.",
+        );
       }
     } catch (error) {
-      console.error('Error sending message:', error);
-      Alert.alert('Error', 'Failed to send message. Please try again.');
+      console.error("[ThreadScreen] Error sending message:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      Alert.alert("Error", `Failed to send message: ${errorMessage}`);
     } finally {
       setSending(false);
     }
-  }, [inputText, selectedAttachments, thread]);
+  }, [inputText, selectedAttachments, thread, currentUserId]);
 
   const handleAttachmentPress = useCallback(async () => {
-    Alert.alert(
-      "Add Attachment",
-      "Choose an option",
-      [
-        {
-          text: "Photo Library",
-          onPress: async () => {
-            const result = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              allowsMultipleSelection: false,
-              quality: 0.8,
-            });
+    Alert.alert("Add Attachment", "Choose an option", [
+      {
+        text: "Photo Library",
+        onPress: async () => {
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsMultipleSelection: false,
+            quality: 0.8,
+          });
 
-            if (!result.canceled && result.assets[0]) {
-              const asset = result.assets[0];
-              setSelectedAttachments((prev) => [...prev, {
+          if (!result.canceled && result.assets[0]) {
+            const asset = result.assets[0];
+            setSelectedAttachments((prev) => [
+              ...prev,
+              {
                 id: Date.now().toString(),
                 name: `image_${Date.now()}.jpg`,
                 type: "image",
                 uri: asset.uri,
                 size: 1000000,
-              }]);
-            }
-          },
+              },
+            ]);
+          }
         },
-        {
-          text: "Document",
-          onPress: async () => {
-            const result = await DocumentPicker.getDocumentAsync({
-              type: ["application/pdf", "image/*"],
-              copyToCacheDirectory: true,
-            });
+      },
+      {
+        text: "Document",
+        onPress: async () => {
+          const result = await DocumentPicker.getDocumentAsync({
+            type: ["application/pdf", "image/*"],
+            copyToCacheDirectory: true,
+          });
 
-            if (!result.canceled && result.assets[0]) {
-              const doc = result.assets[0];
-              setSelectedAttachments((prev) => [...prev, {
+          if (!result.canceled && result.assets[0]) {
+            const doc = result.assets[0];
+            setSelectedAttachments((prev) => [
+              ...prev,
+              {
                 id: Date.now().toString(),
                 name: doc.name,
                 type: "document",
                 uri: doc.uri,
                 size: doc.size || 0,
-              }]);
-            }
-          },
+              },
+            ]);
+          }
         },
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-      ]
-    );
+      },
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+    ]);
   }, []);
 
   const handleAttachmentLongPress = useCallback((attachmentUrl: string) => {
-    Alert.alert(
-      "Attachment",
-      "What would you like to do?",
-      [
-        {
-          text: "Open",
-          onPress: () => {
-            Alert.alert("Opening", `Would open attachment`);
-          },
+    Alert.alert("Attachment", "What would you like to do?", [
+      {
+        text: "Open",
+        onPress: () => {
+          Alert.alert("Opening", `Would open attachment`);
         },
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-      ]
-    );
+      },
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+    ]);
   }, []);
 
   const handleReportAbuse = useCallback(() => {
@@ -276,83 +353,98 @@ export default function ThreadScreen() {
     Alert.alert(
       "Report Sent",
       "Your report has been sent to our moderation team. We'll review it within 24 hours.",
-      [{ text: "OK" }]
+      [{ text: "OK" }],
     );
 
     setReportModalVisible(false);
     setReportText("");
   }, [reportText]);
 
-  const renderMessage = useCallback(({ item }: { item: MessageWithSender }) => {
-    const isUser = item.sender_id === currentUserId;
+  const renderMessage = useCallback(
+    ({ item }: { item: MessageWithSender }) => {
+      const isUser = item.sender_id === currentUserId;
 
-    // Skip deleted messages
-    if (item.deleted_at) {
+      // Skip deleted messages
+      if (item.deleted_at) {
+        return (
+          <View style={[styles.messageRow, isUser && styles.userMessageRow]}>
+            <View style={styles.deletedMessage}>
+              <Text style={styles.deletedMessageText}>Message deleted</Text>
+            </View>
+          </View>
+        );
+      }
+
       return (
         <View style={[styles.messageRow, isUser && styles.userMessageRow]}>
-          <View style={styles.deletedMessage}>
-            <Text style={styles.deletedMessageText}>Message deleted</Text>
+          <View
+            style={[
+              styles.messageBubble,
+              isUser ? styles.userBubble : styles.providerBubble,
+            ]}
+          >
+            {item.body ? (
+              <Text
+                style={[styles.messageText, isUser && styles.userMessageText]}
+              >
+                {item.body}
+              </Text>
+            ) : null}
+
+            {item.attachment_urls?.map((url, index) => (
+              <TouchableOpacity
+                key={`${item.id}-attachment-${index}`}
+                style={styles.attachmentChip}
+                onLongPress={() => handleAttachmentLongPress(url)}
+                delayLongPress={500}
+              >
+                <Ionicons
+                  name="document-outline"
+                  size={16}
+                  color={isUser ? colors.gray[900] : colors.gray[50]}
+                />
+                <Text
+                  style={[
+                    styles.attachmentName,
+                    isUser && styles.userAttachmentName,
+                  ]}
+                  numberOfLines={1}
+                >
+                  Attachment {index + 1}
+                </Text>
+              </TouchableOpacity>
+            ))}
+
+            <View style={styles.messageFooter}>
+              <Text style={[styles.timestamp, isUser && styles.userTimestamp]}>
+                {formatMessageTime(item.created_at)}
+                {item.edited_at && " (edited)"}
+              </Text>
+              {isUser && item.read_by && item.read_by.length > 1 && (
+                <Ionicons
+                  name="checkmark-done"
+                  size={14}
+                  color={colors.gray[700]}
+                  style={styles.readReceipt}
+                />
+              )}
+            </View>
           </View>
         </View>
       );
-    }
-
-    return (
-      <View style={[styles.messageRow, isUser && styles.userMessageRow]}>
-        <View style={[styles.messageBubble, isUser ? styles.userBubble : styles.providerBubble]}>
-          {item.body ? (
-            <Text style={[styles.messageText, isUser && styles.userMessageText]}>
-              {item.body}
-            </Text>
-          ) : null}
-
-          {item.attachment_urls?.map((url, index) => (
-            <TouchableOpacity
-              key={`${item.id}-attachment-${index}`}
-              style={styles.attachmentChip}
-              onLongPress={() => handleAttachmentLongPress(url)}
-              delayLongPress={500}
-            >
-              <Ionicons
-                name="document-outline"
-                size={16}
-                color={isUser ? colors.gray[900] : colors.gray[50]}
-              />
-              <Text
-                style={[styles.attachmentName, isUser && styles.userAttachmentName]}
-                numberOfLines={1}
-              >
-                Attachment {index + 1}
-              </Text>
-            </TouchableOpacity>
-          ))}
-
-          <View style={styles.messageFooter}>
-            <Text style={[styles.timestamp, isUser && styles.userTimestamp]}>
-              {formatMessageTime(item.created_at)}
-              {item.edited_at && ' (edited)'}
-            </Text>
-            {isUser && item.read_by && item.read_by.length > 1 && (
-              <Ionicons
-                name="checkmark-done"
-                size={14}
-                color={colors.gray[700]}
-                style={styles.readReceipt}
-              />
-            )}
-          </View>
-        </View>
-      </View>
-    );
-  }, [currentUserId, handleAttachmentLongPress]);
+    },
+    [currentUserId, handleAttachmentLongPress],
+  );
 
   const keyExtractor = useCallback((item: MessageWithSender) => item.id, []);
 
-  const sortedMessages = useMemo(() =>
-    [...messages].sort((a, b) =>
-      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    ),
-    [messages]
+  const sortedMessages = useMemo(
+    () =>
+      [...messages].sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      ),
+    [messages],
   );
 
   if (loading) {
@@ -366,7 +458,7 @@ export default function ThreadScreen() {
             <Ionicons name="arrow-back" size={24} color={colors.gray[50]} />
           </TouchableOpacity>
           <View style={styles.headerInfo}>
-            <Text style={styles.senderName}>{senderName || 'Loading...'}</Text>
+            <Text style={styles.senderName}>{senderName || "Loading..."}</Text>
           </View>
         </View>
         <View style={styles.loadingContainer}>
@@ -387,15 +479,20 @@ export default function ThreadScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerInfo}>
-          <Text style={styles.senderName} numberOfLines={1}>{senderName}</Text>
-          <Text style={styles.propertyTitle} numberOfLines={1}>{propertyTitle}</Text>
+          <Text style={styles.senderName} numberOfLines={1}>
+            {senderName}
+          </Text>
+          <Text style={styles.propertyTitle} numberOfLines={1}>
+            {propertyTitle}
+          </Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={handleReportAbuse}
-        >
-          <Ionicons name="ellipsis-vertical" size={20} color={colors.gray[50]} />
+        <TouchableOpacity style={styles.menuButton} onPress={handleReportAbuse}>
+          <Ionicons
+            name="ellipsis-vertical"
+            size={20}
+            color={colors.gray[50]}
+          />
         </TouchableOpacity>
       </View>
 
@@ -411,11 +508,13 @@ export default function ThreadScreen() {
           keyExtractor={keyExtractor}
           contentContainerStyle={styles.messagesList}
           showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+          onContentSizeChange={() =>
+            flatListRef.current?.scrollToEnd({ animated: false })
+          }
           ListEmptyComponent={
             <View style={styles.emptyChat}>
               <Text style={styles.emptyChatText}>
-                Start a conversation about {propertyTitle || 'this listing'}
+                Start a conversation about {propertyTitle || "this listing"}
               </Text>
             </View>
           }
@@ -434,11 +533,17 @@ export default function ThreadScreen() {
                   {att.name}
                 </Text>
                 <TouchableOpacity
-                  onPress={() => setSelectedAttachments((prev) =>
-                    prev.filter((a) => a.id !== att.id)
-                  )}
+                  onPress={() =>
+                    setSelectedAttachments((prev) =>
+                      prev.filter((a) => a.id !== att.id),
+                    )
+                  }
                 >
-                  <Ionicons name="close-circle" size={16} color={colors.gray[400]} />
+                  <Ionicons
+                    name="close-circle"
+                    size={16}
+                    color={colors.gray[400]}
+                  />
                 </TouchableOpacity>
               </View>
             ))}
@@ -466,10 +571,18 @@ export default function ThreadScreen() {
           <TouchableOpacity
             style={[
               styles.sendButton,
-              (!inputText.trim() && selectedAttachments.length === 0) && styles.sendButtonDisabled
+              !inputText.trim() &&
+                selectedAttachments.length === 0 &&
+                styles.sendButtonDisabled,
             ]}
             onPress={handleSend}
-            disabled={!inputText.trim() && selectedAttachments.length === 0 || sending}
+            disabled={
+              (!inputText.trim() && selectedAttachments.length === 0) ||
+              sending ||
+              !thread?.id ||
+              !currentUserId ||
+              loading
+            }
           >
             {sending ? (
               <ActivityIndicator size="small" color={colors.primary[400]} />
@@ -477,7 +590,14 @@ export default function ThreadScreen() {
               <Ionicons
                 name="send"
                 size={20}
-                color={(!inputText.trim() && selectedAttachments.length === 0) ? colors.gray[600] : colors.primary[400]}
+                color={
+                  (!inputText.trim() && selectedAttachments.length === 0) ||
+                  !thread?.id ||
+                  !currentUserId ||
+                  loading
+                    ? colors.gray[600]
+                    : colors.primary[400]
+                }
               />
             )}
           </TouchableOpacity>
@@ -494,7 +614,10 @@ export default function ThreadScreen() {
           style={styles.modalOverlay}
           onPress={() => setReportModalVisible(false)}
         >
-          <Pressable style={styles.reportModal} onPress={(e) => e.stopPropagation()}>
+          <Pressable
+            style={styles.reportModal}
+            onPress={(e) => e.stopPropagation()}
+          >
             <Text style={styles.reportTitle}>Report Abuse</Text>
             <Text style={styles.reportSubtitle}>
               Please describe the issue you're experiencing
@@ -608,7 +731,7 @@ const styles = StyleSheet.create({
   deletedMessageText: {
     fontSize: typography.sizes.sm,
     color: colors.gray[500],
-    fontStyle: 'italic',
+    fontStyle: "italic",
   },
   attachmentChip: {
     flexDirection: "row",

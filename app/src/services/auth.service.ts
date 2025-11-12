@@ -131,7 +131,7 @@ export async function loginUser(
 
     if (data?.user) {
       console.log("Login successful for user:", data.user.id);
-      const userData = transformUserData(data.user);
+      const userData = await transformUserData(data.user);
       return {
         success: true,
         user: userData,
@@ -156,7 +156,8 @@ export async function loginUser(
     ) {
       return {
         success: false,
-        error: "Unable to connect to server. Please check your internet connection.",
+        error:
+          "Unable to connect to server. Please check your internet connection.",
         errorCode: "NETWORK_ERROR",
       };
     }
@@ -243,7 +244,7 @@ export async function verifyOtp(
 
     if (data?.user) {
       console.log("Verification successful for:", email);
-      const userData = transformUserData(data.user);
+      const userData = await transformUserData(data.user);
       return {
         success: true,
         user: userData,
@@ -257,7 +258,7 @@ export async function verifyOtp(
       } = await supabase.auth.getUser();
 
       if (user) {
-        const userData = transformUserData(user);
+        const userData = await transformUserData(user);
         return {
           success: true,
           user: userData,
@@ -359,7 +360,8 @@ export async function signUpUser(
       console.log("Email already registered:", email);
       return {
         success: false,
-        error: "This email is already registered. Please use a different email or try logging in.",
+        error:
+          "This email is already registered. Please use a different email or try logging in.",
         errorCode: AUTH_ERROR_CODES.EMAIL_EXISTS,
       };
     }
@@ -424,7 +426,8 @@ export async function signUpUser(
         console.log("Signup failed: Email already exists in auth.users");
         return {
           success: false,
-          error: "This email is already registered. Please use a different email or try logging in.",
+          error:
+            "This email is already registered. Please use a different email or try logging in.",
           errorCode: AUTH_ERROR_CODES.EMAIL_EXISTS,
         };
       }
@@ -442,7 +445,8 @@ export async function signUpUser(
       if (error.message?.includes("weak_password")) {
         return {
           success: false,
-          error: "Password is too weak. Please use a stronger password with at least 8 characters.",
+          error:
+            "Password is too weak. Please use a stronger password with at least 8 characters.",
           errorCode: "WEAK_PASSWORD",
         };
       }
@@ -496,19 +500,24 @@ export async function signUpUser(
 
     // Add detailed logging for successful signup
     if (data?.user) {
-      const userData = transformUserData(data.user);
+      const userData = await transformUserData(data.user);
 
       console.log("✅ Signup Summary:");
       console.log("  - User ID:", data.user.id);
       console.log("  - Email:", data.user.email);
       console.log("  - Role:", userData.role);
       console.log("  - Username:", userData.username);
-      console.log("  - Email verified:", data.user.email_confirmed_at ? "Yes" : "No");
+      console.log(
+        "  - Email verified:",
+        data.user.email_confirmed_at ? "Yes" : "No",
+      );
       console.log("  - Session created:", data.session ? "Yes" : "No");
 
       // Warn if no session was created (might indicate password issue)
       if (!data.session) {
-        console.warn("⚠️ No session created during signup - user will need to verify email first");
+        console.warn(
+          "⚠️ No session created during signup - user will need to verify email first",
+        );
         console.log("  This is normal for email verification flow");
       }
 
@@ -563,7 +572,7 @@ export async function getUser() {
     }
 
     if (user) {
-      return transformUserData(user);
+      return await transformUserData(user);
     }
 
     return null;

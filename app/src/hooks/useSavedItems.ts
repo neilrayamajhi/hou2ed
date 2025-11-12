@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useCallback, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   saveListing,
   unsaveListing,
@@ -20,9 +20,9 @@ import {
   type SavedSearch,
   type SavedSearchAlert,
   type SaveSearchParams,
-} from '../services/saved.service';
-import { useFilterStore } from '../state/useFilterStore';
-import type { SearchFilters } from '../types/listing';
+} from "../services/saved.service";
+import { useFilterStore } from "../state/useFilterStore";
+import type { SearchFilters } from "../types/listing";
 
 interface UseSavedListingsOptions {
   autoRefresh?: boolean;
@@ -42,18 +42,35 @@ export function useSavedListings(options?: UseSavedListingsOptions) {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['savedListings'],
-    queryFn: getSavedListings,
+    queryKey: ["savedListings"],
+    queryFn: async () => {
+      console.log("[useSavedListings] Fetching saved listings...");
+      const listings = await getSavedListings();
+      console.log(
+        "[useSavedListings] Fetched",
+        listings.length,
+        "saved listings",
+      );
+      if (listings.length === 0) {
+        console.log(
+          "[useSavedListings] No saved listings found - this could be normal or an error",
+        );
+      }
+      return listings;
+    },
     staleTime: 1000 * 60 * 5, // 5 minutes
-    refetchInterval: options?.autoRefresh ? (options.refreshInterval || 60000) : undefined,
+    refetchOnMount: true, // Always refetch when component mounts
+    refetchInterval: options?.autoRefresh
+      ? options.refreshInterval || 60000
+      : undefined,
   });
 
   // Save listing mutation
   const saveMutation = useMutation({
     mutationFn: saveListing,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['savedListings'] });
-      queryClient.invalidateQueries({ queryKey: ['isListingSaved'] });
+      queryClient.invalidateQueries({ queryKey: ["savedListings"] });
+      queryClient.invalidateQueries({ queryKey: ["isListingSaved"] });
     },
   });
 
@@ -61,8 +78,8 @@ export function useSavedListings(options?: UseSavedListingsOptions) {
   const unsaveMutation = useMutation({
     mutationFn: unsaveListing,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['savedListings'] });
-      queryClient.invalidateQueries({ queryKey: ['isListingSaved'] });
+      queryClient.invalidateQueries({ queryKey: ["savedListings"] });
+      queryClient.invalidateQueries({ queryKey: ["isListingSaved"] });
     },
   });
 
@@ -70,7 +87,7 @@ export function useSavedListings(options?: UseSavedListingsOptions) {
   const batchSaveMutation = useMutation({
     mutationFn: batchSaveListings,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['savedListings'] });
+      queryClient.invalidateQueries({ queryKey: ["savedListings"] });
     },
   });
 
@@ -82,7 +99,7 @@ export function useSavedListings(options?: UseSavedListingsOptions) {
   // Toggle save status
   const toggleSave = useCallback(
     async (listingId: string, notes?: string) => {
-      const isSaved = savedListings.some(s => s.listing_id === listingId);
+      const isSaved = savedListings.some((s) => s.listing_id === listingId);
 
       if (isSaved) {
         await unsaveMutation.mutateAsync(listingId);
@@ -90,23 +107,23 @@ export function useSavedListings(options?: UseSavedListingsOptions) {
         await saveMutation.mutateAsync({ listingId, notes });
       }
     },
-    [savedListings, saveMutation, unsaveMutation]
+    [savedListings, saveMutation, unsaveMutation],
   );
 
   // Check if listing is saved
   const isSaved = useCallback(
     (listingId: string): boolean => {
-      return savedListings.some(s => s.listing_id === listingId);
+      return savedListings.some((s) => s.listing_id === listingId);
     },
-    [savedListings]
+    [savedListings],
   );
 
   // Get saved listing by ID
   const getSavedListing = useCallback(
     (listingId: string): SavedListing | undefined => {
-      return savedListings.find(s => s.listing_id === listingId);
+      return savedListings.find((s) => s.listing_id === listingId);
     },
-    [savedListings]
+    [savedListings],
   );
 
   // Update notes for saved listing
@@ -114,7 +131,7 @@ export function useSavedListings(options?: UseSavedListingsOptions) {
     async (listingId: string, notes: string) => {
       await saveMutation.mutateAsync({ listingId, notes });
     },
-    [saveMutation]
+    [saveMutation],
   );
 
   // Export saved listings
@@ -123,9 +140,9 @@ export function useSavedListings(options?: UseSavedListingsOptions) {
 
     if (result.success && result.data) {
       // Create download link
-      const blob = new Blob([result.data], { type: 'application/json' });
+      const blob = new Blob([result.data], { type: "application/json" });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = `saved_listings_${new Date().toISOString()}.json`;
       a.click();
@@ -176,25 +193,40 @@ export function useSavedSearches() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['savedSearches'],
-    queryFn: getSavedSearches,
+    queryKey: ["savedSearches"],
+    queryFn: async () => {
+      console.log("[useSavedSearches] Fetching saved searches...");
+      const searches = await getSavedSearches();
+      console.log(
+        "[useSavedSearches] Fetched",
+        searches.length,
+        "saved searches",
+      );
+      return searches;
+    },
     staleTime: 1000 * 60 * 10, // 10 minutes
+    refetchOnMount: true, // Always refetch when component mounts
   });
 
   // Save search mutation
   const saveSearchMutation = useMutation({
     mutationFn: saveSearch,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['savedSearches'] });
+      queryClient.invalidateQueries({ queryKey: ["savedSearches"] });
     },
   });
 
   // Update search mutation
   const updateSearchMutation = useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: Partial<SaveSearchParams> }) =>
-      updateSavedSearch(id, updates),
+    mutationFn: ({
+      id,
+      updates,
+    }: {
+      id: string;
+      updates: Partial<SaveSearchParams>;
+    }) => updateSavedSearch(id, updates),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['savedSearches'] });
+      queryClient.invalidateQueries({ queryKey: ["savedSearches"] });
     },
   });
 
@@ -202,7 +234,7 @@ export function useSavedSearches() {
   const deleteSearchMutation = useMutation({
     mutationFn: deleteSavedSearch,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['savedSearches'] });
+      queryClient.invalidateQueries({ queryKey: ["savedSearches"] });
     },
   });
 
@@ -216,7 +248,7 @@ export function useSavedSearches() {
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       toggleSearchNotification(id, enabled),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['savedSearches'] });
+      queryClient.invalidateQueries({ queryKey: ["savedSearches"] });
     },
   });
 
@@ -232,13 +264,13 @@ export function useSavedSearches() {
         notificationEnabled: false,
       });
     },
-    [filterStore, saveSearchMutation]
+    [filterStore, saveSearchMutation],
   );
 
   // Load saved search filters
   const loadSearch = useCallback(
     (searchId: string) => {
-      const search = savedSearches.find(s => s.id === searchId);
+      const search = savedSearches.find((s) => s.id === searchId);
       if (search) {
         // Apply filters to store
         Object.entries(search.filters).forEach(([key, value]) => {
@@ -250,22 +282,22 @@ export function useSavedSearches() {
       }
       return false;
     },
-    [savedSearches, filterStore]
+    [savedSearches, filterStore],
   );
 
   // Get search by ID
   const getSearch = useCallback(
     (searchId: string): SavedSearch | undefined => {
-      return savedSearches.find(s => s.id === searchId);
+      return savedSearches.find((s) => s.id === searchId);
     },
-    [savedSearches]
+    [savedSearches],
   );
 
   // Check if current filters match a saved search
   const getCurrentMatchingSearch = useCallback((): SavedSearch | undefined => {
     const currentFilters = filterStore.snapshot();
 
-    return savedSearches.find(search => {
+    return savedSearches.find((search) => {
       return JSON.stringify(search.filters) === JSON.stringify(currentFilters);
     });
   }, [savedSearches, filterStore]);
@@ -312,14 +344,14 @@ export function useSavedSearchAlerts(searchId?: string) {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['savedSearchAlerts', searchId],
+    queryKey: ["savedSearchAlerts", searchId],
     queryFn: () => getSavedSearchAlerts(searchId),
     staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
   // Fetch unseen count
   const { data: unseenCount = 0 } = useQuery({
-    queryKey: ['unseenAlertCount'],
+    queryKey: ["unseenAlertCount"],
     queryFn: getUnseenAlertCount,
     refetchInterval: 1000 * 60, // Check every minute
   });
@@ -328,14 +360,14 @@ export function useSavedSearchAlerts(searchId?: string) {
   const markSeenMutation = useMutation({
     mutationFn: markAlertsAsSeen,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['savedSearchAlerts'] });
-      queryClient.invalidateQueries({ queryKey: ['unseenAlertCount'] });
+      queryClient.invalidateQueries({ queryKey: ["savedSearchAlerts"] });
+      queryClient.invalidateQueries({ queryKey: ["unseenAlertCount"] });
     },
   });
 
   // Toggle alert selection
   const toggleSelection = useCallback((alertId: string) => {
-    setSelectedAlerts(prev => {
+    setSelectedAlerts((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(alertId)) {
         newSet.delete(alertId);
@@ -348,7 +380,7 @@ export function useSavedSearchAlerts(searchId?: string) {
 
   // Select all alerts
   const selectAll = useCallback(() => {
-    setSelectedAlerts(new Set(alerts.map(a => a.id)));
+    setSelectedAlerts(new Set(alerts.map((a) => a.id)));
   }, [alerts]);
 
   // Clear selection
@@ -366,7 +398,7 @@ export function useSavedSearchAlerts(searchId?: string) {
 
   // Mark all as seen
   const markAllAsSeen = useCallback(async () => {
-    const unseenAlerts = alerts.filter(a => !a.seen).map(a => a.id);
+    const unseenAlerts = alerts.filter((a) => !a.seen).map((a) => a.id);
     if (unseenAlerts.length > 0) {
       await markSeenMutation.mutateAsync(unseenAlerts);
     }
@@ -375,7 +407,7 @@ export function useSavedSearchAlerts(searchId?: string) {
   // Auto-mark as seen after viewing
   useEffect(() => {
     const timer = setTimeout(() => {
-      const unseenAlerts = alerts.filter(a => !a.seen).map(a => a.id);
+      const unseenAlerts = alerts.filter((a) => !a.seen).map((a) => a.id);
       if (unseenAlerts.length > 0) {
         markAlertsAsSeen(unseenAlerts);
       }
@@ -401,7 +433,7 @@ export function useSavedSearchAlerts(searchId?: string) {
 
     // Status
     isMarkingSeen: markSeenMutation.isPending,
-    hasUnseen: alerts.some(a => !a.seen),
+    hasUnseen: alerts.some((a) => !a.seen),
     hasSelection: selectedAlerts.size > 0,
   };
 }
@@ -411,7 +443,7 @@ export function useSavedSearchAlerts(searchId?: string) {
  */
 export function useIsListingSaved(listingId: string) {
   const { data: isSaved = false } = useQuery({
-    queryKey: ['isListingSaved', listingId],
+    queryKey: ["isListingSaved", listingId],
     queryFn: () => isListingSaved(listingId),
     enabled: !!listingId,
     staleTime: 1000 * 60 * 5, // 5 minutes
