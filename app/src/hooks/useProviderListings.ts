@@ -7,6 +7,7 @@ import { supabase } from "../lib/supabase";
 
 export function useProviderListings() {
   const user = useAuthStore((s) => s.user);
+  const isReady = useAuthStore((s) => s.isReady);
   const providerId = user?.id || null;
   const userRole = user?.role;
   const [sessionReady, setSessionReady] = useState(false);
@@ -77,7 +78,7 @@ export function useProviderListings() {
   const query = useQuery({
     // Include user ID and role in query key to ensure cache separation between users
     queryKey: ["providerListings", providerId, userRole],
-    enabled: !!providerId && userRole === "provider" && sessionReady,
+    enabled: !!providerId && userRole === "provider" && sessionReady && isReady,
     queryFn: async () => {
       if (!providerId || userRole !== "provider") {
         console.log("⚠️ Skipping fetch - not a provider");

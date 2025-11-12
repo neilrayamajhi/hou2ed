@@ -33,6 +33,7 @@ export default function AuthProvider({
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const setStoreUser = useAuthStore((state) => state.setUser);
+  const setReady = useAuthStore((state) => state.setReady);
   const logout = useAuthStore((state) => state.logout);
 
   useEffect(() => {
@@ -66,6 +67,9 @@ export default function AuthProvider({
           // This is especially important when switching between account types
           console.log("🔄 User signed in - clearing all caches...");
 
+          // Mark auth as not ready during transition
+          setReady(false);
+
           // Cancel any in-flight queries
           await queryClient.cancelQueries();
 
@@ -82,7 +86,8 @@ export default function AuthProvider({
 
             // Small delay to ensure auth token propagation
             setTimeout(() => {
-              console.log("🔄 Session ready - data will be fetched fresh");
+              console.log("🔄 Session ready - marking auth as ready for data fetching");
+              setReady(true);
               // No need to manually invalidate - queries will run fresh since cache was cleared
             }, 500);
           }
@@ -138,9 +143,19 @@ export default function AuthProvider({
         // Update store with user data
         const userData = transformUserData(existingSession.user);
         setStoreUser(userData);
+
+        // Mark auth as ready after initial session check
+        console.log("✅ Initial session loaded - marking auth as ready");
+        setReady(true);
+      } else {
+        // No session, but auth check is complete
+        console.log("ℹ️ No initial session - marking auth as ready");
+        setReady(true);
       }
     } catch (error) {
       console.error(ERROR_MESSAGES.AUTH.SESSION_ERROR, error);
+      // Even on error, mark auth as ready to unblock the app
+      setReady(true);
     } finally {
       setLoading(false);
     }

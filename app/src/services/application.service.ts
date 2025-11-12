@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { uploadApplicationDocument, getDocumentSignedUrl } from './storage.service';
+import { getDocumentSignedUrl } from './storage.service';
 import type { Database } from '../lib/supabase';
 
 // Type definitions
@@ -63,9 +63,6 @@ export interface Application {
   documents?: ApplicationDocument[];
   stage_timestamps: Record<ApplicationStatus, string | null>;
   notes?: string;
-  decision_by?: string;
-  decision_note?: string;
-  decision_date?: string;
   consent_signature?: string;
   consent_timestamp?: string;
   created_at: string;
@@ -147,7 +144,7 @@ export async function createApplication(
 }
 
 /**
- * Upload documents for an application
+ * Save documents for an application
  */
 async function uploadApplicationDocuments(
   applicationId: string,
@@ -158,28 +155,25 @@ async function uploadApplicationDocuments(
     for (const doc of documents) {
       if (doc.status === 'uploaded' || !doc.fileUri) continue;
 
-      // Upload to storage
-      const result = await uploadApplicationDocument(
-        doc.fileUri,
-        applicationId,
-        doc.type
-      );
+      // For now, save document info directly to database without storage upload
+      // In production, you'd upload to storage first
+      const { error } = await supabase
+        .from('documents')
+        .insert({
+          application_id: applicationId,
+          type: doc.type,
+          file_url: doc.fileUri, // Storing the local URI for now
+          file_name: doc.fileName,
+          status: 'uploaded',
+          uploaded_by: uploadedBy,
+        });
 
-      if (result.success && result.path) {
-        // Create document record
-        await supabase
-          .from('documents')
-          .insert({
-            application_id: applicationId,
-            type: doc.type,
-            file_url: result.path,
-            status: 'uploaded',
-            uploaded_by: uploadedBy,
-          });
+      if (error) {
+        console.error('Error saving document:', error);
       }
     }
   } catch (error) {
-    console.error('Upload documents error:', error);
+    console.error('Save documents error:', error);
     throw error;
   }
 }
@@ -232,13 +226,6 @@ export async function getApplication(id: string): Promise<Application | null> {
           city,
           state,
           provider_id
-        ),
-        documents (
-          id,
-          type,
-          file_url,
-          status,
-          uploaded_at
         )
       `)
       .eq('id', id)
@@ -249,10 +236,23 @@ export async function getApplication(id: string): Promise<Application | null> {
       return null;
     }
 
+    // Fetch documents separately if needed
+    let documents = [];
+    if (data) {
+      const { data: docsData, error: docsError } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('application_id', id);
+
+      if (!docsError && docsData) {
+        documents = docsData;
+      }
+    }
+
     // Properly type the response
     const typedApplication: Application = {
       ...data,
-      documents: data.documents || [],
+      documents: documents || data?.documents || [],
     };
     return typedApplication;
   } catch (error) {
@@ -360,13 +360,31 @@ export async function updateApplicationStatus(
   note?: string
 ): Promise<ApplicationResult> {
   try {
-    const updateData: any = {
-      status,
-      updated_at: new Date().toISOString(),
+    // First, get the current application to update stage_timestamps
+    const { data: currentApp, error: fetchError } = await supabase
+      .from('applications')
+      .select('stage_timestamps')
+      .eq('id', id)
+      .single();
+
+    if (fetchError) {
+      return {
+        success: false,
+        error: 'Failed to fetch application',
+      };
+    }
+
+    // Update the stage_timestamps JSONB object
+    const updatedTimestamps = {
+      ...(currentApp?.stage_timestamps || {}),
+      [status]: new Date().toISOString(),
     };
 
-    // Update stage timestamp
-    updateData[`stage_timestamps.${status}`] = new Date().toISOString();
+    const updateData: any = {
+      status,
+      stage_timestamps: updatedTimestamps,
+      updated_at: new Date().toISOString(),
+    };
 
     if (note) {
       updateData.notes = note;
@@ -408,6 +426,75 @@ export async function withdrawApplication(id: string): Promise<ApplicationResult
 }
 
 /**
+ * Delete application (only for seekers deleting their own applications)
+ */
+export async function deleteApplication(id: string): Promise<ApplicationResult> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return {
+        success: false,
+        error: 'User not authenticated',
+      };
+    }
+
+    // First check if the application belongs to the user
+    const { data: application, error: fetchError } = await supabase
+      .from('applications')
+      .select('seeker_id, status')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !application) {
+      return {
+        success: false,
+        error: 'Application not found',
+      };
+    }
+
+    if (application.seeker_id !== user.id) {
+      return {
+        success: false,
+        error: 'You can only delete your own applications',
+      };
+    }
+
+    // Only allow deletion of certain statuses (not approved applications)
+    const deletableStatuses = ['new', 'withdrawn', 'rejected', 'draft'];
+    if (!deletableStatuses.includes(application.status)) {
+      return {
+        success: false,
+        error: `Cannot delete ${application.status} applications. You can withdraw it instead.`,
+      };
+    }
+
+    // Delete the application (documents will cascade delete due to FK constraint)
+    const { error: deleteError } = await supabase
+      .from('applications')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      console.error('Delete application error:', deleteError);
+      return {
+        success: false,
+        error: deleteError.message,
+      };
+    }
+
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.error('Delete application error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete application',
+    };
+  }
+}
+
+/**
  * Add document to existing application
  */
 export async function addDocumentToApplication(
@@ -422,29 +509,24 @@ export async function addDocumentToApplication(
       };
     }
 
-    // Upload to storage
-    const result = await uploadApplicationDocument(
-      document.fileUri,
-      applicationId,
-      document.type
-    );
-
-    if (!result.success || !result.path) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
       return {
         success: false,
-        error: result.error || 'Upload failed',
+        error: 'User not authenticated',
       };
     }
 
-    // Create document record
+    // Create document record directly without storage upload
     const { error } = await supabase
       .from('documents')
       .insert({
         application_id: applicationId,
         type: document.type,
-        file_url: result.path,
+        file_url: document.fileUri, // Storing local URI for now
+        file_name: document.fileName,
         status: 'uploaded',
-        uploaded_by: (await supabase.auth.getUser()).data.user?.id,
+        uploaded_by: user.id,
       });
 
     if (error) {
@@ -520,6 +602,106 @@ export async function hasUserApplied(listingId: string): Promise<boolean> {
   } catch (error) {
     console.error('Check application error:', error);
     return false;
+  }
+}
+
+/**
+ * Get existing application for a listing
+ */
+export async function getExistingApplication(listingId: string): Promise<{
+  exists: boolean;
+  canResubmit: boolean;
+  application?: Application;
+  waitTimeHours?: number;
+  message?: string;
+}> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return {
+        exists: false,
+        canResubmit: false,
+        message: 'User not authenticated'
+      };
+    }
+
+    const { data, error } = await supabase
+      .from('applications')
+      .select('*')
+      .eq('listing_id', listingId)
+      .eq('seeker_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error || !data) {
+      // No existing application
+      return { exists: false, canResubmit: true };
+    }
+
+    // Check application status
+    const application = data as Application;
+
+    // If application is pending/approved, can't resubmit
+    if (['new', 'docs_needed', 'under_review', 'interview_scheduled', 'approved', 'waitlisted'].includes(application.status)) {
+      return {
+        exists: true,
+        canResubmit: false,
+        application,
+        message: `You already have a ${application.status.replace('_', ' ')} application for this listing.`
+      };
+    }
+
+    // If rejected, check time since rejection (24 hour cooldown)
+    if (application.status === 'rejected') {
+      // Try to get rejection time from stage_timestamps, fallback to updated_at
+      const stageTimestamps = application.stage_timestamps as any;
+      const rejectionTime = stageTimestamps?.rejected || application.updated_at;
+      const hoursSinceRejection = (Date.now() - new Date(rejectionTime).getTime()) / (1000 * 60 * 60);
+      const cooldownHours = 24; // 24 hour cooldown period
+
+      if (hoursSinceRejection < cooldownHours) {
+        return {
+          exists: true,
+          canResubmit: false,
+          application,
+          waitTimeHours: cooldownHours - hoursSinceRejection,
+          message: `You can resubmit after ${Math.ceil(cooldownHours - hoursSinceRejection)} hours.`
+        };
+      }
+
+      // Cooldown period has passed, allow resubmission
+      return {
+        exists: true,
+        canResubmit: true,
+        application,
+        message: 'You can now resubmit your application.'
+      };
+    }
+
+    // If withdrawn, allow immediate resubmission
+    if (application.status === 'withdrawn') {
+      return {
+        exists: true,
+        canResubmit: true,
+        application,
+        message: 'You can submit a new application.'
+      };
+    }
+
+    // Default case
+    return {
+      exists: true,
+      canResubmit: false,
+      application
+    };
+  } catch (error) {
+    console.error('Check existing application error:', error);
+    return {
+      exists: false,
+      canResubmit: false,
+      message: 'Error checking application status'
+    };
   }
 }
 

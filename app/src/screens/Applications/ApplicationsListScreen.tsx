@@ -8,20 +8,27 @@ import {
   SafeAreaView,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
 import { useAuthStore } from "../../state/useAuthStore";
 import { supabase } from "../../lib/supabase";
+import { deleteApplication, withdrawApplication } from "../../services/application.service";
 import type { Application, Listing } from "../../lib/supabase-types";
 import { RootStackNavigationProp } from "../../navigation/types";
 
 type ApplicationWithListing = Application & {
   listing: Pick<
     Listing,
-    "id" | "name" | "housing_type" | "district" | "island"
+    "id" | "title" | "housing_type" | "city" | "state"
   >;
+  seeker?: {
+    id: string;
+    email: string;
+    full_name?: string;
+  };
 };
 
 const getStatusColor = (status: Application["status"]) => {
@@ -89,21 +96,75 @@ export default function ApplicationsListScreen() {
     try {
       setError(null);
 
-      const { data, error: fetchError } = await supabase
-        .from("applications")
-        .select(
-          `
+      // First, check the user's role
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      if (profileError) {
+        console.error("Error fetching user profile:", profileError);
+      }
+
+      const userRole = profile?.role || "seeker";
+
+      // Adjust query based on role to include relevant information
+      const selectQuery = userRole === "provider"
+        ? `
           *,
           listing:listings (
             id,
-            name,
+            title,
             housing_type,
-            district,
-            island
+            city,
+            state
+          ),
+          seeker:profiles!applications_seeker_id_fkey (
+            id,
+            email,
+            full_name
           )
-        `,
-        )
-        .eq("seeker_id", user.id)
+        `
+        : `
+          *,
+          listing:listings (
+            id,
+            title,
+            housing_type,
+            city,
+            state
+          )
+        `;
+
+      let query = supabase
+        .from("applications")
+        .select(selectQuery);
+
+      // Query based on user role
+      if (userRole === "provider") {
+        // For providers, get applications for their listings
+        const { data: providerListings } = await supabase
+          .from("listings")
+          .select("id")
+          .eq("provider_id", user.id);
+
+        const listingIds = providerListings?.map(l => l.id) || [];
+
+        if (listingIds.length > 0) {
+          query = query.in("listing_id", listingIds);
+        } else {
+          // Provider has no listings, show empty
+          setApplications([]);
+          setLoading(false);
+          return;
+        }
+      } else {
+        // For seekers, get their own applications
+        query = query.eq("seeker_id", user.id);
+      }
+
+      const { data, error: fetchError } = await query
         .order("created_at", { ascending: false });
 
       if (fetchError) {
@@ -111,6 +172,9 @@ export default function ApplicationsListScreen() {
       }
 
       setApplications((data as ApplicationWithListing[]) || []);
+
+      // Log for debugging
+      console.log(`User role: ${userRole}, Applications found: ${data?.length || 0}`);
     } catch (err) {
       console.error("Error fetching applications:", err);
       setError("Failed to load applications. Please try again.");
@@ -129,6 +193,69 @@ export default function ApplicationsListScreen() {
     fetchApplications();
   }, [fetchApplications]);
 
+  const handleDeleteApplication = useCallback(async (applicationId: string, status: string) => {
+    // Show confirmation dialog
+    Alert.alert(
+      "Delete Application",
+      "Are you sure you want to delete this application? This action cannot be undone.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const result = await deleteApplication(applicationId);
+              if (result.success) {
+                Alert.alert("Success", "Application deleted successfully");
+                fetchApplications(); // Refresh the list
+              } else {
+                Alert.alert("Error", result.error || "Failed to delete application");
+              }
+            } catch (error) {
+              Alert.alert("Error", "An unexpected error occurred");
+              console.error("Delete error:", error);
+            }
+          },
+        },
+      ]
+    );
+  }, [fetchApplications]);
+
+  const handleWithdrawApplication = useCallback(async (applicationId: string) => {
+    Alert.alert(
+      "Withdraw Application",
+      "Are you sure you want to withdraw this application?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Withdraw",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const result = await withdrawApplication(applicationId);
+              if (result.success) {
+                Alert.alert("Success", "Application withdrawn successfully");
+                fetchApplications(); // Refresh the list
+              } else {
+                Alert.alert("Error", result.error || "Failed to withdraw application");
+              }
+            } catch (error) {
+              Alert.alert("Error", "An unexpected error occurred");
+              console.error("Withdraw error:", error);
+            }
+          },
+        },
+      ]
+    );
+  }, [fetchApplications]);
+
   const renderApplicationItem = useCallback(
     ({ item }: { item: ApplicationWithListing }) => {
       const statusColor = getStatusColor(item.status);
@@ -141,12 +268,12 @@ export default function ApplicationsListScreen() {
             // TODO: Navigate to application details screen
             console.log("View application:", item.id);
           }}
-          accessibilityLabel={`Application for ${item.listing?.name || "Unknown"}`}
+          accessibilityLabel={`Application for ${item.listing?.title || "Unknown"}`}
           accessibilityRole="button"
         >
           <View style={styles.cardHeader}>
             <Text style={styles.listingName} numberOfLines={2}>
-              {item.listing?.name || "Unknown Listing"}
+              {item.listing?.title || "Unknown Listing"}
             </Text>
             <View
               style={[styles.statusBadge, { backgroundColor: statusColor }]}
@@ -163,8 +290,8 @@ export default function ApplicationsListScreen() {
                 color={colors.gray[400]}
               />
               <Text style={styles.detailText}>
-                {item.listing?.district || "N/A"},{" "}
-                {item.listing?.island || "N/A"}
+                {item.listing?.city || "N/A"},{" "}
+                {item.listing?.state || "N/A"}
               </Text>
             </View>
 
@@ -192,6 +319,33 @@ export default function ApplicationsListScreen() {
           </View>
 
           <View style={styles.cardFooter}>
+            <View style={styles.actionButtons}>
+              {/* Show different actions based on status */}
+              {(item.status === 'new' || item.status === 'under_review' ||
+                item.status === 'docs_needed' || item.status === 'interview_scheduled') && (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.withdrawButton]}
+                  onPress={() => handleWithdrawApplication(item.id)}
+                  accessibilityLabel="Withdraw application"
+                >
+                  <Ionicons name="close-circle-outline" size={18} color={colors.yellow} />
+                  <Text style={styles.withdrawButtonText}>Withdraw</Text>
+                </TouchableOpacity>
+              )}
+
+              {(item.status === 'withdrawn' || item.status === 'rejected' ||
+                item.status === 'new' || item.status === 'draft') && (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.deleteButton]}
+                  onPress={() => handleDeleteApplication(item.id, item.status)}
+                  accessibilityLabel="Delete application"
+                >
+                  <Ionicons name="trash-outline" size={18} color={colors.red} />
+                  <Text style={styles.deleteButtonText}>Delete</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
             <Ionicons
               name="chevron-forward"
               size={20}
@@ -201,7 +355,7 @@ export default function ApplicationsListScreen() {
         </TouchableOpacity>
       );
     },
-    [],
+    [handleDeleteApplication, handleWithdrawApplication],
   );
 
   const renderEmptyState = useCallback(() => {
@@ -393,7 +547,41 @@ const styles = StyleSheet.create({
     color: colors.gray[300],
   },
   cardFooter: {
-    alignItems: "flex-end",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: spacing.sm,
+  },
+  actionButtons: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  actionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+  },
+  withdrawButton: {
+    borderColor: colors.yellow,
+    backgroundColor: `${colors.yellow}10`,
+  },
+  withdrawButtonText: {
+    fontSize: typography.sizes.xs,
+    color: colors.yellow,
+    fontWeight: "600",
+  },
+  deleteButton: {
+    borderColor: colors.red,
+    backgroundColor: `${colors.red}10`,
+  },
+  deleteButtonText: {
+    fontSize: typography.sizes.xs,
+    color: colors.red,
+    fontWeight: "600",
   },
   emptyState: {
     alignItems: "center",

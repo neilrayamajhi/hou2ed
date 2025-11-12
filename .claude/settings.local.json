@@ -1,19 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Read(//c/Users/samso/Documents/My Code, Projects, etc/**)",
-      "Bash(npx prettier:*)",
-      "Bash(npm test:*)",
-      "Bash(npx tsc:*)",
-      "mcp__ide__getDiagnostics",
-      "Bash(npm install:*)",
-      "Bash(winget:*)",
-      "Bash(scoop:*)",
-      "Bash(curl:*)",
-      "Bash(git add:*)",
-      "Bash(git checkout:*)",
-      "Bash(git reset:*)",
-      "Bash(git commit:*)"
+      "Bash(chmod:*)",
+      "Bash(./apply-rls-fix-api.sh:*)",
+      "Bash(node verify-rls-fix.js:*)",
+      "Bash(./apply-emergency-rls-fix.sh:*)",
+      "Bash(node apply-simple-rls-fix.js:*)",
+      "Bash(node create-policies.js)",
+      "Bash(node check-user-profile.js:*)",
+      "Bash(node fix-user-profile.js:*)",
+      "Bash(node:*)"
     ],
     "deny": [],
     "ask": []

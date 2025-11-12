@@ -77,7 +77,7 @@ function formatFileSize(bytes: number): string {
 export default function ThreadScreen() {
   const route = useRoute<RootStackRouteProp<"Thread">>();
   const navigation = useNavigation<RootStackNavigationProp>();
-  const { user } = useAuthStore(); // Get user from auth store
+  const { user, isReady } = useAuthStore(); // Get user and ready state from auth store
   const flatListRef = useRef<FlatList>(null);
 
   const [thread, setThread] = useState<ThreadWithDetails | null>(null);
@@ -99,6 +99,12 @@ export default function ThreadScreen() {
   useEffect(() => {
     async function loadThread() {
       try {
+        // Wait for auth to be ready
+        if (!isReady) {
+          console.log("⏳ Auth not ready yet, waiting...");
+          return;
+        }
+
         // Check if user exists
         if (!user || !user.id) {
           console.warn("No user found in auth store for ThreadScreen");
@@ -150,7 +156,7 @@ export default function ThreadScreen() {
     }
 
     loadThread();
-  }, [threadId, participantId, propertyTitle, user]);
+  }, [threadId, participantId, propertyTitle, user, isReady]);
 
   // Subscribe to real-time messages
   useEffect(() => {

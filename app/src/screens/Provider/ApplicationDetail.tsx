@@ -25,6 +25,7 @@ import {
   updateApplicationStatus,
 } from "../../services/application.service";
 import type { ApplicationStatus } from "../../services/application.service";
+import { supabase } from "../../lib/supabase";
 
 type ApplicationDetailRouteProp = RouteProp<
   { ApplicationDetail: { applicationId: string } },
@@ -36,6 +37,7 @@ export default function ApplicationDetail() {
   const route = useRoute<ApplicationDetailRouteProp>();
   const queryClient = useQueryClient();
   const [notes, setNotes] = useState("");
+  const [seekerProfile, setSeekerProfile] = useState<any>(null);
 
   const {
     data: application,
@@ -43,7 +45,22 @@ export default function ApplicationDetail() {
     isError,
   } = useQuery({
     queryKey: ["application", route.params.applicationId],
-    queryFn: () => getApplication(route.params.applicationId),
+    queryFn: async () => {
+      const app = await getApplication(route.params.applicationId);
+
+      // Fetch seeker profile if application exists
+      if (app?.seeker_id) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("id, email, full_name, role")
+          .eq("id", app.seeker_id)
+          .single();
+
+        setSeekerProfile(profile);
+      }
+
+      return app;
+    },
   });
 
   const updateStatusMutation = useMutation({
@@ -258,7 +275,25 @@ export default function ApplicationDetail() {
 
         {/* Applicant Information */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Applicant Information</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Applicant Information</Text>
+            <TouchableOpacity
+              style={styles.messageButton}
+              onPress={() => {
+                // Navigate to messages with this seeker
+                if (seekerProfile) {
+                  // @ts-ignore
+                  navigation.navigate("Messages", {
+                    recipientId: seekerProfile.id,
+                    recipientName: seekerProfile.full_name || "Applicant",
+                  });
+                }
+              }}
+            >
+              <Ionicons name="chatbubble-outline" size={20} color={colors.primary[500]} />
+              <Text style={styles.messageButtonText}>Message</Text>
+            </TouchableOpacity>
+          </View>
 
           <View style={styles.infoCard}>
             <View style={styles.avatarLarge}>
@@ -273,7 +308,9 @@ export default function ApplicationDetail() {
               />
               <Text style={styles.infoLabel}>Full Name</Text>
               <Text style={styles.infoValue}>
-                {application.application_data.fullName || "Not provided"}
+                {seekerProfile?.full_name ||
+                 application.application_data?.fullName ||
+                 "Not provided"}
               </Text>
             </View>
 
@@ -285,7 +322,9 @@ export default function ApplicationDetail() {
               />
               <Text style={styles.infoLabel}>Email</Text>
               <Text style={styles.infoValue}>
-                {application.application_data.email || "Not provided"}
+                {seekerProfile?.email ||
+                 application.application_data?.email ||
+                 "Not provided"}
               </Text>
             </View>
 
@@ -394,6 +433,60 @@ export default function ApplicationDetail() {
             </View>
           </View>
         </View>
+
+        {/* Submitted Documents */}
+        {application.documents && application.documents.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Submitted Documents</Text>
+            <View style={styles.documentsContainer}>
+              {application.documents.map((doc: any, index: number) => (
+                <TouchableOpacity
+                  key={doc.id || index}
+                  style={styles.documentCard}
+                  onPress={() => {
+                    // Open document URL
+                    if (doc.file_url) {
+                      // You can implement document viewing here
+                      Alert.alert(
+                        "Document",
+                        `${doc.type || "Document"}\n${doc.file_name || ""}`,
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          {
+                            text: "View",
+                            onPress: () => {
+                              // Implement document viewer
+                              console.log("View document:", doc.file_url);
+                            },
+                          },
+                        ],
+                      );
+                    }
+                  }}
+                >
+                  <Ionicons
+                    name="document-attach-outline"
+                    size={24}
+                    color={colors.primary[500]}
+                  />
+                  <View style={styles.documentInfo}>
+                    <Text style={styles.documentTitle}>
+                      {doc.type || "Document"}
+                    </Text>
+                    <Text style={styles.documentSubtitle}>
+                      {doc.file_name || "Uploaded document"}
+                    </Text>
+                  </View>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={20}
+                    color={colors.gray[400]}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Additional Information */}
         {application.application_data.additionalInfo && (
@@ -697,5 +790,51 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.md,
     fontWeight: "600",
     color: colors.gray[900],
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.md,
+  },
+  messageButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    backgroundColor: colors.primary[500] + "20",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+  },
+  messageButtonText: {
+    fontSize: typography.sizes.sm,
+    color: colors.primary[500],
+    fontWeight: "600",
+  },
+  documentsContainer: {
+    gap: spacing.sm,
+  },
+  documentCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.gray[850],
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.gray[800],
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  documentInfo: {
+    flex: 1,
+  },
+  documentTitle: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray[50],
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  documentSubtitle: {
+    fontSize: typography.sizes.xs,
+    color: colors.gray[400],
   },
 });

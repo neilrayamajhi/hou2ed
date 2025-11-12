@@ -56,7 +56,7 @@ function getInitials(name: string): string {
 
 export default function InboxScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
-  const { user } = useAuthStore(); // Get user from auth store
+  const { user, isReady } = useAuthStore(); // Get user and ready state from auth store
   const [threads, setThreads] = useState<ThreadWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -67,6 +67,12 @@ export default function InboxScreen() {
   // Initialize and fetch threads
   const loadThreads = useCallback(async () => {
     try {
+      // Wait for auth to be ready
+      if (!isReady) {
+        console.log("⏳ Auth not ready yet, waiting...");
+        return;
+      }
+
       // Check if user exists
       if (!user || !user.id) {
         console.warn("No user found in auth store for InboxScreen");
@@ -92,7 +98,7 @@ export default function InboxScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user]);
+  }, [user, isReady]);
 
   // Load threads on mount and when screen focuses
   useFocusEffect(

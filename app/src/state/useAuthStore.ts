@@ -20,11 +20,13 @@ type AuthState = {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isReady: boolean; // Indicates auth initialization is complete and safe to fetch data
   selectedRole: UserRole | null;
   setUser: (user: User | null) => void;
   setSelectedRole: (role: UserRole | null) => void;
   logout: () => Promise<void>;
   setLoading: (loading: boolean) => void;
+  setReady: (ready: boolean) => void;
 };
 
 const secureStorage = {
@@ -49,6 +51,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       isAuthenticated: false,
       isLoading: false,
+      isReady: false,
       selectedRole: null,
 
       setUser: (user) =>
@@ -59,6 +62,8 @@ export const useAuthStore = create<AuthState>()(
 
       setSelectedRole: (role) => set({ selectedRole: role }),
 
+      setReady: (ready) => set({ isReady: ready }),
+
       logout: async () => {
         try {
           console.log("🔴 Logging out - clearing all data...");
@@ -67,6 +72,7 @@ export const useAuthStore = create<AuthState>()(
           set({
             user: null,
             isAuthenticated: false,
+            isReady: false,
             selectedRole: null,
           });
 
@@ -96,6 +102,7 @@ export const useAuthStore = create<AuthState>()(
           set({
             user: null,
             isAuthenticated: false,
+            isReady: false,
             selectedRole: null,
           });
         }

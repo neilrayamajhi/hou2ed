@@ -358,10 +358,13 @@ export default function Step3Documents({
   );
 
   const allRequiredDocumentsUploaded = useMemo(() => {
-    return DOCUMENT_TYPES.filter((dt) => dt.required).every((dt) =>
-      documents.some((doc) => doc.type === dt.id && doc.uploadProgress === 100),
-    );
-  }, [documents]);
+    // Check that all required documents from the provider's requirements are uploaded
+    return documentRequirements
+      .filter((req) => req.required)
+      .every((req) =>
+        documents.some((doc) => doc.type === req.id && doc.uploadProgress === 100),
+      );
+  }, [documents, documentRequirements]);
 
   const handleDocumentPick = (docType: string) => {
     Alert.alert(

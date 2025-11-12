@@ -98,9 +98,18 @@ export default function HomeScreen() {
   // Load real listings from database or fall back to mock data
   useEffect(() => {
     async function loadListings() {
+      // Don't load listings if location is still loading
+      // This prevents the initial load with null location that causes 0.5 mile default
+      if (locationLoading) {
+        console.log('⏳ Waiting for location before loading listings...');
+        return;
+      }
+
       setLoadingData(true);
       listingLoadPerf.start();
       try {
+        console.log('📍 Loading listings with location:', location);
+
         // Fetch real listings from Supabase database
         const dbListings = await getMarketplaceListings(
           location?.latitude,
@@ -113,7 +122,7 @@ export default function HomeScreen() {
         if (dbListings && dbListings.length > 0) {
           // Use database listings
           allListings = dbListings as any;
-          console.log(`✅ Found ${dbListings.length} real listings from database`);
+          console.log(`✅ Found ${dbListings.length} real listings from database with proper distances`);
           setIsRealData(true);
           setDataSource('Live Database');
         } else {
@@ -137,7 +146,7 @@ export default function HomeScreen() {
     }
 
     loadListings();
-  }, [quickFilters, location]);
+  }, [quickFilters, location, locationLoading]);
 
   // Update map region when user location is loaded
   useEffect(() => {
@@ -186,7 +195,7 @@ export default function HomeScreen() {
   // Navigate to listing details
   const openDetails = useCallback(
     (listing: Listing) => {
-      console.log("Opening details for:", listing.name);
+      console.log("Opening details for:", listing.title);
       // @ts-ignore - Navigation types will be updated
       navigation.navigate("ListingDetails", { listingId: listing.id, listing });
     },
@@ -248,7 +257,9 @@ export default function HomeScreen() {
           </Text>
           <View style={styles.listItemDistance}>
             <Ionicons name="navigate" size={14} color="#D4AF37" />
-            <Text style={styles.distanceText}>{item.distance || 0.5} mi</Text>
+            <Text style={styles.distanceText}>
+              {item.distance !== undefined ? `${item.distance} mi` : 'Calculating...'}
+            </Text>
           </View>
         </View>
       </View>

@@ -24,6 +24,7 @@ import Step3Documents from "./Step3Documents";
 import Step4Review from "./Step4Review";
 import { useAuthStore } from "../../state/useAuthStore";
 import { supabase } from "../../lib/supabase";
+import { getExistingApplication } from "../../services/application.service";
 
 // Types for application data
 export interface ApplicationDraft {
@@ -34,6 +35,12 @@ export interface ApplicationDraft {
   email: string;
   // Step 2
   eligibilityTags?: string[];
+  emergencyContact?: {
+    name: string;
+    phone: string;
+    relationship: string;
+  };
+  additionalInfo?: string;
   // Step 3
   documents?: Array<{
     type: string;
@@ -68,9 +75,10 @@ export default function ApplyWizard() {
     email: "",
   });
 
-  // Load saved draft on mount
+  // Load saved draft on mount and check for existing applications
   useEffect(() => {
     loadDraft();
+    checkExistingApplication();
   }, []);
 
   // Check auth on mount
@@ -115,6 +123,40 @@ export default function ApplyWizard() {
       await SecureStore.deleteItemAsync(DRAFT_STORAGE_KEY);
     } catch (error) {
       console.error("Error clearing draft:", error);
+    }
+  };
+
+  const checkExistingApplication = async () => {
+    if (!listingId) return;
+
+    try {
+      const result = await getExistingApplication(listingId);
+
+      if (result.exists && !result.canResubmit) {
+        // Show alert and navigate back
+        Alert.alert(
+          "Application Already Exists",
+          result.message || "You have already applied to this listing.",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                navigation.goBack();
+              },
+            },
+          ],
+          { cancelable: false }
+        );
+      } else if (result.exists && result.canResubmit) {
+        // Inform user they can resubmit
+        Alert.alert(
+          "Resubmission Available",
+          result.message || "You can now submit a new application for this listing.",
+          [{ text: "Continue" }]
+        );
+      }
+    } catch (error) {
+      console.error("Error checking existing application:", error);
     }
   };
 
@@ -175,6 +217,33 @@ export default function ApplyWizard() {
         return;
       }
 
+      // Check for existing application before submitting
+      const existingApp = await getExistingApplication(draft.listingId);
+
+      if (existingApp.exists && !existingApp.canResubmit) {
+        Alert.alert(
+          "Cannot Submit",
+          existingApp.message || "You already have an active application for this listing.",
+          [{ text: "OK" }]
+        );
+        return;
+      }
+
+      // If there's an existing application that can be resubmitted (rejected/withdrawn),
+      // we need to delete the old one first to avoid the unique constraint
+      if (existingApp.exists && existingApp.canResubmit && existingApp.application) {
+        console.log("🔄 Deleting old application before resubmission");
+        const { error: deleteError } = await supabase
+          .from("applications")
+          .delete()
+          .eq("id", existingApp.application.id);
+
+        if (deleteError) {
+          console.error("Error deleting old application:", deleteError);
+          // Continue anyway - the insert might still work
+        }
+      }
+
       // Validate listing_id is a valid UUID format
       const uuidRegex =
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -219,10 +288,25 @@ export default function ApplyWizard() {
         );
       }
 
-      // Insert with only the absolutely required columns
+      // Insert with all the form data
       const applicationData = {
         listing_id: draft.listingId,
         seeker_id: user.id,
+        status: "new",
+        application_data: {
+          fullName: draft.fullName,
+          phone: draft.phone,
+          email: draft.email,
+          eligibilityTags: draft.eligibilityTags,
+          emergencyContact: draft.emergencyContact,
+          additionalInfo: draft.additionalInfo,
+          documents: draft.documents,
+          signature: draft.signature,
+          agreedToTerms: draft.agreedToTerms,
+        },
+        stage_timestamps: {
+          new: new Date().toISOString(),
+        },
       };
 
       console.log("Inserting application with data:", applicationData);
@@ -244,6 +328,31 @@ export default function ApplyWizard() {
       }
 
       console.log("Application submitted successfully:", data);
+
+      // Upload documents to the documents table if any
+      if (draft.documents && draft.documents.length > 0 && data.id) {
+        console.log("Saving documents to documents table...");
+
+        for (const doc of draft.documents) {
+          const { error: docError } = await supabase
+            .from("documents")
+            .insert({
+              application_id: data.id,
+              type: doc.type,
+              file_url: doc.uri, // For now, storing the local URI
+              file_name: doc.name,
+              file_size: doc.size,
+              status: "uploaded",
+              uploaded_by: user.id,
+            });
+
+          if (docError) {
+            console.error("Error saving document:", docError);
+          } else {
+            console.log("Document saved successfully:", doc.name);
+          }
+        }
+      }
 
       // Clear draft after successful submission
       await clearDraft();

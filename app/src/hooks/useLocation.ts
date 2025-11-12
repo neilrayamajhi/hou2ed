@@ -32,7 +32,8 @@ export function useLocation(): UseLocationReturn {
 
       // Request permission
       if (!ExpoLocation) {
-        // Web: skip real permissions, use fallback immediately
+        // Web: Use fallback for web platform only
+        console.log('📍 Web platform detected - using default location');
         setLocation({ latitude: 37.7749, longitude: -122.4194 });
         return;
       }
@@ -40,7 +41,10 @@ export function useLocation(): UseLocationReturn {
       const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
 
       if (status !== 'granted') {
+        console.warn('⚠️ Location permission denied - not setting fallback');
         setError('Permission to access location was denied');
+        // Don't set a fallback location - let components handle the null case
+        setLocation(null);
         setLoading(false);
         return;
       }
@@ -50,6 +54,11 @@ export function useLocation(): UseLocationReturn {
         accuracy: ExpoLocation.Accuracy.Balanced,
       });
 
+      console.log('✅ Got user location:', {
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+      });
+
       setLocation({
         latitude: currentLocation.coords.latitude,
         longitude: currentLocation.coords.longitude,
@@ -57,29 +66,16 @@ export function useLocation(): UseLocationReturn {
     } catch (err) {
       console.error('Error getting location:', err);
       setError('Failed to get location');
-
-      // Set default location (San Francisco) as fallback
-      setLocation({
-        latitude: 37.7749,
-        longitude: -122.4194,
-      });
+      // Don't automatically set fallback - let the app handle null location
+      setLocation(null);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    // Only request location on mobile platforms
-    if (Platform.OS !== 'web') {
-      getLocation();
-    } else {
-      // Set default for web
-      setLocation({
-        latitude: 37.7749,
-        longitude: -122.4194,
-      });
-      setLoading(false);
-    }
+    // Request location on all platforms
+    getLocation();
   }, []);
 
   const refreshLocation = async () => {
