@@ -56,19 +56,67 @@ export interface SavedResult<T> {
  */
 export async function saveListing(
   params: SaveListingParams,
-  userId?: string,
 ): Promise<SavedResult<SavedListing>> {
   try {
-    const actualUserId =
-      userId || (await supabase.auth.getUser()).data.user?.id;
-    if (!actualUserId) {
+    // Validate listingId is a string
+    if (typeof params.listingId !== "string") {
+      console.error("[saveListing] Invalid listingId type:", {
+        listingId: params.listingId,
+        type: typeof params.listingId,
+        params,
+      });
+      return {
+        success: false,
+        error: `Invalid listing ID: expected string, got ${typeof params.listingId}`,
+      };
+    }
+
+    // Validate UUID format
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(params.listingId)) {
+      console.error("[saveListing] Invalid UUID format:", params.listingId);
+      return {
+        success: false,
+        error: `Invalid listing ID format: ${params.listingId}`,
+      };
+    }
+
+    // Get authenticated user
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user?.id) {
       return {
         success: false,
         error: "User not authenticated",
       };
     }
+    const actualUserId = user.id;
+
+    // Validate userId UUID format (reuse uuidRegex)
+    if (!uuidRegex.test(actualUserId)) {
+      console.error("[saveListing] Invalid userId UUID format:", actualUserId);
+      return {
+        success: false,
+        error: `Invalid user ID format: ${actualUserId}`,
+      };
+    }
+
+    console.log("[saveListing] Saving listing:", {
+      listingId: params.listingId,
+      userId: actualUserId,
+    });
 
     // Check if already saved
+    console.log("[saveListing] Querying existing:", {
+      user_id: actualUserId,
+      listing_id: params.listingId,
+      types: {
+        user_id: typeof actualUserId,
+        listing_id: typeof params.listingId,
+      },
+    });
     const { data: existing } = await supabase
       .from("saved_listings")
       .select("id")
@@ -100,6 +148,15 @@ export async function saveListing(
     }
 
     // Create new saved listing
+    console.log("[saveListing] Inserting new:", {
+      user_id: actualUserId,
+      listing_id: params.listingId,
+      notes: params.notes,
+      types: {
+        user_id: typeof actualUserId,
+        listing_id: typeof params.listingId,
+      },
+    });
     const { data, error } = await supabase
       .from("saved_listings")
       .insert({
@@ -136,17 +193,18 @@ export async function saveListing(
  */
 export async function unsaveListing(
   listingId: string,
-  userId?: string,
 ): Promise<SavedResult<void>> {
   try {
-    const actualUserId =
-      userId || (await supabase.auth.getUser()).data.user?.id;
-    if (!actualUserId) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user?.id) {
       return {
         success: false,
         error: "User not authenticated",
       };
     }
+    const actualUserId = user.id;
 
     const { error } = await supabase
       .from("saved_listings")
@@ -176,14 +234,13 @@ export async function unsaveListing(
 /**
  * Check if a listing is saved by the current user
  */
-export async function isListingSaved(
-  listingId: string,
-  userId?: string,
-): Promise<boolean> {
+export async function isListingSaved(listingId: string): Promise<boolean> {
   try {
-    const actualUserId =
-      userId || (await supabase.auth.getUser()).data.user?.id;
-    if (!actualUserId) return false;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user?.id) return false;
+    const actualUserId = user.id;
 
     const { data, error } = await supabase
       .from("saved_listings")
@@ -202,13 +259,28 @@ export async function isListingSaved(
 /**
  * Get user's saved listings
  */
-export async function getSavedListings(
-  userId?: string,
-): Promise<SavedListing[]> {
+export async function getSavedListings(): Promise<SavedListing[]> {
   try {
-    const actualUserId =
-      userId || (await supabase.auth.getUser()).data.user?.id;
-    if (!actualUserId) return [];
+    console.log("[getSavedListings] Starting fetch...");
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user?.id) {
+      console.warn(
+        "[getSavedListings] ⚠️ No user authenticated - returning empty array",
+      );
+      console.warn(
+        "[getSavedListings] This might indicate auth state hasn't propagated yet",
+      );
+      return [];
+    }
+    const actualUserId = user.id;
+
+    console.log(
+      "[getSavedListings] ✅ User authenticated, fetching for user:",
+      actualUserId,
+    );
 
     const { data, error } = await supabase
       .from("saved_listings")
@@ -216,13 +288,7 @@ export async function getSavedListings(
         `
         *,
         listing:listings (
-          *,
-          provider:profiles!provider_id (
-            id,
-            full_name,
-            username,
-            is_verified
-          )
+          *
         )
       `,
       )
@@ -230,10 +296,15 @@ export async function getSavedListings(
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Get saved listings error:", error);
+      console.error("[getSavedListings] Database error:", error);
       return [];
     }
 
+    console.log("[getSavedListings] Fetched items:", data?.length || 0);
+    console.log(
+      "[getSavedListings] Sample data structure:",
+      JSON.stringify(data?.[0], null, 2),
+    );
     return data || [];
   } catch (error) {
     console.error("Get saved listings error:", error);
@@ -243,28 +314,38 @@ export async function getSavedListings(
 
 /**
  * Save a search with filters
+ * NOTE: This feature is not yet implemented - table doesn't exist
  */
 export async function saveSearch(
   params: SaveSearchParams,
-  userId?: string,
 ): Promise<SavedResult<SavedSearch>> {
   try {
-    const actualUserId =
-      userId || (await supabase.auth.getUser()).data.user?.id;
-    if (!actualUserId) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user?.id) {
       return {
         success: false,
         error: "User not authenticated",
       };
     }
+    const actualUserId = user.id;
 
     // Check for duplicate name
-    const { data: existing } = await supabase
+    const { data: existing, error: checkError } = await supabase
       .from("saved_searches")
       .select("id")
       .eq("user_id", actualUserId)
       .eq("name", params.name)
       .single();
+
+    // Table doesn't exist yet
+    if (checkError?.code === "PGRST205" || checkError?.code === "42P01") {
+      return {
+        success: false,
+        error: "Saved searches feature is not yet available",
+      };
+    }
 
     if (existing) {
       return {
@@ -314,17 +395,18 @@ export async function saveSearch(
 export async function updateSavedSearch(
   searchId: string,
   updates: Partial<SaveSearchParams>,
-  userId?: string,
 ): Promise<SavedResult<SavedSearch>> {
   try {
-    const actualUserId =
-      userId || (await supabase.auth.getUser()).data.user?.id;
-    if (!actualUserId) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user?.id) {
       return {
         success: false,
         error: "User not authenticated",
       };
     }
+    const actualUserId = user.id;
 
     // Verify ownership
     const { data: existing } = await supabase
@@ -333,7 +415,7 @@ export async function updateSavedSearch(
       .eq("id", searchId)
       .single();
 
-    if (!existing || existing.user_id !== user.id) {
+    if (!existing || existing.user_id !== actualUserId) {
       return {
         success: false,
         error: "Saved search not found or access denied",
@@ -391,20 +473,22 @@ export async function deleteSavedSearch(
   searchId: string,
 ): Promise<SavedResult<void>> {
   try {
-    const actualUserId =
-      userId || (await supabase.auth.getUser()).data.user?.id;
-    if (!actualUserId) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user?.id) {
       return {
         success: false,
         error: "User not authenticated",
       };
     }
+    const actualUserId = user.id;
 
     const { error } = await supabase
       .from("saved_searches")
       .delete()
       .eq("id", searchId)
-      .eq("user_id", user.id);
+      .eq("user_id", actualUserId);
 
     if (error) {
       console.error("Delete saved search error:", error);
@@ -426,13 +510,26 @@ export async function deleteSavedSearch(
 
 /**
  * Get user's saved searches
+ * NOTE: This feature is not yet implemented - table doesn't exist
  */
 export async function getSavedSearches(): Promise<SavedSearch[]> {
   try {
+    console.log("[getSavedSearches] Starting fetch...");
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return [];
+
+    if (!user) {
+      console.warn(
+        "[getSavedSearches] ⚠️ No user authenticated - returning empty array",
+      );
+      return [];
+    }
+
+    console.log(
+      "[getSavedSearches] ✅ User authenticated, fetching for user:",
+      user.id,
+    );
 
     const { data, error } = await supabase
       .from("saved_searches")
@@ -441,13 +538,25 @@ export async function getSavedSearches(): Promise<SavedSearch[]> {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Get saved searches error:", error);
+      // Table doesn't exist yet - return empty array instead of logging error
+      if (error.code === "PGRST205" || error.code === "42P01") {
+        console.warn(
+          "[getSavedSearches] Table doesn't exist yet - returning empty array",
+        );
+        return [];
+      }
+      console.error("[getSavedSearches] ❌ Database error:", error);
       return [];
     }
 
+    console.log(
+      "[getSavedSearches] Fetched",
+      data?.length || 0,
+      "saved searches",
+    );
     return data as SavedSearch[];
   } catch (error) {
-    console.error("Get saved searches error:", error);
+    console.error("[getSavedSearches] ❌ CRITICAL error:", error);
     return [];
   }
 }
@@ -459,21 +568,23 @@ export async function runSavedSearch(
   searchId: string,
 ): Promise<SavedResult<Listing[]>> {
   try {
-    const actualUserId =
-      userId || (await supabase.auth.getUser()).data.user?.id;
-    if (!actualUserId) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user?.id) {
       return {
         success: false,
         error: "User not authenticated",
       };
     }
+    const actualUserId = user.id;
 
     // Get saved search
     const { data: savedSearch, error: searchError } = await supabase
       .from("saved_searches")
       .select("filters")
       .eq("id", searchId)
-      .eq("user_id", user.id)
+      .eq("user_id", actualUserId)
       .single();
 
     if (searchError || !savedSearch) {
@@ -513,6 +624,7 @@ export async function runSavedSearch(
 
 /**
  * Get alerts for saved searches
+ * NOTE: This feature is not yet implemented - table doesn't exist
  */
 export async function getSavedSearchAlerts(
   searchId?: string,
@@ -551,6 +663,10 @@ export async function getSavedSearchAlerts(
       .limit(50);
 
     if (error) {
+      // Table doesn't exist yet - return empty array instead of logging error
+      if (error.code === "PGRST205" || error.code === "42P01") {
+        return [];
+      }
       console.error("Get alerts error:", error);
       return [];
     }
@@ -569,20 +685,22 @@ export async function markAlertsAsSeen(
   alertIds: string[],
 ): Promise<SavedResult<void>> {
   try {
-    const actualUserId =
-      userId || (await supabase.auth.getUser()).data.user?.id;
-    if (!actualUserId) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user?.id) {
       return {
         success: false,
         error: "User not authenticated",
       };
     }
+    const actualUserId = user.id;
 
     const { error } = await supabase
       .from("saved_search_alerts")
       .update({ seen: true })
       .in("id", alertIds)
-      .eq("user_id", user.id);
+      .eq("user_id", actualUserId);
 
     if (error) {
       console.error("Mark alerts seen error:", error);
@@ -610,20 +728,22 @@ export async function toggleSearchNotification(
   enabled: boolean,
 ): Promise<SavedResult<void>> {
   try {
-    const actualUserId =
-      userId || (await supabase.auth.getUser()).data.user?.id;
-    if (!actualUserId) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user?.id) {
       return {
         success: false,
         error: "User not authenticated",
       };
     }
+    const actualUserId = user.id;
 
     const { error } = await supabase
       .from("saved_searches")
       .update({ notification_enabled: enabled })
       .eq("id", searchId)
-      .eq("user_id", user.id);
+      .eq("user_id", actualUserId);
 
     if (error) {
       console.error("Toggle notification error:", error);
@@ -648,6 +768,7 @@ export async function toggleSearchNotification(
 
 /**
  * Get count of unseen alerts
+ * NOTE: This feature is not yet implemented - table doesn't exist
  */
 export async function getUnseenAlertCount(): Promise<number> {
   try {
@@ -663,6 +784,10 @@ export async function getUnseenAlertCount(): Promise<number> {
       .eq("seen", false);
 
     if (error) {
+      // Table doesn't exist yet - return 0 instead of logging error
+      if (error.code === "PGRST205" || error.code === "42P01") {
+        return 0;
+      }
       console.error("Get unseen count error:", error);
       return 0;
     }
@@ -681,27 +806,29 @@ export async function batchSaveListings(
   listingIds: string[],
 ): Promise<SavedResult<number>> {
   try {
-    const actualUserId =
-      userId || (await supabase.auth.getUser()).data.user?.id;
-    if (!actualUserId) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user?.id) {
       return {
         success: false,
         error: "User not authenticated",
       };
     }
+    const actualUserId = user.id;
 
     // Get existing saved listings
     const { data: existing } = await supabase
       .from("saved_listings")
       .select("listing_id")
-      .eq("user_id", user.id)
+      .eq("user_id", actualUserId)
       .in("listing_id", listingIds);
 
     const existingIds = new Set((existing || []).map((s) => s.listing_id));
     const newListings = listingIds
       .filter((id) => !existingIds.has(id))
       .map((listing_id) => ({
-        user_id: user.id,
+        user_id: actualUserId,
         listing_id,
       }));
 

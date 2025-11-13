@@ -20,7 +20,8 @@
       "Bash(done)",
       "Bash(src/types/database.types.ts)",
       "Bash(echo:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []

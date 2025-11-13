@@ -23,7 +23,7 @@ import {
   parseRules,
   parseEligibility,
 } from "../../constants/listingOptions";
-import useSavedStore from "../../state/useSavedStore";
+import { useSavedListings } from "../../hooks/useSavedItems";
 import { useAuthStore } from "../../state/useAuthStore";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -97,12 +97,22 @@ export default function ListingDetailsScreen() {
   const route = useRoute<any>();
   const listingFromParams = route.params?.listing || {};
 
+  // Support both route.params.listing.id AND route.params.listingId
+  const routeListingId = route.params?.listingId || listingFromParams?.id;
+
+  console.log("[ListingDetails] Route params:", {
+    listingId: route.params?.listingId,
+    hasListing: !!route.params?.listing,
+    listingId_from_listing: listingFromParams?.id,
+    resolved: routeListingId,
+  });
+
   const [dbListing, setDbListing] = useState<any>(null);
   const [loadingDb, setLoadingDb] = useState(false);
   const [checkingApplication, setCheckingApplication] = useState(false);
 
   useEffect(() => {
-    const id = listingFromParams?.id;
+    const id = routeListingId;
     if (!id) return;
     let cancelled = false;
     (async () => {
@@ -127,11 +137,11 @@ export default function ListingDetailsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [listingFromParams?.id]);
+  }, [routeListingId]);
 
   const merged = useMemo(() => {
     const base = {
-      id: listingFromParams.id,
+      id: routeListingId || listingFromParams.id,
       title: listingFromParams.name || listingFromParams.title || "",
       providerName: listingFromParams.provider || "",
       isVerified: !!listingFromParams.verified,
@@ -183,7 +193,7 @@ export default function ListingDetailsScreen() {
         zip: (dbListing as any).zip_code ?? base.location.zip,
       },
     };
-  }, [listingFromParams, dbListing]);
+  }, [listingFromParams, dbListing, routeListingId]);
 
   // Use the new parsing functions that convert codes to nice labels
   const amenitiesList = parseAmenities(merged.amenities);
@@ -204,31 +214,27 @@ export default function ListingDetailsScreen() {
   // Get auth state
   const { user } = useAuthStore();
 
-  // Get saved store functions
-  const { toggleListing, isListingSaved } = useSavedStore();
+  // Bookmark functionality
+  const { isSaved: isListingSaved, toggleSave, isSaving } = useSavedListings();
 
-  // Check if listing is saved
-  const isSaved = isListingSaved(merged.id);
+  // Ensure listingId is a string, not an object
+  const listingId =
+    typeof merged.id === "string"
+      ? merged.id
+      : (merged.id as any)?.toString?.() || String(merged.id);
+
+  const isSaved = listingId ? isListingSaved(listingId) : false;
 
   const handleBack = () => (navigation as any).goBack?.();
 
-  const handleSave = useCallback(() => {
-    // Create SavedListing object for the store
-    const savedListing = {
-      id: merged.id,
-      title: merged.title,
-      address: merged.location?.address || "Address not available",
-      rent: merged.costPerMonth,
-      bedrooms: merged.bedsTotal || 0,
-      bathrooms: 1, // Default value as it's not in the data
-      sqft: 0, // Default value as it's not in the data
-      imageUrl: merged.images?.[0] || "",
-      savedAt: new Date(),
-      availableUnits: merged.bedsAvailable,
-      propertyType: "shelter", // Default type
-    };
-    toggleListing(savedListing);
-  }, [merged, toggleListing]);
+  const handleSave = useCallback(async () => {
+    if (!listingId || isSaving) return;
+    try {
+      await toggleSave(listingId);
+    } catch (error) {
+      console.error("Error toggling save status:", error);
+    }
+  }, [listingId, toggleSave, isSaving]);
 
   const handleApply = useCallback(async () => {
     // Prevent multiple clicks
@@ -474,12 +480,20 @@ export default function ListingDetailsScreen() {
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Ionicons
-            name={isSaved ? "bookmark" : "bookmark-outline"}
-            size={24}
-            color={colors.white}
-          />
+        <TouchableOpacity
+          style={styles.saveButton}
+          onPress={handleSave}
+          disabled={isSaving}
+        >
+          {isSaving ? (
+            <ActivityIndicator size="small" color={colors.white} />
+          ) : (
+            <Ionicons
+              name={isSaved ? "bookmark" : "bookmark-outline"}
+              size={24}
+              color={colors.white}
+            />
+          )}
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.applyButton, checkingApplication && styles.applyButtonDisabled]}

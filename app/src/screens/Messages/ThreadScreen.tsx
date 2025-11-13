@@ -34,9 +34,7 @@ import {
   MessageWithSender,
   ThreadWithDetails,
 } from "../../services/messageService";
-import { attachmentService } from "../../services/attachmentService";
 import { supabase } from "../../lib/supabase";
-import { useAuthStore } from "../../state/useAuthStore";
 
 interface Attachment {
   id: string;
@@ -77,7 +75,6 @@ function formatFileSize(bytes: number): string {
 export default function ThreadScreen() {
   const route = useRoute<RootStackRouteProp<"Thread">>();
   const navigation = useNavigation<RootStackNavigationProp>();
-  const { user, isReady } = useAuthStore(); // Get user and ready state from auth store
   const flatListRef = useRef<FlatList>(null);
 
   const [thread, setThread] = useState<ThreadWithDetails | null>(null);
@@ -99,64 +96,71 @@ export default function ThreadScreen() {
   useEffect(() => {
     async function loadThread() {
       try {
-        // Wait for auth to be ready
-        if (!isReady) {
-          console.log("⏳ Auth not ready yet, waiting...");
-          return;
-        }
-
-        // Check if user exists
-        if (!user || !user.id) {
-          console.warn("No user found in auth store for ThreadScreen");
-          setLoading(false);
-          return;
-        }
-
-        // Initialize message service with user ID from store
-        const userId = await messageService.initialize(user.id);
-        await attachmentService.initialize();
+        // Initialize message service
+        const userId = await messageService.initialize();
+        console.log("[ThreadScreen] Initialized with userId:", userId);
         setCurrentUserId(userId);
 
-        let threadData = null;
+        if (!userId) {
+          console.error("[ThreadScreen] No user ID after initialization");
+          Alert.alert("Error", "You must be logged in to access messages.");
+          return;
+        }
 
         // If we have a threadId, load the thread
         if (threadId) {
-          threadData = await messageService.getThread(threadId);
+          console.log("[ThreadScreen] Loading existing thread:", threadId);
+          const threadData = await messageService.getThread(threadId);
           if (threadData) {
+            console.log("[ThreadScreen] Thread loaded:", threadData.id);
             setThread(threadData);
             setMessages(threadData.messages || []);
+          } else {
+            console.error("[ThreadScreen] Failed to load thread:", threadId);
+            Alert.alert(
+              "Error",
+              "Failed to load conversation. Please try again.",
+            );
           }
         } else if (participantId && userId) {
           // Create a new thread if needed
+          console.log(
+            "[ThreadScreen] Creating new thread with participant:",
+            participantId,
+          );
           const newThread = await messageService.createThread(
             [userId, participantId],
             propertyTitle || "New Conversation",
           );
           if (newThread) {
+            console.log("[ThreadScreen] Thread created:", newThread.id);
             setThread({ ...newThread, messages: [], participants: [] });
             setMessages([]);
+          } else {
+            console.error("[ThreadScreen] Failed to create thread");
+            Alert.alert(
+              "Error",
+              "Failed to create conversation. Please ensure messaging tables exist in the database.",
+            );
           }
         }
 
-        // Mark messages as read - need to pass message IDs, not thread ID
-        if (threadId && threadData?.messages) {
-          const unreadMessageIds = threadData.messages
-            .filter((msg) => !msg.read_by?.includes(userId))
-            .map((msg) => msg.id);
-
-          if (unreadMessageIds.length > 0) {
-            await messageService.markMessagesAsRead(threadId, unreadMessageIds);
-          }
+        // Mark messages as read
+        if (threadId) {
+          await messageService.markMessagesAsRead(threadId);
         }
       } catch (error) {
-        console.error("Error loading thread:", error);
+        console.error("[ThreadScreen] Error loading thread:", error);
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        Alert.alert("Error", `Failed to load conversation: ${errorMessage}`);
       } finally {
         setLoading(false);
       }
     }
 
     loadThread();
-  }, [threadId, participantId, propertyTitle, user, isReady]);
+  }, [threadId, participantId, propertyTitle]);
 
   // Subscribe to real-time messages
   useEffect(() => {
@@ -166,32 +170,28 @@ export default function ThreadScreen() {
       threadId,
       (newMessage: MessageWithSender) => {
         setMessages((prev) => {
-          // Check if message already exists (from optimistic update or duplicate event)
+          // Check if message already exists (update) or is new
           const existingIndex = prev.findIndex((m) => m.id === newMessage.id);
           if (existingIndex >= 0) {
-            // Update existing message with latest data
+            // Update existing message
             const updated = [...prev];
             updated[existingIndex] = newMessage;
             return updated;
           } else {
-            // Add new message only if it doesn't exist
+            // Add new message
             return [...prev, newMessage];
           }
         });
 
         // Mark as read if from other user
-        if (newMessage.sender_id !== currentUserId && newMessage.id) {
-          messageService.markMessagesAsRead(threadId, [newMessage.id]).catch(error => {
-            console.error("Failed to mark message as read:", error);
-          });
+        if (newMessage.sender_id !== currentUserId) {
+          messageService.markMessagesAsRead(threadId);
         }
 
-        // Only scroll for new messages from others (not for our own optimistic updates)
-        if (newMessage.sender_id !== currentUserId) {
-          setTimeout(() => {
-            flatListRef.current?.scrollToEnd({ animated: true });
-          }, 100);
-        }
+        // Scroll to bottom on new message
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
       },
     );
 
@@ -202,23 +202,41 @@ export default function ThreadScreen() {
 
   const handleSend = useCallback(async () => {
     if (!inputText.trim() && selectedAttachments.length === 0) return;
+
+    // Validate thread exists
     if (!thread?.id) {
-      Alert.alert("Error", "Unable to send message. Thread not initialized.");
+      console.error("[ThreadScreen] Cannot send: thread.id is undefined", {
+        thread,
+      });
+      Alert.alert(
+        "Error",
+        "Unable to send message. Thread not initialized. Please try reopening the conversation.",
+      );
+      return;
+    }
+
+    // Validate user is authenticated
+    if (!currentUserId) {
+      console.error("[ThreadScreen] Cannot send: currentUserId is undefined");
+      Alert.alert("Error", "You must be logged in to send messages.");
       return;
     }
 
     setSending(true);
     try {
-      // Upload attachments if any
-      let attachmentUrls: string[] | undefined;
-      if (selectedAttachments.length > 0 && currentUserId) {
-        const uris = selectedAttachments.map((a) => a.uri);
-        attachmentUrls = await attachmentService.uploadMultiple(
-          uris,
-          thread.id,
-          currentUserId,
-        );
-      }
+      // Upload attachments if any (in a real app)
+      const attachmentUrls =
+        selectedAttachments.length > 0
+          ? selectedAttachments.map((a) => a.uri)
+          : undefined;
+
+      // Log attempt for debugging
+      console.log("[ThreadScreen] Sending message:", {
+        threadId: thread.id,
+        senderId: currentUserId,
+        bodyLength: inputText.trim().length,
+        hasAttachments: !!attachmentUrls,
+      });
 
       // Send message
       const sentMessage = await messageService.sendMessage(
@@ -228,36 +246,31 @@ export default function ThreadScreen() {
       );
 
       if (sentMessage) {
-        // Clear input immediately
+        // Clear input
         setInputText("");
         setSelectedAttachments([]);
+        console.log(
+          "[ThreadScreen] Message sent successfully:",
+          sentMessage.id,
+        );
 
-        // Optimistically add the message to the UI immediately
-        // This ensures the message appears even if real-time subscription has issues
-        setMessages((prev) => {
-          // Check if message already exists (from real-time)
-          const exists = prev.some((m) => m.id === sentMessage.id);
-          if (exists) {
-            return prev;
-          }
-          // Add the new message
-          return [...prev, sentMessage];
-        });
-
-        // Scroll to bottom after adding message
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
+        // Message will be added via real-time subscription
       } else {
-        Alert.alert("Error", "Failed to send message. Please try again.");
+        console.error("[ThreadScreen] sendMessage returned null");
+        Alert.alert(
+          "Error",
+          "Failed to send message. This may be a database issue. Please check that messaging tables exist.",
+        );
       }
     } catch (error) {
-      console.error("Error sending message:", error);
-      Alert.alert("Error", "Failed to send message. Please try again.");
+      console.error("[ThreadScreen] Error sending message:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      Alert.alert("Error", `Failed to send message: ${errorMessage}`);
     } finally {
       setSending(false);
     }
-  }, [inputText, selectedAttachments, thread]);
+  }, [inputText, selectedAttachments, thread, currentUserId]);
 
   const handleAttachmentPress = useCallback(async () => {
     Alert.alert("Add Attachment", "Choose an option", [
@@ -370,11 +383,11 @@ export default function ThreadScreen() {
               isUser ? styles.userBubble : styles.providerBubble,
             ]}
           >
-            {item.body || item.content ? (
+            {item.body ? (
               <Text
                 style={[styles.messageText, isUser && styles.userMessageText]}
               >
-                {item.body || item.content}
+                {item.body}
               </Text>
             ) : null}
 
@@ -564,7 +577,11 @@ export default function ThreadScreen() {
             ]}
             onPress={handleSend}
             disabled={
-              (!inputText.trim() && selectedAttachments.length === 0) || sending
+              (!inputText.trim() && selectedAttachments.length === 0) ||
+              sending ||
+              !thread?.id ||
+              !currentUserId ||
+              loading
             }
           >
             {sending ? (
@@ -574,7 +591,10 @@ export default function ThreadScreen() {
                 name="send"
                 size={20}
                 color={
-                  !inputText.trim() && selectedAttachments.length === 0
+                  (!inputText.trim() && selectedAttachments.length === 0) ||
+                  !thread?.id ||
+                  !currentUserId ||
+                  loading
                     ? colors.gray[600]
                     : colors.primary[400]
                 }

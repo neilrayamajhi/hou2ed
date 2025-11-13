@@ -14,6 +14,7 @@ export type User = {
   role: UserRole;
   isVerified: boolean;
   createdAt: string;
+  avatar_url?: string;
 };
 
 type AuthState = {

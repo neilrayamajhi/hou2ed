@@ -30,8 +30,6 @@ import * as ImagePicker from "expo-image-picker";
 // Use clean uploader that works on all platforms
 import { uploadListingImageClean as uploadListingImage } from "../../services/storage.clean.service";
 import { useRequireProvider } from "../../hooks/useRequireProvider";
-import { DocumentRequirement } from "../../types/listing";
-import { PREDEFINED_DOCUMENT_TYPES } from "../../constants/documents";
 
 type StepKey =
   | "Basics"
@@ -105,13 +103,6 @@ export default function ListingWizard() {
   const [selectedEligibility, setSelectedEligibility] = useState<string[]>([]);
   const [customEligibility, setCustomEligibility] = useState("");
 
-  // Document Requirements state
-  const [documentRequirements, setDocumentRequirements] = useState<
-    DocumentRequirement[]
-  >([]);
-  const [customDocumentName, setCustomDocumentName] = useState("");
-  const [customDocumentDescription, setCustomDocumentDescription] = useState("");
-
   const { mutate: submit, isPending } = useMutation({
     mutationFn: async () => {
       const providerId = await getCurrentProviderId();
@@ -171,8 +162,6 @@ export default function ListingWizard() {
           customEligibilityArray.length > 0
             ? customEligibilityArray
             : undefined,
-        documentsRequired:
-          documentRequirements.length > 0 ? documentRequirements : undefined,
       });
       // If photos selected and created successfully, upload and attach
       if (created.success && created.listingId) {
@@ -739,208 +728,6 @@ export default function ListingWizard() {
           placeholderTextColor={colors.gray[500]}
           multiline
         />
-
-        {/* Document Requirements Section */}
-        <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>
-          Document Requirements
-        </Text>
-        <Text style={styles.sectionDescription}>
-          Select which documents applicants must provide
-        </Text>
-
-        {/* Predefined Documents */}
-        <View style={{ marginBottom: spacing.lg }}>
-          {PREDEFINED_DOCUMENT_TYPES.map((doc) => {
-            const isSelected = documentRequirements.some(
-              (req) => req.id === doc.id,
-            );
-            const selectedDoc = documentRequirements.find(
-              (req) => req.id === doc.id,
-            );
-
-            return (
-              <TouchableOpacity
-                key={doc.id}
-                style={styles.documentItem}
-                onPress={() => {
-                  if (isSelected) {
-                    // Remove document
-                    setDocumentRequirements((prev) =>
-                      prev.filter((req) => req.id !== doc.id),
-                    );
-                  } else {
-                    // Add document as required by default
-                    setDocumentRequirements((prev) => [
-                      ...prev,
-                      { ...doc, required: true },
-                    ]);
-                  }
-                }}
-              >
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center" }}>
-                    <Ionicons
-                      name={isSelected ? "checkbox" : "square-outline"}
-                      size={24}
-                      color={
-                        isSelected ? colors.primary[500] : colors.gray[400]
-                      }
-                    />
-                    <Text
-                      style={[styles.documentTitle, { marginLeft: spacing.sm }]}
-                    >
-                      {doc.label}
-                    </Text>
-                  </View>
-                  {doc.description && (
-                    <Text style={styles.documentDescription}>
-                      {doc.description}
-                    </Text>
-                  )}
-
-                  {/* Required/Optional Toggle for selected documents */}
-                  {isSelected && (
-                    <View style={styles.requiredToggle}>
-                      <TouchableOpacity
-                        style={[
-                          styles.requiredChip,
-                          selectedDoc?.required && styles.requiredChipActive,
-                        ]}
-                        onPress={() => {
-                          setDocumentRequirements((prev) =>
-                            prev.map((req) =>
-                              req.id === doc.id
-                                ? { ...req, required: true }
-                                : req,
-                            ),
-                          );
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.requiredChipText,
-                            selectedDoc?.required &&
-                              styles.requiredChipTextActive,
-                          ]}
-                        >
-                          Required
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.requiredChip,
-                          !selectedDoc?.required && styles.requiredChipActive,
-                        ]}
-                        onPress={() => {
-                          setDocumentRequirements((prev) =>
-                            prev.map((req) =>
-                              req.id === doc.id
-                                ? { ...req, required: false }
-                                : req,
-                            ),
-                          );
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.requiredChipText,
-                            !selectedDoc?.required &&
-                              styles.requiredChipTextActive,
-                          ]}
-                        >
-                          Optional
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Add Custom Document */}
-        <Text style={[styles.label, { marginTop: spacing.lg }]}>
-          Add Custom Document Requirement
-        </Text>
-        <TextInput
-          style={styles.input}
-          value={customDocumentName}
-          onChangeText={setCustomDocumentName}
-          placeholder="Document name (e.g., TB Test Results)"
-          placeholderTextColor={colors.gray[500]}
-        />
-        <TextInput
-          style={[styles.input, { marginTop: spacing.sm, minHeight: 60 }]}
-          value={customDocumentDescription}
-          onChangeText={setCustomDocumentDescription}
-          placeholder="Instructions or description (optional)"
-          placeholderTextColor={colors.gray[500]}
-          multiline
-        />
-        <TouchableOpacity
-          style={[
-            styles.addCustomButton,
-            !customDocumentName.trim() && styles.addCustomButtonDisabled,
-          ]}
-          disabled={!customDocumentName.trim()}
-          onPress={() => {
-            if (customDocumentName.trim()) {
-              const customDoc: DocumentRequirement = {
-                id: `custom-${Date.now()}`,
-                label: customDocumentName.trim(),
-                description: customDocumentDescription.trim() || undefined,
-                required: true,
-                category: "other",
-                isCustom: true,
-              };
-              setDocumentRequirements((prev) => [...prev, customDoc]);
-              setCustomDocumentName("");
-              setCustomDocumentDescription("");
-            }
-          }}
-        >
-          <Ionicons
-            name="add-circle-outline"
-            size={20}
-            color={colors.gray[50]}
-          />
-          <Text style={styles.addCustomButtonText}>Add Custom Document</Text>
-        </TouchableOpacity>
-
-        {/* Show custom documents */}
-        {documentRequirements.filter((doc) => doc.isCustom).length > 0 && (
-          <View style={{ marginTop: spacing.lg }}>
-            <Text style={styles.label}>Custom Documents</Text>
-            {documentRequirements
-              .filter((doc) => doc.isCustom)
-              .map((doc) => (
-                <View key={doc.id} style={styles.customDocumentItem}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.documentTitle}>{doc.label}</Text>
-                    {doc.description && (
-                      <Text style={styles.documentDescription}>
-                        {doc.description}
-                      </Text>
-                    )}
-                  </View>
-                  <TouchableOpacity
-                    onPress={() => {
-                      setDocumentRequirements((prev) =>
-                        prev.filter((req) => req.id !== doc.id),
-                      );
-                    }}
-                  >
-                    <Ionicons
-                      name="trash-outline"
-                      size={20}
-                      color={colors.error[500]}
-                    />
-                  </TouchableOpacity>
-                </View>
-              ))}
-          </View>
-        )}
       </ScrollView>
     );
   };
@@ -1491,76 +1278,5 @@ const styles = StyleSheet.create({
   chipTextSelected: {
     color: colors.gray[900],
     fontWeight: "600",
-  },
-  // Document Requirements styles
-  documentItem: {
-    backgroundColor: colors.gray[850],
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  documentTitle: {
-    fontSize: typography.sizes.md,
-    fontWeight: "600",
-    color: colors.gray[50],
-  },
-  documentDescription: {
-    fontSize: typography.sizes.sm,
-    color: colors.gray[400],
-    marginTop: spacing.xs,
-    marginLeft: spacing.lg + spacing.sm,
-  },
-  requiredToggle: {
-    flexDirection: "row",
-    gap: spacing.xs,
-    marginTop: spacing.sm,
-    marginLeft: spacing.lg + spacing.sm,
-  },
-  requiredChip: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.gray[700],
-    backgroundColor: colors.gray[800],
-  },
-  requiredChipActive: {
-    backgroundColor: colors.primary[500],
-    borderColor: colors.primary[500],
-  },
-  requiredChipText: {
-    fontSize: typography.sizes.xs,
-    color: colors.gray[400],
-  },
-  requiredChipTextActive: {
-    color: colors.gray[900],
-    fontWeight: "600",
-  },
-  addCustomButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
-    backgroundColor: colors.primary[500],
-    borderRadius: radius.md,
-    paddingVertical: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  addCustomButtonDisabled: {
-    backgroundColor: colors.gray[700],
-    opacity: 0.5,
-  },
-  addCustomButtonText: {
-    color: colors.gray[50],
-    fontSize: typography.sizes.sm,
-    fontWeight: "600",
-  },
-  customDocumentItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.gray[850],
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginTop: spacing.sm,
   },
 });

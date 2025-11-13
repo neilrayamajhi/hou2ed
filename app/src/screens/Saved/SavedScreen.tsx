@@ -10,14 +10,15 @@ import {
   Share,
   Dimensions,
   Pressable,
+  ActivityIndicator,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
-import useSavedStore, { SavedListing } from "../../state/useSavedStore";
+import { useSavedListings } from "../../hooks/useSavedItems";
+import type { SavedListing } from "../../services/saved.service";
 import ListingCard from "../../components/patterns/ListingCard";
 import { RootStackNavigationProp } from "../../navigation/types";
-import { useI18n } from "../../i18n";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const NUM_COLUMNS = 2;
@@ -26,172 +27,125 @@ const CARD_WIDTH =
   (SCREEN_WIDTH - spacing.lg * 2 - CARD_MARGIN * (NUM_COLUMNS - 1)) /
   NUM_COLUMNS;
 
-// Mock saved listings for demonstration
-const mockSavedListings: SavedListing[] = [
-  {
-    id: "1",
-    title: "Sunset View Apartments",
-    address: "123 Main St, San Francisco, CA",
-    rent: 2500,
-    bedrooms: 2,
-    bathrooms: 2,
-    sqft: 1200,
-    imageUrl: "https://picsum.photos/400/300?random=1",
-    savedAt: new Date(Date.now() - 86400000),
-    availableUnits: 3,
-    propertyType: "Apartment",
-  },
-  {
-    id: "2",
-    title: "Green Valley Homes",
-    address: "456 Oak Ave, Oakland, CA",
-    rent: 3200,
-    bedrooms: 3,
-    bathrooms: 2.5,
-    sqft: 1800,
-    imageUrl: "https://picsum.photos/400/300?random=2",
-    savedAt: new Date(Date.now() - 172800000),
-    availableUnits: 1,
-    propertyType: "House",
-  },
-  {
-    id: "3",
-    title: "Downtown Lofts",
-    address: "789 Market St, San Francisco, CA",
-    rent: 3800,
-    bedrooms: 1,
-    bathrooms: 1,
-    sqft: 850,
-    imageUrl: "https://picsum.photos/400/300?random=3",
-    savedAt: new Date(Date.now() - 259200000),
-    propertyType: "Loft",
-  },
-  {
-    id: "4",
-    title: "Riverside Commons",
-    address: "321 River Rd, Berkeley, CA",
-    rent: 2100,
-    bedrooms: 2,
-    bathrooms: 1,
-    sqft: 950,
-    imageUrl: "https://picsum.photos/400/300?random=4",
-    savedAt: new Date(Date.now() - 345600000),
-    availableUnits: 5,
-    propertyType: "Apartment",
-  },
-  {
-    id: "5",
-    title: "Oak Park Residences",
-    address: "654 Park Blvd, Alameda, CA",
-    rent: 2800,
-    bedrooms: 3,
-    bathrooms: 2,
-    sqft: 1400,
-    imageUrl: "https://picsum.photos/400/300?random=5",
-    savedAt: new Date(Date.now() - 432000000),
-    availableUnits: 2,
-    propertyType: "Townhouse",
-  },
-  {
-    id: "6",
-    title: "Marina Bay Suites",
-    address: "987 Marina Dr, San Francisco, CA",
-    rent: 4500,
-    bedrooms: 2,
-    bathrooms: 2,
-    sqft: 1300,
-    imageUrl: "https://picsum.photos/400/300?random=6",
-    savedAt: new Date(Date.now() - 518400000),
-    propertyType: "Condo",
-  },
-];
-
 export default function SavedScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
-  const { savedListings, removeListing } = useSavedStore();
+  const { savedListings, unsave, isUnsaving, isLoading } = useSavedListings();
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
-  const i18n = useI18n();
-
-  // Use mock data if store is empty
-  const displayListings =
-    savedListings.length > 0 ? savedListings : mockSavedListings;
 
   const handleListingPress = useCallback(
     (listing: SavedListing) => {
-      navigation.navigate("ListingDetails", { listingId: listing.id });
+      console.log("[SavedScreen] Navigating to listing:", {
+        listing_id: listing.listing_id,
+        nested_listing_id: listing.listing?.id,
+        full_object: JSON.stringify(listing, null, 2),
+      });
+
+      // Use listing.listing_id first, fallback to nested listing.id
+      const listingId = listing.listing_id || listing.listing?.id;
+
+      if (!listingId) {
+        console.error("[SavedScreen] No listing ID found!", listing);
+        Alert.alert("Error", "Cannot open listing - invalid data");
+        return;
+      }
+
+      navigation.navigate("ListingDetails", { listingId });
     },
     [navigation],
   );
 
   const handleListingLongPress = useCallback(
-    (listing: SavedListing) => {
+    async (listing: SavedListing) => {
+      console.log("[SavedScreen] Attempting to unsave:", {
+        listing_id: listing.listing_id,
+        nested_listing_id: listing.listing?.id,
+        id: listing.id,
+        has_listing: !!listing.listing,
+        full_object: JSON.stringify(listing, null, 2),
+      });
+
+      // Use listing.listing_id first, fallback to nested listing.id
+      const listingId = listing.listing_id || listing.listing?.id;
+
+      if (!listingId) {
+        console.error("[SavedScreen] No listing ID found for unsave!", listing);
+        Alert.alert("Error", "Cannot remove listing - invalid data");
+        return;
+      }
+
+      const listingTitle = listing.listing?.title || "this listing";
       Alert.alert(
-        i18n.t("saved.remove"),
-        i18n.t("saved.removeConfirm", { title: listing.title }),
+        "Remove from Saved?",
+        `Remove "${listingTitle}" from your saved listings?`,
         [
           {
-            text: i18n.t("common.cancel"),
+            text: "Cancel",
             style: "cancel",
           },
           {
-            text: i18n.t("common.delete"),
+            text: "Remove",
             style: "destructive",
-            onPress: () => {
-              removeListing(listing.id);
-              Alert.alert(
-                i18n.t("saved.removed"),
-                i18n.t("saved.removedSuccess"),
-              );
+            onPress: async () => {
+              try {
+                console.log("[SavedScreen] Calling unsave with:", listingId);
+                await unsave(listingId);
+                Alert.alert(
+                  "Removed",
+                  "Listing has been removed from your saved items",
+                );
+              } catch (error) {
+                console.error("[SavedScreen] Unsave error:", error);
+                Alert.alert("Error", "Failed to remove listing");
+              }
             },
           },
         ],
       );
     },
-    [removeListing, i18n],
+    [unsave],
   );
 
-  const handleShare = useCallback(
-    async (listing: SavedListing) => {
-      try {
-        const message = `Check out this listing on HOU2ED:\n\n${listing.title}\n${listing.address}\n$${listing.rent}/month\n${listing.bedrooms} bed, ${listing.bathrooms} bath\n\nView more at: hou2ed://listing/${listing.id}`;
+  const handleShare = useCallback(async (listing: SavedListing) => {
+    if (!listing.listing) return;
 
-        const result = await Share.share({
-          message,
-          title: listing.title,
-        });
+    // Use listing.listing_id first, fallback to nested listing.id
+    const listingId = listing.listing_id || listing.listing?.id;
 
-        if (result.action === Share.sharedAction) {
-          console.log("Shared successfully");
-        }
-      } catch (error) {
-        Alert.alert(i18n.t("common.error"), i18n.t("saved.shareError"));
+    if (!listingId) {
+      Alert.alert("Error", "Cannot share listing - invalid data");
+      return;
+    }
+
+    try {
+      const listingData = listing.listing;
+      const title = listingData.title || "Housing Listing";
+      const address =
+        `${listingData.address || ""}, ${listingData.city || ""}, ${listingData.state || ""}`.trim();
+
+      const message = `Check out this listing on HOU2ED:\n\n${title}\n${address}\n\nView more at: hou2ed://listing/${listingId}`;
+
+      const result = await Share.share({
+        message,
+        title,
+      });
+
+      if (result.action === Share.sharedAction) {
+        console.log("Shared successfully");
       }
-    },
-    [i18n],
-  );
-
-  const renderListingSpecs = useCallback(
-    (item: SavedListing) => (
-      <View style={styles.specsRow}>
-        <View style={styles.spec}>
-          <Ionicons name="bed-outline" size={14} color={colors.gray[400]} />
-          <Text style={styles.specText}>{item.bedrooms}</Text>
-        </View>
-        <View style={styles.spec}>
-          <Ionicons name="water-outline" size={14} color={colors.gray[400]} />
-          <Text style={styles.specText}>{item.bathrooms}</Text>
-        </View>
-        <View style={styles.spec}>
-          <Ionicons name="resize-outline" size={14} color={colors.gray[400]} />
-          <Text style={styles.specText}>{item.sqft} ft²</Text>
-        </View>
-      </View>
-    ),
-    [],
-  );
+    } catch (error) {
+      Alert.alert("Error", "Unable to share listing");
+    }
+  }, []);
 
   const renderListing = useCallback(
     ({ item }: { item: SavedListing }) => {
+      if (!item.listing) return null;
+
+      const listingData = item.listing;
+      const title = listingData.title || "Housing Listing";
+      const address =
+        `${listingData.city || ""}, ${listingData.state || ""}`.trim();
+
       return (
         <Pressable
           style={styles.cardContainer}
@@ -240,41 +194,23 @@ export default function SavedScreen() {
 
             <View style={styles.cardContent}>
               <Text style={styles.title} numberOfLines={1}>
-                {item.title}
+                {title}
               </Text>
               <Text style={styles.address} numberOfLines={1}>
-                {item.address}
+                {address}
               </Text>
 
-              <View style={styles.detailsRow}>
-                <Text style={styles.price}>${item.rent}/mo</Text>
+              <View style={styles.availabilityRow}>
+                <Text style={styles.availabilityText}>
+                  Saved {new Date(item.created_at).toLocaleDateString()}
+                </Text>
               </View>
-
-              {renderListingSpecs(item)}
-
-              {item.availableUnits && (
-                <View style={styles.availabilityRow}>
-                  <Text style={styles.availabilityText}>
-                    {item.availableUnits}{" "}
-                    {item.availableUnits === 1
-                      ? i18n.t("saved.unit")
-                      : i18n.t("saved.units")}{" "}
-                    {i18n.t("saved.available")}
-                  </Text>
-                </View>
-              )}
             </View>
           </View>
         </Pressable>
       );
     },
-    [
-      handleListingPress,
-      handleListingLongPress,
-      handleShare,
-      renderListingSpecs,
-      i18n,
-    ],
+    [handleListingPress, handleListingLongPress, handleShare],
   );
 
   const keyExtractor = useCallback((item: SavedListing) => item.id, []);
@@ -283,39 +219,51 @@ export default function SavedScreen() {
     () => (
       <View style={styles.emptyContainer}>
         <Ionicons name="bookmark-outline" size={64} color={colors.gray[400]} />
-        <Text style={styles.emptyTitle}>{i18n.t("saved.empty")}</Text>
-        <Text style={styles.emptySubtitle}>{i18n.t("saved.emptyDesc")}</Text>
+        <Text style={styles.emptyTitle}>No Saved Listings</Text>
+        <Text style={styles.emptySubtitle}>
+          Listings you save will appear here for easy access
+        </Text>
         <TouchableOpacity
           style={styles.browseButton}
-          onPress={() => navigation.navigate("Search" as any)}
+          onPress={() => navigation.navigate("Home" as any)}
         >
-          <Text style={styles.browseButtonText}>{i18n.t("saved.browse")}</Text>
+          <Text style={styles.browseButtonText}>Browse Listings</Text>
         </TouchableOpacity>
       </View>
     ),
-    [navigation, i18n],
+    [navigation],
   );
 
   const ListHeader = useCallback(
     () => (
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>{i18n.t("saved.title")}</Text>
+        <Text style={styles.headerTitle}>Saved Listings</Text>
         <Text style={styles.headerSubtitle}>
-          {displayListings.length}{" "}
-          {displayListings.length === 1
-            ? i18n.t("saved.listing")
-            : i18n.t("saved.listings")}{" "}
-          {i18n.t("saved.saved")}
+          {savedListings.length} listing
+          {savedListings.length !== 1 ? "s" : ""} saved
         </Text>
       </View>
     ),
-    [displayListings.length, i18n],
+    [savedListings.length],
   );
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={[styles.emptyContainer, { paddingTop: 100 }]}>
+          <ActivityIndicator size="large" color={colors.primary[500]} />
+          <Text style={[styles.emptySubtitle, { marginTop: spacing.lg }]}>
+            Loading saved listings...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <FlatList
-        data={displayListings}
+        data={savedListings}
         renderItem={renderListing}
         keyExtractor={keyExtractor}
         numColumns={NUM_COLUMNS}

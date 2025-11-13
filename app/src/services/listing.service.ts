@@ -41,7 +41,6 @@ export interface CreateListingInput {
   maxAge?: number;
   eligibility?: string[];
   customEligibility?: string[];
-  documentsRequired?: any; // DocumentRequirement[] but avoiding circular import
 }
 
 // Type for updating a listing
@@ -80,13 +79,31 @@ export async function getProviderListings(
   try {
     console.log("📋 Fetching listings for provider:", providerId);
 
-    // Create a timeout promise
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Query timeout after 10s")), 10000),
-    );
+    // First check if user is authenticated
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      console.error("❌ No authenticated user - cannot fetch listings");
+      console.error("RLS policies require authentication");
+      return [];
+    }
+    console.log("✅ User authenticated:", user.id);
 
-    // Race between the query and timeout
-    const queryPromise = supabase
+    // Verify the providerId matches the authenticated user
+    if (user.id !== providerId) {
+      console.warn(
+        "⚠️ Provider ID mismatch! Auth user:",
+        user.id,
+        "Requested provider:",
+        providerId,
+      );
+    }
+
+    console.log("📡 Executing Supabase query...");
+    const startTime = Date.now();
+
+    const { data, error } = await supabase
       .from("listings")
       .select(
         `
@@ -103,10 +120,8 @@ export async function getProviderListings(
       .eq("is_active", true)
       .order("created_at", { ascending: false });
 
-    const { data, error } = (await Promise.race([
-      queryPromise,
-      timeoutPromise,
-    ])) as any;
+    const queryTime = Date.now() - startTime;
+    console.log(`⏱️ Query completed in ${queryTime}ms`);
 
     console.log(
       "🟢 Query completed. Error?",
@@ -160,7 +175,10 @@ export async function getProviderListings(
       }) || []
     );
   } catch (error) {
-    console.error("Failed to fetch provider listings:", error);
+    console.error("❌ CRITICAL: Failed to fetch provider listings:", error);
+    console.error(
+      "Returning empty array - this will cause UI to show 'no listings'",
+    );
     return [];
   }
 }
@@ -419,9 +437,7 @@ export async function createListing(
       cost: listingData.price
         ? { monthly: listingData.price }
         : { is_free: true },
-      intake: listingData.documentsRequired
-        ? { documents_required: listingData.documentsRequired }
-        : {},
+      intake: {},
       availability: {
         beds_today: listingData.availableBeds || listingData.totalBeds,
         beds_week: listingData.totalBeds,
