@@ -9,7 +9,18 @@
       "Bash(node create-policies.js)",
       "Bash(node check-user-profile.js:*)",
       "Bash(node fix-user-profile.js:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(git fetch:*)",
+      "Bash(git merge:*)",
+      "Bash(git push:*)",
+      "Bash(for file in fix-user-role.js check-role-confusion.js check-specific-app.js check-all-tables.js check-current-apps.js apply-applications-rls-fix.js apply-rls-fix-via-api.js)",
+      "Bash(do if [ -f \"$file\" ])",
+      "Bash(then mv \"$file\" \"$file%.js-INSECURE-OLD.js\")",
+      "Bash(fi)",
+      "Bash(done)",
+      "Bash(src/types/database.types.ts)",
+      "Bash(echo:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

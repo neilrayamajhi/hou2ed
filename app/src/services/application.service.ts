@@ -468,18 +468,41 @@ export async function deleteApplication(id: string): Promise<ApplicationResult> 
       };
     }
 
-    // Delete the application (documents will cascade delete due to FK constraint)
-    const { error: deleteError } = await supabase
-      .from('applications')
-      .delete()
-      .eq('id', id);
+    // Try to use the RPC function first for proper soft delete
+    const { error: rpcError } = await supabase
+      .rpc('soft_delete_application', { application_id: id });
 
-    if (deleteError) {
-      console.error('Delete application error:', deleteError);
-      return {
-        success: false,
-        error: deleteError.message,
+    if (rpcError) {
+      // If RPC fails, fallback to direct update
+      console.log('RPC soft delete failed, using direct update:', rpcError);
+
+      // Try to update with deleted_at (cast to any to bypass type checking)
+      const updateData: any = {
+        deleted_at: new Date().toISOString(),
+        status: 'withdrawn'
       };
+
+      const { error: updateError } = await supabase
+        .from('applications')
+        .update(updateData)
+        .eq('id', id);
+
+      if (updateError) {
+        // Final fallback: just update status
+        console.log('Direct soft delete failed, updating status only');
+        const { error: fallbackError } = await supabase
+          .from('applications')
+          .update({ status: 'withdrawn' })
+          .eq('id', id);
+
+        if (fallbackError) {
+          console.error('Delete application error:', fallbackError);
+          return {
+            success: false,
+            error: fallbackError.message,
+          };
+        }
+      }
     }
 
     return {
@@ -630,17 +653,26 @@ export async function getExistingApplication(listingId: string): Promise<{
       .select('*')
       .eq('listing_id', listingId)
       .eq('seeker_id', user.id)
+      .is('deleted_at', null) // Filter out soft-deleted applications
       .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+      .limit(1);
 
-    if (error || !data) {
+    // Check if no data returned (empty array) or error occurred
+    if (!data || data.length === 0) {
+      // No existing application
+      return { exists: false, canResubmit: true };
+    }
+
+    // Get the first (and should be only) application
+    const applicationData = data[0];
+
+    if (!applicationData) {
       // No existing application
       return { exists: false, canResubmit: true };
     }
 
     // Check application status
-    const application = data as Application;
+    const application = applicationData as Application;
 
     // If application is pending/approved, can't resubmit
     if (['new', 'docs_needed', 'under_review', 'interview_scheduled', 'approved', 'waitlisted'].includes(application.status)) {

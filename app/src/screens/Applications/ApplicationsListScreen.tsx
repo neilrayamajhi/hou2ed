@@ -164,6 +164,11 @@ export default function ApplicationsListScreen() {
         query = query.eq("seeker_id", user.id);
       }
 
+      // Filter out soft-deleted applications and withdrawn applications for both providers and seekers
+      query = query
+        .is("deleted_at", null)
+        .neq("status", "withdrawn");
+
       const { data, error: fetchError } = await query
         .order("created_at", { ascending: false });
 
@@ -210,8 +215,17 @@ export default function ApplicationsListScreen() {
             try {
               const result = await deleteApplication(applicationId);
               if (result.success) {
+                // Immediately remove from local state for instant UI update
+                setApplications(prevApps =>
+                  prevApps.filter(app => app.id !== applicationId)
+                );
+
                 Alert.alert("Success", "Application deleted successfully");
-                fetchApplications(); // Refresh the list
+
+                // Also fetch from server to ensure consistency
+                setTimeout(() => {
+                  fetchApplications();
+                }, 500); // Small delay to ensure database update completes
               } else {
                 Alert.alert("Error", result.error || "Failed to delete application");
               }
@@ -241,8 +255,17 @@ export default function ApplicationsListScreen() {
             try {
               const result = await withdrawApplication(applicationId);
               if (result.success) {
+                // Immediately remove from local state for instant UI update
+                setApplications(prevApps =>
+                  prevApps.filter(app => app.id !== applicationId)
+                );
+
                 Alert.alert("Success", "Application withdrawn successfully");
-                fetchApplications(); // Refresh the list
+
+                // Also fetch from server to ensure consistency
+                setTimeout(() => {
+                  fetchApplications();
+                }, 500); // Small delay to ensure database update completes
               } else {
                 Alert.alert("Error", result.error || "Failed to withdraw application");
               }
@@ -257,7 +280,7 @@ export default function ApplicationsListScreen() {
   }, [fetchApplications]);
 
   const renderApplicationItem = useCallback(
-    ({ item }: { item: ApplicationWithListing }) => {
+    ({ item, index }: { item: ApplicationWithListing; index: number }) => {
       const statusColor = getStatusColor(item.status);
       const statusLabel = getStatusLabel(item.status);
 
@@ -268,13 +291,16 @@ export default function ApplicationsListScreen() {
             // TODO: Navigate to application details screen
             console.log("View application:", item.id);
           }}
-          accessibilityLabel={`Application for ${item.listing?.title || "Unknown"}`}
+          accessibilityLabel={`Application ${index + 1} for ${item.listing?.title || "Unknown"}`}
           accessibilityRole="button"
         >
           <View style={styles.cardHeader}>
-            <Text style={styles.listingName} numberOfLines={2}>
-              {item.listing?.title || "Unknown Listing"}
-            </Text>
+            <View style={styles.titleContainer}>
+              <Text style={styles.applicationNumber}>{index + 1}.</Text>
+              <Text style={styles.listingName} numberOfLines={2}>
+                {item.listing?.title || "Unknown Listing"}
+              </Text>
+            </View>
             <View
               style={[styles.statusBadge, { backgroundColor: statusColor }]}
             >
@@ -441,6 +467,7 @@ export default function ApplicationsListScreen() {
           data={applications}
           renderItem={renderApplicationItem}
           keyExtractor={(item) => item.id}
+          extraData={applications.length} // Force re-render when data changes
           contentContainerStyle={[
             styles.listContainer,
             applications.length === 0 && styles.emptyListContainer,
@@ -516,6 +543,18 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: spacing.md,
     gap: spacing.sm,
+  },
+  titleContainer: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+  },
+  applicationNumber: {
+    fontSize: typography.sizes.lg,
+    fontWeight: "700",
+    color: colors.primary[400],
+    minWidth: 24,
   },
   listingName: {
     flex: 1,

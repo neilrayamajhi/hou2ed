@@ -36,6 +36,8 @@ interface UploadedDocument {
   size: number;
   uploadProgress?: number;
   error?: string;
+  storagePath?: string; // Supabase storage path
+  uploaded?: boolean; // Track if uploaded to storage
 }
 
 export default function Step3Documents({
@@ -179,34 +181,39 @@ export default function Step3Documents({
       setUploading((prev) => ({ ...prev, [docType]: true }));
 
       try {
-        // Import storage service
-        const { uploadApplicationDocument } = await import(
-          "../../services/storage.service"
-        );
+        // For now, just mark as uploaded without actually uploading
+        // The actual upload will happen when the application is submitted
+        // This prevents the confusion with temp paths
 
-        // Use a temporary application ID (will be updated when application is submitted)
-        const tempAppId = `temp_${Date.now()}`;
-
-        // Update progress to show upload starting
+        // Simulate upload progress
         setDocuments((prev) =>
           prev.map((d) =>
-            d.type === docType ? { ...d, uploadProgress: 10 } : d,
+            d.type === docType ? { ...d, uploadProgress: 50 } : d,
           ),
         );
 
-        // Upload to Supabase
-        const result = await uploadApplicationDocument(
-          doc.uri,
-          tempAppId,
-          docType,
-        );
+        // Wait a bit for UI effect
+        await new Promise(resolve => setTimeout(resolve, 500));
 
-        if (result.success && result.path) {
-          // Upload successful
+        // Mark as ready for upload (not actually uploaded yet)
+        const result = {
+          success: true,
+          path: null // No path yet, will be uploaded on submit
+        };
+
+        if (result.success) {
+          // Mark as ready (will be uploaded on submit)
           setDocuments((prev) =>
             prev.map((d) =>
               d.type === docType
-                ? { ...d, uploadProgress: 100, uri: result.path || d.uri }
+                ? {
+                    ...d,
+                    uploadProgress: 100,
+                    // Keep original URI for actual upload on submit
+                    storagePath: null,
+                    // Mark as ready (not uploaded yet)
+                    uploaded: false
+                  }
                 : d,
             ),
           );

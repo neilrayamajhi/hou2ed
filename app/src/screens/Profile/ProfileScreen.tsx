@@ -60,22 +60,44 @@ export default function ProfileScreen() {
     }
   }, []);
 
-  // Fetch applications count
+  // Fetch applications count (excluding withdrawn and deleted)
   const fetchApplicationsCount = useCallback(async () => {
     if (!user?.id) return;
 
     try {
       const { supabase } = await import("../../lib/supabase");
-      const { count, error } = await supabase
-        .from("applications")
-        .select("*", { count: "exact", head: true })
-        .eq("seeker_id", user.id);
 
-      if (!error && count !== null) {
-        setApplicationsCount(count);
+      // Check user's role first
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      const userRole = profile?.role || "seeker";
+
+      // Only count applications for seekers
+      if (userRole === "seeker") {
+        const { count, error } = await supabase
+          .from("applications")
+          .select("*", { count: "exact", head: true })
+          .eq("seeker_id", user.id)
+          .is("deleted_at", null)  // Exclude soft-deleted
+          .neq("status", "withdrawn");  // Exclude withdrawn
+
+        if (!error && count !== null) {
+          setApplicationsCount(count);
+        } else {
+          // If there's an error or no count, set to 0
+          setApplicationsCount(0);
+        }
+      } else {
+        // Providers don't have applications in the same way
+        setApplicationsCount(0);
       }
     } catch (error) {
       console.error("Error fetching applications count:", error);
+      setApplicationsCount(0);  // Reset to 0 on error
     }
   }, [user?.id]);
 

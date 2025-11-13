@@ -14,7 +14,7 @@ if (Platform.OS !== "web") {
 
 // Constants
 const LISTING_IMAGES_BUCKET = "listing-images";
-const APPLICATION_DOCS_BUCKET = "application-docs";
+const APPLICATION_DOCS_BUCKET = "application-documents";
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_DOC_SIZE = 10 * 1024 * 1024; // 10MB
 const IMAGE_QUALITY = 0.8;
@@ -258,8 +258,16 @@ export async function uploadApplicationDocument(
 
       console.log("📱 Reading file for React Native upload...");
 
+      // Ensure the URI has the proper file:// prefix
+      let fileUri = uri;
+      if (!fileUri.startsWith('file://') && !fileUri.startsWith('http')) {
+        // If it's a relative path, prepend file://
+        fileUri = fileUri.startsWith('/') ? `file://${fileUri}` : `file:///${fileUri}`;
+      }
+      console.log("📁 Reading from URI:", fileUri);
+
       // Read file as base64
-      const base64String = await FileSystem.readAsStringAsync(uri, {
+      const base64String = await FileSystem.readAsStringAsync(fileUri, {
         encoding: "base64",
       });
 
@@ -309,6 +317,9 @@ export async function uploadApplicationDocument(
     const filePath = `${applicationId}/${fileName}`;
 
     console.log("📁 Uploading to:", filePath);
+    console.log("📦 Bucket:", APPLICATION_DOCS_BUCKET);
+    console.log("📄 Content Type:", contentType);
+    console.log("📏 File Size:", fileSize);
 
     // Upload to Supabase (private bucket)
     const { data, error } = await supabase.storage
@@ -321,6 +332,11 @@ export async function uploadApplicationDocument(
 
     if (error) {
       console.error("❌ Document upload error:", error);
+      console.error("Error Details:", {
+        message: error.message,
+        statusCode: (error as any)?.statusCode,
+        error: error
+      });
       return {
         success: false,
         error: error.message,
@@ -328,6 +344,8 @@ export async function uploadApplicationDocument(
     }
 
     console.log("✅ Document uploaded successfully:", data);
+    console.log("Verifying upload - Full path:", data.path);
+    console.log("Verifying upload - ID:", data.id);
 
     return {
       success: true,
@@ -350,18 +368,29 @@ export async function getDocumentSignedUrl(
   expiresIn: number = 3600,
 ): Promise<string | null> {
   try {
+    // Don't try to get signed URL for temp paths or invalid paths
+    if (!path || path.includes('temp_')) {
+      console.log("Skipping signed URL for temporary/invalid path:", path);
+      return null;
+    }
+
     const { data, error } = await supabase.storage
       .from(APPLICATION_DOCS_BUCKET)
       .createSignedUrl(path, expiresIn);
 
     if (error) {
-      console.error("Signed URL error:", error);
+      // Don't log as error if file not found - this is expected for old documents
+      if (error.message?.includes('not found')) {
+        console.log("Document not found in storage:", path);
+      } else {
+        console.error("Signed URL error:", error);
+      }
       return null;
     }
 
     return data.signedUrl;
   } catch (error) {
-    console.error("Get signed URL error:", error);
+    console.log("Get signed URL error:", error);
     return null;
   }
 }

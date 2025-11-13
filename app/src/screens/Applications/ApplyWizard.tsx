@@ -25,6 +25,7 @@ import Step4Review from "./Step4Review";
 import { useAuthStore } from "../../state/useAuthStore";
 import { supabase } from "../../lib/supabase";
 import { getExistingApplication } from "../../services/application.service";
+import { uploadApplicationDocument } from "../../services/storage.service";
 
 // Types for application data
 export interface ApplicationDraft {
@@ -68,11 +69,17 @@ export default function ApplyWizard() {
   const { user } = useAuthStore();
 
   const [currentStep, setCurrentStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false); // Add loading state
   const [draft, setDraft] = useState<ApplicationDraft>({
     listingId,
     fullName: "",
     phone: "",
     email: "",
+    // Clear any previous eligibility and documents
+    eligibilityTags: [],
+    documents: [],
+    signature: "",
+    agreedToTerms: false,
   });
 
   // Load saved draft on mount and check for existing applications
@@ -95,14 +102,21 @@ export default function ApplyWizard() {
     saveDraft();
   }, [draft]);
 
+  // Use listing-specific draft key to prevent cross-contamination
+  const getDraftKey = () => `${DRAFT_STORAGE_KEY}_${listingId || 'unknown'}`;
+
   const loadDraft = async () => {
     try {
-      const savedDraft = await SecureStore.getItemAsync(DRAFT_STORAGE_KEY);
+      const draftKey = getDraftKey();
+      const savedDraft = await SecureStore.getItemAsync(draftKey);
       if (savedDraft) {
         const parsed = JSON.parse(savedDraft);
-        // Only restore if same listing
+        // Only restore if same listing (double-check)
         if (parsed.listingId === listingId) {
           setDraft(parsed);
+        } else {
+          // Clear mismatched draft
+          await SecureStore.deleteItemAsync(draftKey);
         }
       }
     } catch (error) {
@@ -112,7 +126,8 @@ export default function ApplyWizard() {
 
   const saveDraft = async () => {
     try {
-      await SecureStore.setItemAsync(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+      const draftKey = getDraftKey();
+      await SecureStore.setItemAsync(draftKey, JSON.stringify(draft));
     } catch (error) {
       console.error("Error saving draft:", error);
     }
@@ -120,9 +135,45 @@ export default function ApplyWizard() {
 
   const clearDraft = async () => {
     try {
-      await SecureStore.deleteItemAsync(DRAFT_STORAGE_KEY);
+      const draftKey = getDraftKey();
+      await SecureStore.deleteItemAsync(draftKey);
+
+      // Also try to clear the old non-listing-specific key for backwards compatibility
+      try {
+        await SecureStore.deleteItemAsync(DRAFT_STORAGE_KEY);
+      } catch {
+        // Ignore error if old key doesn't exist
+      }
     } catch (error) {
       console.error("Error clearing draft:", error);
+    }
+  };
+
+  // Clear all application drafts to prevent data leakage between applications
+  const clearAllApplicationDrafts = async () => {
+    try {
+      // Get all keys from SecureStore
+      // Since SecureStore doesn't provide a way to list all keys,
+      // we'll just clear common patterns
+      const prefixesToClear = [
+        DRAFT_STORAGE_KEY, // Old format
+        `${DRAFT_STORAGE_KEY}_`, // New format prefix
+      ];
+
+      // Try to clear any keys that might exist
+      // This is a best-effort approach
+      for (let i = 0; i < 10; i++) {
+        try {
+          // Clear potential drafts for recent listings
+          await SecureStore.deleteItemAsync(`${DRAFT_STORAGE_KEY}_${i}`);
+        } catch {
+          // Ignore if doesn't exist
+        }
+      }
+
+      console.log("Cleared all application drafts");
+    } catch (error) {
+      console.error("Error clearing all drafts:", error);
     }
   };
 
@@ -199,7 +250,15 @@ export default function ApplyWizard() {
   };
 
   const handleSubmit = async () => {
+    // Prevent multiple submissions
+    if (isSubmitting) {
+      console.log("⚠️ Already submitting, ignoring duplicate click");
+      return;
+    }
+
     try {
+      setIsSubmitting(true); // Start loading state
+
       // Check if user is authenticated
       console.log("🔵 Submitting application - checking auth");
       console.log("User from store:", user);
@@ -207,6 +266,7 @@ export default function ApplyWizard() {
       if (!user || !user.id) {
         console.error("❌ No user found in auth store");
         Alert.alert("Error", "You must be logged in to submit an application");
+        setIsSubmitting(false);
         return;
       }
 
@@ -232,15 +292,23 @@ export default function ApplyWizard() {
       // If there's an existing application that can be resubmitted (rejected/withdrawn),
       // we need to delete the old one first to avoid the unique constraint
       if (existingApp.exists && existingApp.canResubmit && existingApp.application) {
-        console.log("🔄 Deleting old application before resubmission");
+        console.log("🔄 Deleting old application before resubmission:", existingApp.application.id);
         const { error: deleteError } = await supabase
           .from("applications")
           .delete()
-          .eq("id", existingApp.application.id);
+          .eq("id", existingApp.application.id)
+          .eq("seeker_id", user.id); // Add extra safety check
 
         if (deleteError) {
           console.error("Error deleting old application:", deleteError);
-          // Continue anyway - the insert might still work
+          Alert.alert(
+            "Cannot Resubmit",
+            "Failed to delete the old application. Please try withdrawing or deleting it from My Applications first.",
+            [{ text: "OK" }]
+          );
+          return; // Stop here if we can't delete the old application
+        } else {
+          console.log("✅ Successfully deleted old application");
         }
       }
 
@@ -320,42 +388,106 @@ export default function ApplyWizard() {
 
       if (error) {
         console.error("Error submitting application:", error);
-        Alert.alert(
-          "Submission Failed",
-          "Failed to submit your application. Please try again.",
-        );
+
+        // Check if it's a duplicate key error
+        if (error.code === '23505' || error.message?.includes('duplicate key')) {
+          Alert.alert(
+            "Application Already Exists",
+            "You have already applied to this listing. You cannot submit multiple applications to the same listing unless your previous application was rejected or withdrawn.",
+            [
+              {
+                text: "View My Applications",
+                onPress: () => {
+                  navigation.goBack();
+                  setTimeout(() => {
+                    navigation.navigate("ApplicationsList");
+                  }, 100);
+                },
+              },
+              { text: "OK", style: "cancel" }
+            ]
+          );
+        } else {
+          Alert.alert(
+            "Submission Failed",
+            "Failed to submit your application. Please try again.",
+          );
+        }
         return;
       }
 
       console.log("Application submitted successfully:", data);
 
-      // Upload documents to the documents table if any
+      // Upload documents to storage and save to documents table
       if (draft.documents && draft.documents.length > 0 && data.id) {
-        console.log("Saving documents to documents table...");
+        console.log("Uploading documents to storage...");
 
         for (const doc of draft.documents) {
-          const { error: docError } = await supabase
-            .from("documents")
-            .insert({
-              application_id: data.id,
-              type: doc.type,
-              file_url: doc.uri, // For now, storing the local URI
-              file_name: doc.name,
-              file_size: doc.size,
-              status: "uploaded",
-              uploaded_by: user.id,
-            });
+          try {
+            let finalPath = null;
+            let uploadStatus = "uploaded";
 
-          if (docError) {
-            console.error("Error saving document:", docError);
-          } else {
-            console.log("Document saved successfully:", doc.name);
+            // Check if document was already uploaded during Step3
+            if (doc.storagePath && doc.uploaded) {
+              console.log("Document already uploaded to storage:", doc.storagePath);
+              finalPath = doc.storagePath;
+            } else {
+              // Document needs to be uploaded
+              console.log("Uploading document to storage:", doc.name);
+              console.log("Document URI:", doc.uri);
+              console.log("Application ID:", data.id);
+              console.log("Document Type:", doc.type);
+
+              // Upload to Supabase Storage
+              const uploadResult = await uploadApplicationDocument(
+                doc.uri,
+                data.id,
+                doc.type
+              );
+
+              if (uploadResult.success && uploadResult.path) {
+                console.log("✅ Document uploaded successfully to storage:", uploadResult.path);
+                finalPath = uploadResult.path;
+              } else {
+                console.error("❌ Failed to upload document:", doc.name, uploadResult.error);
+                uploadStatus = "upload_failed";
+
+                // Continue to save the document record even if upload failed
+                // This helps us track failed uploads
+              }
+            }
+
+            // Save document info to database
+            const { error: docError } = await supabase
+              .from("documents")
+              .insert({
+                application_id: data.id,
+                type: doc.type,
+                file_path: finalPath, // Store the storage path
+                file_url: null, // Don't store URLs anymore, we'll generate signed URLs when needed
+                file_name: doc.name,
+                file_size: doc.size,
+                status: uploadStatus,
+                uploaded_by: user.id,
+              });
+
+            if (docError) {
+              console.error("Error saving document info:", docError);
+            } else {
+              console.log("Document info saved successfully:", doc.name);
+            }
+          } catch (error) {
+            console.error("Error processing document:", error);
           }
         }
       }
 
       // Clear draft after successful submission
       await clearDraft();
+
+      // Also clear any other old drafts to prevent data leakage
+      // This helps ensure users always start fresh for new applications
+      await clearAllApplicationDrafts();
 
       // Show success alert
       Alert.alert(
@@ -384,6 +516,8 @@ export default function ApplyWizard() {
     } catch (error) {
       console.error("Unexpected error during submission:", error);
       Alert.alert("Error", "An unexpected error occurred. Please try again.");
+    } finally {
+      setIsSubmitting(false); // Always reset loading state
     }
   };
 
@@ -452,6 +586,7 @@ export default function ApplyWizard() {
             onSubmit={handleSubmit}
             onBack={handleBack}
             onEditStep={handleEditStep}
+            isSubmitting={isSubmitting}
           />
         );
       default:

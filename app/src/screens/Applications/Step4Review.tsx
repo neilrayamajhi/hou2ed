@@ -23,6 +23,7 @@ interface Step4ReviewProps {
   onSubmit: () => void;
   onBack: () => void;
   onEditStep: (step: number) => void;
+  isSubmitting?: boolean;
 }
 
 interface ReviewSection {
@@ -40,10 +41,11 @@ export default function Step4Review({
   onSubmit,
   onBack,
   onEditStep,
+  isSubmitting: isParentSubmitting = false,
 }: Step4ReviewProps) {
   const [signature, setSignature] = useState(draft.signature || "");
   const [agreedToTerms, setAgreedToTerms] = useState(draft.agreedToTerms || false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmitting = isParentSubmitting; // Use parent's submitting state
 
   // Get formatted timestamp
   const timestamp = useMemo(() => {
@@ -146,6 +148,11 @@ export default function Step4Review({
   }, [agreedToTerms, onUpdate]);
 
   const handleSubmit = useCallback(async () => {
+    // Don't allow submission if already submitting
+    if (isSubmitting) {
+      return;
+    }
+
     if (!signature.trim()) {
       Alert.alert("Signature Required", "Please type your full name to sign the application.");
       return;
@@ -161,14 +168,9 @@ export default function Step4Review({
       return;
     }
 
-    setIsSubmitting(true);
-
-    // Simulate submission delay
-    setTimeout(() => {
-      setIsSubmitting(false);
-      onSubmit();
-    }, 1500);
-  }, [signature, agreedToTerms, onSubmit]);
+    // Call parent's submit handler which manages the loading state
+    onSubmit();
+  }, [signature, agreedToTerms, onSubmit, isSubmitting]);
 
   const canSubmit = signature.trim().length >= 3 && agreedToTerms && !isSubmitting;
 

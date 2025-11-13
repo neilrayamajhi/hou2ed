@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   Dimensions,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -98,6 +99,7 @@ export default function ListingDetailsScreen() {
 
   const [dbListing, setDbListing] = useState<any>(null);
   const [loadingDb, setLoadingDb] = useState(false);
+  const [checkingApplication, setCheckingApplication] = useState(false);
 
   useEffect(() => {
     const id = listingFromParams?.id;
@@ -228,7 +230,12 @@ export default function ListingDetailsScreen() {
     toggleListing(savedListing);
   }, [merged, toggleListing]);
 
-  const handleApply = useCallback(() => {
+  const handleApply = useCallback(async () => {
+    // Prevent multiple clicks
+    if (checkingApplication) {
+      return;
+    }
+
     console.log("🔵 Apply Now clicked");
     console.log("User:", user);
     console.log("Listing ID:", merged.id);
@@ -247,11 +254,72 @@ export default function ListingDetailsScreen() {
       return;
     }
 
-    console.log("✅ Navigating to ApplyWizard with listingId:", merged.id);
-    // Navigate to application flow
-    // @ts-ignore
-    navigation.navigate("ApplyWizard", { listingId: merged.id });
-  }, [navigation, merged.id, user]);
+    setCheckingApplication(true);
+
+    // Check for existing application before allowing to proceed
+    try {
+      const { getExistingApplication } = await import("../../services/application.service");
+      const existingApp = await getExistingApplication(merged.id);
+
+      if (existingApp.exists && !existingApp.canResubmit) {
+        // User already has an active application
+        Alert.alert(
+          "Application Already Exists",
+          existingApp.message || "You already have an active application for this listing.",
+          [
+            {
+              text: "View My Applications",
+              onPress: () => {
+                // @ts-ignore
+                navigation.navigate("ApplicationsList");
+              },
+            },
+            {
+              text: "OK",
+              style: "cancel",
+            },
+          ]
+        );
+        return;
+      }
+
+      if (existingApp.exists && existingApp.canResubmit) {
+        // User has a rejected/withdrawn application - allow resubmission
+        Alert.alert(
+          "Previous Application Found",
+          existingApp.message || "You can submit a new application for this listing.",
+          [
+            {
+              text: "Continue",
+              onPress: () => {
+                console.log("✅ Navigating to ApplyWizard with listingId:", merged.id);
+                // @ts-ignore
+                navigation.navigate("ApplyWizard", { listingId: merged.id });
+              },
+            },
+            {
+              text: "Cancel",
+              style: "cancel",
+            },
+          ]
+        );
+        return;
+      }
+
+      // No existing application - proceed normally
+      console.log("✅ Navigating to ApplyWizard with listingId:", merged.id);
+      // @ts-ignore
+      navigation.navigate("ApplyWizard", { listingId: merged.id });
+    } catch (error) {
+      console.error("Error checking existing application:", error);
+      // On error, allow them to proceed (will be checked again in wizard)
+      console.log("⚠️ Proceeding despite error - will check again in wizard");
+      // @ts-ignore
+      navigation.navigate("ApplyWizard", { listingId: merged.id });
+    } finally {
+      setCheckingApplication(false);
+    }
+  }, [navigation, merged.id, user, checkingApplication]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -413,8 +481,16 @@ export default function ListingDetailsScreen() {
             color={colors.white}
           />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.applyButton} onPress={handleApply}>
-          <Text style={styles.applyButtonText}>Apply Now</Text>
+        <TouchableOpacity
+          style={[styles.applyButton, checkingApplication && styles.applyButtonDisabled]}
+          onPress={handleApply}
+          disabled={checkingApplication}
+        >
+          {checkingApplication ? (
+            <ActivityIndicator color={colors.white} />
+          ) : (
+            <Text style={styles.applyButtonText}>Apply Now</Text>
+          )}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -522,6 +598,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     justifyContent: "center",
     alignItems: "center",
+  },
+  applyButtonDisabled: {
+    opacity: 0.7,
   },
   applyButtonText: { fontSize: 16, fontWeight: "bold", color: colors.black },
 });
