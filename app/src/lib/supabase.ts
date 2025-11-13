@@ -124,16 +124,21 @@ export const authHelpers = {
       role: "seeker" | "provider" | "admin";
     },
   ) => {
-    console.log("Creating user with password and sending verification email to:", email);
+    console.log(
+      "Creating user with password and sending verification email to:",
+      email,
+    );
     console.log("User metadata being sent:", metadata);
     console.log("Password length:", password.length, "characters");
 
     // Validate password before sending to Supabase
     if (!password || password.length < 8) {
-      console.error("Password validation failed: Must be at least 8 characters");
+      console.error(
+        "Password validation failed: Must be at least 8 characters",
+      );
       return {
         data: null,
-        error: new Error("Password must be at least 8 characters long")
+        error: new Error("Password must be at least 8 characters long"),
       };
     }
 
@@ -150,14 +155,21 @@ export const authHelpers = {
     // IMPORTANT: Supabase has a quirk where if an unconfirmed user already exists,
     // it returns success but with identities = [] (empty array)
     // This is how we detect duplicate email signups
-    if (data?.user && (!data.user.identities || data.user.identities.length === 0)) {
-      console.warn('⚠️ Duplicate email detected - user returned with no identities');
-      console.warn('   Email:', email);
-      console.warn('   User ID returned:', data.user.id);
-      console.warn('   This email is already registered in the system');
+    if (
+      data?.user &&
+      (!data.user.identities || data.user.identities.length === 0)
+    ) {
+      console.warn(
+        "⚠️ Duplicate email detected - user returned with no identities",
+      );
+      console.warn("   Email:", email);
+      console.warn("   User ID returned:", data.user.id);
+      console.warn("   This email is already registered in the system");
       return {
         data: null,
-        error: new Error('This email is already registered. Please use a different email or try logging in.')
+        error: new Error(
+          "This email is already registered. Please use a different email or try logging in.",
+        ),
       };
     }
 
@@ -171,7 +183,9 @@ export const authHelpers = {
 
       // Check for specific error types
       if (error.message?.includes("weak_password")) {
-        console.error("Password is too weak. Supabase requires stronger passwords.");
+        console.error(
+          "Password is too weak. Supabase requires stronger passwords.",
+        );
       } else if (error.message?.includes("already_exists")) {
         console.error("User already exists with this email.");
       }
@@ -185,19 +199,27 @@ export const authHelpers = {
       console.log("   User ID:", data.user.id);
       console.log("   Email:", data.user.email);
       console.log("   Metadata saved:", data.user.user_metadata);
-      console.log("   Email confirmed:", data.user.email_confirmed_at ? "Yes" : "Needs verification");
+      console.log(
+        "   Email confirmed:",
+        data.user.email_confirmed_at ? "Yes" : "Needs verification",
+      );
 
       // Important: Log session status
       if (data.session) {
         console.log("   Session created:", "Yes (user can login immediately)");
       } else {
-        console.log("   Session created:", "No (email verification required first)");
+        console.log(
+          "   Session created:",
+          "No (email verification required first)",
+        );
       }
 
       console.log("\n📧 Email verification sent with 6-digit OTP code");
       console.log("   User should check inbox (and spam folder)");
     } else {
-      console.warn("⚠️ User data not returned properly - signup may have failed");
+      console.warn(
+        "⚠️ User data not returned properly - signup may have failed",
+      );
     }
 
     return {
@@ -207,22 +229,107 @@ export const authHelpers = {
   },
 
   signIn: async (email: string, password: string) => {
+    console.log("🔐 [signIn] Starting sign in process for:", email);
+
+    // Supabase automatically handles session replacement on signInWithPassword
+    // No need to manually clear the session - this was causing race conditions
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+
+    if (error) {
+      console.error("❌ [signIn] Sign in failed:", error.message);
+      return { data, error };
+    }
+
+    if (data?.session) {
+      console.log("✅ [signIn] Sign in successful");
+      console.log("   User ID:", data.user?.id);
+      console.log("   Role:", data.user?.user_metadata?.role);
+      console.log(
+        "   Session expires:",
+        new Date(data.session.expires_at! * 1000).toISOString(),
+      );
+    }
+
     return { data, error };
   },
 
   signOut: async () => {
-    const { error } = await supabase.auth.signOut();
-    // Also clear any session storage
-    if (Platform.OS === "web") {
-      await WebLocalStorageAdapter.removeItem("supabase.auth.token");
-    } else {
-      await ExpoSecureStoreAdapter.removeItem("supabase.auth.token");
+    console.log("🔴 [signOut] Starting logout process");
+
+    try {
+      // 1. Sign out from Supabase - this clears the session
+      // Use 'local' scope instead of 'global' for faster logout
+      const { error } = await supabase.auth.signOut({ scope: "local" });
+
+      if (error) {
+        console.error("❌ [signOut] Supabase signOut error:", error);
+        // Continue anyway to clear local state
+      } else {
+        console.log("✅ [signOut] Supabase signOut successful");
+      }
+
+      // 2. Clear storage in parallel (don't await each one)
+      const clearPromises: Promise<void>[] = [];
+
+      if (Platform.OS === "web") {
+        // Web: Clear localStorage keys
+        clearPromises.push(
+          (async () => {
+            await WebLocalStorageAdapter.removeItem("supabase.auth.token");
+            if (typeof window !== "undefined" && window.localStorage) {
+              // Clear all sb- prefixed keys
+              const keysToRemove: string[] = [];
+              for (let i = 0; i < window.localStorage.length; i++) {
+                const key = window.localStorage.key(i);
+                if (
+                  key &&
+                  (key.startsWith("sb-") || key.includes("supabase"))
+                ) {
+                  keysToRemove.push(key);
+                }
+              }
+              keysToRemove.forEach((key) =>
+                window.localStorage.removeItem(key),
+              );
+              console.log(
+                "✅ [signOut] Cleared",
+                keysToRemove.length,
+                "web storage keys",
+              );
+            }
+          })(),
+        );
+      } else {
+        // Native: Clear SecureStore keys
+        clearPromises.push(
+          (async () => {
+            const keysToRemove = [
+              "supabase.auth.token",
+              "supabase-auth-token",
+              "sb-auth-token",
+            ];
+            await Promise.all(
+              keysToRemove.map((key) =>
+                SecureStore.deleteItemAsync(key).catch(() => {}),
+              ),
+            );
+            console.log("✅ [signOut] Cleared native storage keys");
+          })(),
+        );
+      }
+
+      // Wait for all clear operations to complete
+      await Promise.all(clearPromises);
+
+      console.log("✅ [signOut] Logout complete");
+      return { error: null };
+    } catch (error) {
+      console.error("❌ [signOut] Unexpected error during logout:", error);
+      return { error: error as any };
     }
-    return { error };
   },
 
   resetPassword: async (email: string) => {

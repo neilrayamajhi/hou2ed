@@ -91,8 +91,13 @@ function transformToMarketplace(
   const toString = (v: any) => {
     if (v == null) return null;
     if (typeof v === "string") return v.trim();
-    if (typeof v === "object" && (v as any).url) return String((v as any).url).trim();
-    try { return String(v).trim(); } catch { return null; }
+    if (typeof v === "object" && (v as any).url)
+      return String((v as any).url).trim();
+    try {
+      return String(v).trim();
+    } catch {
+      return null;
+    }
   };
   const toPublicUrl = (p: string | null) => {
     if (!p) return null;
@@ -250,27 +255,140 @@ export async function getMarketplaceListings(
     console.log("   User location:", userLat, userLng);
     console.log("   Radius:", radiusMiles, "miles");
 
+    // Skip session validation - it causes hanging when switching accounts
+    // The Supabase client automatically includes the session in requests
+    console.log("⏭️ Skipping session check to prevent hanging...");
+
     // First try using the RPC function that bypasses RLS
     let data: any[] | null = null;
     let error: any = null;
 
-    try {
-      console.log("   Trying RPC function to bypass RLS...");
-      const rpcResult = await supabase.rpc("get_active_listings", {
-        user_lat: userLat,
-        user_lng: userLng,
-        radius_miles: radiusMiles,
-      });
+    // Skip RPC and go straight to direct query
+    // RPC has issues with session changes between provider/seeker
+    const skipRpc = true;
 
-      // Check for RPC-specific errors
+    try {
+      if (skipRpc) {
+        console.log(
+          "   Skipping RPC, using direct query (more reliable after account switches)",
+        );
+        error = new Error("RPC skipped");
+      } else {
+        console.log("   Trying RPC function to bypass RLS...");
+
+        // Add timeout to RPC call to prevent hanging
+        let rpcTimedOut = false;
+        const timeoutId = setTimeout(() => {
+          rpcTimedOut = true;
+          console.log("   ⏰ RPC timeout triggered after 3 seconds");
+        }, 3000); // Reduced to 3 seconds
+
+        try {
+          const rpcResult = await supabase.rpc("get_active_listings", {
+            user_lat: userLat,
+            user_lng: userLng,
+            radius_miles: radiusMiles,
+          });
+
+          clearTimeout(timeoutId);
+
+          if (rpcTimedOut) {
+            console.log(
+              "   ⚠️ RPC completed but after timeout, using fallback",
+            );
+            throw new Error("RPC timeout after 3 seconds");
+          }
+
+          data = rpcResult.data;
+          error = rpcResult.error;
+        } catch (rpcErr: any) {
+          clearTimeout(timeoutId);
+          console.log("   ⚠️ RPC error:", rpcErr?.message || "Unknown error");
+          error = rpcErr;
+        }
+      }
+
+      // Check for RPC-specific errors or if RPC was skipped
       if (
-        rpcResult.error?.code === "42804" ||
-        rpcResult.error?.message?.includes("structure of query")
+        error?.code === "42804" ||
+        error?.message?.includes("structure of query") ||
+        error?.message?.includes("RPC timeout") ||
+        error?.message?.includes("RPC skipped") ||
+        skipRpc
       ) {
         console.log(
-          "   ⚠️ RPC function has type mismatch, falling back to direct query",
+          "   ⚠️ RPC function error or skipped, falling back to direct query:",
+          error?.message,
         );
-        // Fall back to direct query with provider info
+
+        // Fall back to direct query WITHOUT the join - the join is causing hanging
+        // We'll fetch provider info separately if needed
+        console.log("   📊 Starting simplified direct query (no joins)...");
+        const queryPromise = supabase
+          .from("listings")
+          .select("*")
+          .eq("is_active", true)
+          .order("created_at", { ascending: false })
+          .limit(100);
+
+        // Race against a 3 second timeout
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Direct query timeout after 3 seconds")),
+            3000,
+          ),
+        );
+
+        try {
+          const queryResult = (await Promise.race([
+            queryPromise,
+            timeoutPromise,
+          ])) as any;
+          console.log("   ✅ Direct query completed successfully");
+          data = queryResult.data;
+          error = queryResult.error;
+
+          // If successful and we have data, fetch provider info separately
+          if (data && data.length > 0) {
+            console.log(
+              `   📊 Fetching provider info for ${data.length} listings...`,
+            );
+            const providerIds = [
+              ...new Set(data.map((l: any) => l.provider_id).filter(Boolean)),
+            ];
+
+            if (providerIds.length > 0) {
+              const { data: providers } = await supabase
+                .from("profiles")
+                .select("id, full_name, username, role")
+                .in("id", providerIds);
+
+              // Attach provider info to listings
+              if (providers) {
+                const providerMap = new Map(providers.map((p) => [p.id, p]));
+                data = data.map((listing: any) => ({
+                  ...listing,
+                  provider: providerMap.get(listing.provider_id) || null,
+                }));
+                console.log("   ✅ Provider info attached");
+              }
+            }
+          }
+        } catch (timeoutError) {
+          console.error("   ❌ Direct query timed out:", timeoutError);
+          error = timeoutError;
+          data = [];
+        }
+      } else if (!error && data) {
+        console.log(`   ✅ RPC function returned ${data.length} listings`);
+      }
+    } catch (outerError) {
+      console.log(
+        "   ⚠️ Unexpected error, falling back to direct query:",
+        outerError,
+      );
+      // Fall back to direct query with provider info
+      try {
         const queryResult = await supabase
           .from("listings")
           .select(
@@ -290,38 +408,10 @@ export async function getMarketplaceListings(
 
         data = queryResult.data;
         error = queryResult.error;
-      } else {
-        data = rpcResult.data;
-        error = rpcResult.error;
-
-        if (!error && data) {
-          console.log(`   ✅ RPC function returned ${data.length} listings`);
-        }
+      } catch (fallbackError) {
+        console.error("   ❌ Even fallback query failed:", fallbackError);
+        return [];
       }
-    } catch (rpcError) {
-      console.log(
-        "   ⚠️ RPC function not available, falling back to direct query",
-      );
-      // Fall back to direct query with provider info
-      const queryResult = await supabase
-        .from("listings")
-        .select(
-          `
-          *,
-          provider:profiles!listings_provider_id_fkey (
-            id,
-            full_name,
-            username,
-            role
-          )
-        `,
-        )
-        .eq("is_active", true)
-        .order("created_at", { ascending: false })
-        .limit(100);
-
-      data = queryResult.data;
-      error = queryResult.error;
     }
 
     console.log(

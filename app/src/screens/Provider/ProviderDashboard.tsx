@@ -58,8 +58,10 @@ export default function ProviderDashboard() {
         if (userChanged) {
           console.log(
             "🔄 User switch detected in ProviderDashboard - refreshing listings",
-            "Previous:", lastUserRef.current,
-            "Current:", user?.id
+            "Previous:",
+            lastUserRef.current,
+            "Current:",
+            user?.id,
           );
           lastUserRef.current = user?.id;
 
@@ -77,7 +79,8 @@ export default function ProviderDashboard() {
           lastRefetchTime.current = now;
         }
       }
-    }, [user?.id, user?.role, refetch]),
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user?.id, user?.role]), // Removed 'refetch' to prevent infinite loop
   );
 
   const handleLogout = async () => {

@@ -20,10 +20,14 @@ import { theme } from "../../theme";
 import ListingCard from "../../components/ListingCard";
 import FiltersSheet from "../Search/FiltersSheet";
 import { useFilterStore } from "../../state/useFilterStore";
+import { useAuthStore } from "../../state/useAuthStore";
 import { useLocation } from "../../hooks/useLocation";
 import { filterListingsByQuick } from "../../data/mockListings";
 import { fetchRealShelters } from "../../services/shelterService";
-import { getMarketplaceListings, type MarketplaceListing } from "../../services/marketplace.service";
+import {
+  getMarketplaceListings,
+  type MarketplaceListing,
+} from "../../services/marketplace.service";
 import { usePerformance } from "../../utils/perf";
 import type { Listing } from "../../types/listing";
 import type { RootStackNavigationProp } from "../../navigation/types";
@@ -68,8 +72,27 @@ export default function HomeScreen() {
   const listRef = useRef<FlatList>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
 
+  // Get auth ready state
+  const isReady = useAuthStore((state) => state.isReady);
+  const user = useAuthStore((state) => state.user);
+
   // Get user location
   const { location, loading: locationLoading, refreshLocation } = useLocation();
+
+  // Log when HomeScreen mounts - DON'T force refresh location on every render
+  // The location hook already handles user changes internally
+  useEffect(() => {
+    console.log(
+      "🏠 HomeScreen mounted for user:",
+      user?.id,
+      "role:",
+      user?.role,
+    );
+
+    return () => {
+      console.log("🏠 HomeScreen unmounted");
+    };
+  }, [user?.id]); // Only re-run when user ID changes, not on every render
 
   // Store state
   const { quickFilters, toggleQuickFilter, searchQuery, setSearchQuery } =
@@ -82,7 +105,7 @@ export default function HomeScreen() {
   const [showListView, setShowListView] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
   const [isRealData, setIsRealData] = useState(false);
-  const [dataSource, setDataSource] = useState('Mock Data');
+  const [dataSource, setDataSource] = useState("Mock Data");
   const [mapRegion, setMapRegion] = useState<Region>({
     latitude: 37.7749,
     longitude: -122.4194,
@@ -98,23 +121,39 @@ export default function HomeScreen() {
   // Load real listings from database or fall back to mock data
   useEffect(() => {
     async function loadListings() {
+      console.log("🏠 [loadListings] Called with:", {
+        isReady,
+        locationLoading,
+        location: location ? "exists" : "null",
+        user: user?.id,
+        role: user?.role,
+      });
+
+      // Don't load listings if auth is not ready
+      if (!isReady) {
+        console.log(
+          "⏳ Waiting for auth to be ready before loading listings...",
+        );
+        return;
+      }
+
       // Don't load listings if location is still loading
       // This prevents the initial load with null location that causes 0.5 mile default
       if (locationLoading) {
-        console.log('⏳ Waiting for location before loading listings...');
+        console.log("⏳ Waiting for location before loading listings...");
         return;
       }
 
       setLoadingData(true);
       listingLoadPerf.start();
       try {
-        console.log('📍 Loading listings with location:', location);
+        console.log("📍 Loading listings with location:", location);
 
         // Fetch real listings from Supabase database
         const dbListings = await getMarketplaceListings(
           location?.latitude,
           location?.longitude,
-          50 // 50 mile radius
+          50, // 50 mile radius
         );
 
         let allListings: Listing[];
@@ -122,21 +161,23 @@ export default function HomeScreen() {
         if (dbListings && dbListings.length > 0) {
           // Use database listings
           allListings = dbListings as any;
-          console.log(`✅ Found ${dbListings.length} real listings from database with proper distances`);
+          console.log(
+            `✅ Found ${dbListings.length} real listings from database with proper distances`,
+          );
           setIsRealData(true);
-          setDataSource('Live Database');
+          setDataSource("Live Database");
         } else {
           // No database listings — show empty list (no mock)
-          console.log('No database listings found');
+          console.log("No database listings found");
           allListings = [] as any;
           setIsRealData(true);
-          setDataSource('Live Database');
+          setDataSource("Live Database");
         }
 
         const filtered = filterListingsByQuick(allListings, quickFilters);
         setListings(filtered);
       } catch (error) {
-        console.error('Error loading listings:', error);
+        console.error("Error loading listings:", error);
         // On error, show empty list (no mock)
         setListings([]);
       } finally {
@@ -146,7 +187,7 @@ export default function HomeScreen() {
     }
 
     loadListings();
-  }, [quickFilters, location, locationLoading]);
+  }, [quickFilters, location, locationLoading, isReady, user?.id]); // Also re-run when user changes
 
   // Update map region when user location is loaded
   useEffect(() => {
@@ -228,7 +269,13 @@ export default function HomeScreen() {
   }, [location, refreshLocation]);
 
   // Render listing item for list view
-  const renderListItem = ({ item, index }: { item: Listing; index: number }) => (
+  const renderListItem = ({
+    item,
+    index,
+  }: {
+    item: Listing;
+    index: number;
+  }) => (
     <TouchableOpacity
       style={styles.listItem}
       onPress={() => openDetails(item)}
@@ -237,28 +284,37 @@ export default function HomeScreen() {
       <View style={styles.listItemContent}>
         <View style={styles.listItemHeader}>
           <Text style={styles.listItemTitle}>{item.name}</Text>
-          <View style={[styles.availabilityBadge,
-            item.availability === 'available' ? styles.availableBadge : styles.fullBadge
-          ]}>
+          <View
+            style={[
+              styles.availabilityBadge,
+              item.availability === "available"
+                ? styles.availableBadge
+                : styles.fullBadge,
+            ]}
+          >
             <Text style={styles.badgeText}>
-              {item.availability === 'available' ? `${item.bedsAvailable} beds` : 'Full'}
+              {item.availability === "available"
+                ? `${item.bedsAvailable} beds`
+                : "Full"}
             </Text>
           </View>
         </View>
 
         <Text style={styles.listItemAddress}>
-          <Ionicons name="location" size={14} color="#8a8a8a" />
-          {' '}{item.address.street}, {item.address.city}
+          <Ionicons name="location" size={14} color="#8a8a8a" />{" "}
+          {item.address.street}, {item.address.city}
         </Text>
 
         <View style={styles.listItemFooter}>
           <Text style={styles.listItemPrice}>
-            {item.price.isFree ? 'FREE' : `$${item.price.min}/mo`}
+            {item.price.isFree ? "FREE" : `$${item.price.min}/mo`}
           </Text>
           <View style={styles.listItemDistance}>
             <Ionicons name="navigate" size={14} color="#D4AF37" />
             <Text style={styles.distanceText}>
-              {item.distance !== undefined ? `${item.distance} mi` : 'Calculating...'}
+              {item.distance !== undefined
+                ? `${item.distance} mi`
+                : "Calculating..."}
             </Text>
           </View>
         </View>
@@ -274,7 +330,10 @@ export default function HomeScreen() {
   ) => (
     <TouchableOpacity
       key={key}
-      style={[styles.quickFilter, quickFilters[key] && styles.quickFilterActive]}
+      style={[
+        styles.quickFilter,
+        quickFilters[key] && styles.quickFilterActive,
+      ]}
       onPress={() => toggleQuickFilter(key)}
       activeOpacity={0.7}
     >
@@ -406,12 +465,14 @@ export default function HomeScreen() {
             styles.listViewContainer,
             {
               opacity: slideAnim,
-              transform: [{
-                translateY: slideAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [50, 0],
-                }),
-              }],
+              transform: [
+                {
+                  translateY: slideAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [50, 0],
+                  }),
+                },
+              ],
             },
           ]}
         >
@@ -435,7 +496,9 @@ export default function HomeScreen() {
               <ActivityIndicator size="small" color="#D4AF37" />
             ) : (
               <>
-                <Text style={styles.resultsCount}>{listings.length} places</Text>
+                <Text style={styles.resultsCount}>
+                  {listings.length} places
+                </Text>
                 <Text style={styles.resultsSubtext}>in this area</Text>
               </>
             )}
@@ -469,17 +532,20 @@ export default function HomeScreen() {
                 {listings[activeIndex].name}
               </Text>
               <Text style={styles.miniCardAddress} numberOfLines={1}>
-                {listings[activeIndex].address.street}, {listings[activeIndex].address.city}
+                {listings[activeIndex].address.street},{" "}
+                {listings[activeIndex].address.city}
               </Text>
               <View style={styles.miniCardFooter}>
                 <Text style={styles.miniCardPrice}>
-                  {listings[activeIndex].price.isFree ? 'FREE' : `$${listings[activeIndex].price.min}/mo`}
+                  {listings[activeIndex].price.isFree
+                    ? "FREE"
+                    : `$${listings[activeIndex].price.min}/mo`}
                 </Text>
                 <View style={styles.miniCardBadge}>
                   <Text style={styles.miniCardBadgeText}>
-                    {listings[activeIndex].availability === 'available'
+                    {listings[activeIndex].availability === "available"
                       ? `${listings[activeIndex].bedsAvailable} beds`
-                      : 'Full'}
+                      : "Full"}
                   </Text>
                 </View>
               </View>
@@ -490,7 +556,10 @@ export default function HomeScreen() {
       </View>
 
       {/* Filters Sheet */}
-      <FiltersSheet visible={showFilters} onClose={() => setShowFilters(false)} />
+      <FiltersSheet
+        visible={showFilters}
+        onClose={() => setShowFilters(false)}
+      />
     </SafeAreaView>
   );
 }

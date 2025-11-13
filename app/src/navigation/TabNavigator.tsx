@@ -23,13 +23,30 @@ export default function TabNavigator() {
 
   useEffect(() => {
     // If user is not authenticated, redirect to auth flow
+    // Only check on mount and when authentication status changes
     if (!isAuthenticated || !user) {
       navigation.reset({
         index: 0,
         routes: [{ name: "RoleSelection" }],
       });
     }
-  }, [isAuthenticated, user, navigation]);
+  }, [isAuthenticated, user?.id, navigation]); // Changed 'user' to 'user?.id' to prevent infinite resets
+
+  // Log which tabs are being shown (only when user ID or role changes, not on every render)
+  useEffect(() => {
+    console.log(
+      "[TabNavigator] Rendering tabs for:",
+      isProvider ? "PROVIDER" : "SEEKER",
+      "user:",
+      user?.id,
+    );
+  }, [isProvider, user?.id]); // Changed from 'user' to 'user?.id' to prevent unnecessary re-renders
+
+  // Don't render anything if user is not set or role doesn't match expected state
+  if (!user) {
+    console.log("[TabNavigator] No user, not rendering tabs");
+    return null;
+  }
 
   return (
     <Tab.Navigator
@@ -44,7 +61,11 @@ export default function TabNavigator() {
         tabBarInactiveTintColor: "#FFFFFF",
         // Hide the header for all tabs (we'll create custom headers later)
         headerShown: false,
+        // Don't lazy load screens - mount them immediately
+        lazy: false,
       }}
+      // Force recreation when user changes
+      key={`tabs-${user.id}`}
     >
       {/* Provider-specific tabs */}
       {isProvider ? (
