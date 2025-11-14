@@ -87,8 +87,10 @@ export const useAuthStore = create<AuthState>()(
           // Clear all auth-related storage
           await secureStorage.removeItem("auth-storage");
 
-          // Sign out from Supabase last to ensure local state is cleared first
-          await supabase.auth.signOut();
+          // CRITICAL: Use authHelpers.signOut() which properly clears client session
+          // Don't use supabase.auth.signOut() directly - it doesn't clear storage
+          const { authHelpers } = await import("../lib/supabase");
+          await authHelpers.signOut();
 
           // Force a small delay to ensure everything is cleared
           await new Promise((resolve) => setTimeout(resolve, 200));

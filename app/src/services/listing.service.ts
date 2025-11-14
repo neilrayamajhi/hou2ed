@@ -79,26 +79,9 @@ export async function getProviderListings(
   try {
     console.log("📋 Fetching listings for provider:", providerId);
 
-    // First check if user is authenticated
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      console.error("❌ No authenticated user - cannot fetch listings");
-      console.error("RLS policies require authentication");
-      return [];
-    }
-    console.log("✅ User authenticated:", user.id);
-
-    // Verify the providerId matches the authenticated user
-    if (user.id !== providerId) {
-      console.warn(
-        "⚠️ Provider ID mismatch! Auth user:",
-        user.id,
-        "Requested provider:",
-        providerId,
-      );
-    }
+    // Skip manual auth check - RLS policies will handle authentication
+    // The getUser() call was hanging after account switches, causing issues
+    // RLS will return empty results if user isn't authenticated or doesn't own the listings
 
     console.log("📡 Executing Supabase query...");
     const startTime = Date.now();

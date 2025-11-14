@@ -91,8 +91,13 @@ function transformToMarketplace(
   const toString = (v: any) => {
     if (v == null) return null;
     if (typeof v === "string") return v.trim();
-    if (typeof v === "object" && (v as any).url) return String((v as any).url).trim();
-    try { return String(v).trim(); } catch { return null; }
+    if (typeof v === "object" && (v as any).url)
+      return String((v as any).url).trim();
+    try {
+      return String(v).trim();
+    } catch {
+      return null;
+    }
   };
   const toPublicUrl = (p: string | null) => {
     if (!p) return null;
@@ -250,79 +255,34 @@ export async function getMarketplaceListings(
     console.log("   User location:", userLat, userLng);
     console.log("   Radius:", radiusMiles, "miles");
 
-    // First try using the RPC function that bypasses RLS
+    // Use direct query with RLS policies (the RPC function doesn't exist)
+    // The RLS policies allow anonymous users to view active listings
     let data: any[] | null = null;
     let error: any = null;
 
-    try {
-      console.log("   Trying RPC function to bypass RLS...");
-      const rpcResult = await supabase.rpc("get_active_listings", {
-        user_lat: userLat,
-        user_lng: userLng,
-        radius_miles: radiusMiles,
-      });
+    console.log("   Fetching listings via direct query with RLS...");
+    console.log("   Using simplified query without joins...");
+    const queryPromise = supabase
+      .from("listings")
+      .select("*")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false })
+      .limit(100);
 
-      // Check for RPC-specific errors
-      if (
-        rpcResult.error?.code === "42804" ||
-        rpcResult.error?.message?.includes("structure of query")
-      ) {
-        console.log(
-          "   ⚠️ RPC function has type mismatch, falling back to direct query",
-        );
-        // Fall back to direct query with provider info
-        const queryResult = await supabase
-          .from("listings")
-          .select(
-            `
-            *,
-            provider:profiles!listings_provider_id_fkey (
-              id,
-              full_name,
-              username,
-              role
-            )
-          `,
-          )
-          .eq("is_active", true)
-          .order("created_at", { ascending: false })
-          .limit(100);
+    const timeoutPromise = new Promise<{ data: null; error: any }>((resolve) =>
+      setTimeout(() => {
+        console.warn("⚠️ Query timeout after 10 seconds");
+        resolve({
+          data: null,
+          error: { message: "Query timeout", code: "TIMEOUT" },
+        });
+      }, 10000),
+    );
 
-        data = queryResult.data;
-        error = queryResult.error;
-      } else {
-        data = rpcResult.data;
-        error = rpcResult.error;
+    const queryResult = await Promise.race([queryPromise, timeoutPromise]);
 
-        if (!error && data) {
-          console.log(`   ✅ RPC function returned ${data.length} listings`);
-        }
-      }
-    } catch (rpcError) {
-      console.log(
-        "   ⚠️ RPC function not available, falling back to direct query",
-      );
-      // Fall back to direct query with provider info
-      const queryResult = await supabase
-        .from("listings")
-        .select(
-          `
-          *,
-          provider:profiles!listings_provider_id_fkey (
-            id,
-            full_name,
-            username,
-            role
-          )
-        `,
-        )
-        .eq("is_active", true)
-        .order("created_at", { ascending: false })
-        .limit(100);
-
-      data = queryResult.data;
-      error = queryResult.error;
-    }
+    data = queryResult.data;
+    error = queryResult.error;
 
     console.log(
       "🟢 Query completed. Error?",
@@ -334,41 +294,7 @@ export async function getMarketplaceListings(
     if (error) {
       console.error("❌ Error fetching marketplace listings:", error);
       console.error("Error details:", JSON.stringify(error, null, 2));
-
-      // If RLS is blocking, try one more workaround
-      if (error.code === "42501" || error.message?.includes("permission")) {
-        console.log("🔧 RLS blocking detected, attempting workaround...");
-
-        // Try to use service role if available (this won't work in production but helps during development)
-        const serviceRoleKey = process.env.EXPO_PUBLIC_SUPABASE_SERVICE_KEY;
-        if (serviceRoleKey && __DEV__) {
-          console.log("   Using service role key in dev mode...");
-          const { createClient } = await import("@supabase/supabase-js");
-          const serviceSupabase = createClient(
-            env.SUPABASE_URL,
-            serviceRoleKey,
-          );
-
-          const serviceResult = await serviceSupabase
-            .from("listings")
-            .select("*")
-            .eq("is_active", true)
-            .order("created_at", { ascending: false })
-            .limit(100);
-
-          if (serviceResult.data) {
-            console.log(
-              `   ✅ Service role query returned ${serviceResult.data.length} listings`,
-            );
-            data = serviceResult.data;
-            error = null;
-          }
-        }
-      }
-
-      if (error) {
-        return [];
-      }
+      return [];
     }
 
     if (!data || data.length === 0) {

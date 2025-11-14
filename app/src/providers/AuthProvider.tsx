@@ -58,6 +58,8 @@ export default function AuthProvider({
         }
 
         if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+          console.log("[AuthProvider] SIGNED_IN event - user logged in");
+
           setSession(session);
           setUser(session?.user || null);
 
@@ -65,7 +67,7 @@ export default function AuthProvider({
             const userData = await transformUserData(session.user);
             setStoreUser(userData);
 
-            // CRITICAL FIX: Invalidate all queries after login so they refetch with new user
+            // Invalidate all queries after login so they refetch with new user
             console.log(
               "[AuthProvider] Login successful - invalidating all queries to refetch fresh data",
             );

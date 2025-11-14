@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   Image,
 } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
@@ -119,7 +118,7 @@ export default function ProviderDashboard() {
   ).length;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       {/* Header with welcome message */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
@@ -404,7 +403,7 @@ export default function ProviderDashboard() {
           )}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -412,6 +411,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.gray[900],
+    paddingTop: 50, // Add padding for status bar
   },
   header: {
     paddingHorizontal: spacing.lg,

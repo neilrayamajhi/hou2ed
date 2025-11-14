@@ -131,6 +131,8 @@ export async function loginUser(
 
     if (data?.user) {
       console.log("Login successful for user:", data.user.id);
+      console.log("✅ Fresh Supabase client should have clean session state");
+
       const userData = await transformUserData(data.user);
       return {
         success: true,

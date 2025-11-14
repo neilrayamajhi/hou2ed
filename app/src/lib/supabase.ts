@@ -69,11 +69,34 @@ const WebLocalStorageAdapter = {
   },
 };
 
-// Create Supabase client with custom storage and type safety
-export const supabase = createClient<Database>(
-  env.SUPABASE_URL,
-  env.SUPABASE_ANON_KEY,
-  {
+// Create a fetch wrapper with timeout to prevent hanging
+const fetchWithTimeout = async (
+  url: RequestInfo | URL,
+  options: RequestInit = {},
+): Promise<Response> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === "AbortError") {
+      console.warn("⚠️ Fetch timeout after 15 seconds:", url);
+      throw new Error("Request timeout");
+    }
+    throw error;
+  }
+};
+
+// Factory function to create Supabase client
+function createSupabaseClient() {
+  return createClient<Database>(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
     auth: {
       storage:
         Platform.OS === "web"
@@ -88,11 +111,36 @@ export const supabase = createClient<Database>(
         // Add user agent for debugging
         "x-client-info": "hou2ed-app",
       },
-      // Removed custom fetch timeout - let Supabase handle timeouts naturally
-      // The custom timeout was causing AbortError issues
+      fetch: fetchWithTimeout as any, // Use custom fetch with timeout
+    },
+  });
+}
+
+// Create initial Supabase client - will be recreated on logout
+let supabaseInstance = createSupabaseClient();
+
+// Export getter to always get current instance
+export const getSupabase = () => supabaseInstance;
+
+// For backward compatibility, export as 'supabase'
+export const supabase = new Proxy(
+  {} as ReturnType<typeof createSupabaseClient>,
+  {
+    get: (target, prop) => {
+      return (supabaseInstance as any)[prop];
     },
   },
 );
+
+// Recreate the client to clear ALL internal state (including cached sessions)
+export async function resetSupabaseClient() {
+  console.log("🔄 Recreating Supabase client to clear all internal state...");
+
+  // Create a completely new client instance
+  supabaseInstance = createSupabaseClient();
+
+  console.log("✅ Supabase client recreated with clean state");
+}
 
 // Re-export types from supabase-types for convenience
 export type {
@@ -124,16 +172,21 @@ export const authHelpers = {
       role: "seeker" | "provider" | "admin";
     },
   ) => {
-    console.log("Creating user with password and sending verification email to:", email);
+    console.log(
+      "Creating user with password and sending verification email to:",
+      email,
+    );
     console.log("User metadata being sent:", metadata);
     console.log("Password length:", password.length, "characters");
 
     // Validate password before sending to Supabase
     if (!password || password.length < 8) {
-      console.error("Password validation failed: Must be at least 8 characters");
+      console.error(
+        "Password validation failed: Must be at least 8 characters",
+      );
       return {
         data: null,
-        error: new Error("Password must be at least 8 characters long")
+        error: new Error("Password must be at least 8 characters long"),
       };
     }
 
@@ -150,14 +203,21 @@ export const authHelpers = {
     // IMPORTANT: Supabase has a quirk where if an unconfirmed user already exists,
     // it returns success but with identities = [] (empty array)
     // This is how we detect duplicate email signups
-    if (data?.user && (!data.user.identities || data.user.identities.length === 0)) {
-      console.warn('⚠️ Duplicate email detected - user returned with no identities');
-      console.warn('   Email:', email);
-      console.warn('   User ID returned:', data.user.id);
-      console.warn('   This email is already registered in the system');
+    if (
+      data?.user &&
+      (!data.user.identities || data.user.identities.length === 0)
+    ) {
+      console.warn(
+        "⚠️ Duplicate email detected - user returned with no identities",
+      );
+      console.warn("   Email:", email);
+      console.warn("   User ID returned:", data.user.id);
+      console.warn("   This email is already registered in the system");
       return {
         data: null,
-        error: new Error('This email is already registered. Please use a different email or try logging in.')
+        error: new Error(
+          "This email is already registered. Please use a different email or try logging in.",
+        ),
       };
     }
 
@@ -171,7 +231,9 @@ export const authHelpers = {
 
       // Check for specific error types
       if (error.message?.includes("weak_password")) {
-        console.error("Password is too weak. Supabase requires stronger passwords.");
+        console.error(
+          "Password is too weak. Supabase requires stronger passwords.",
+        );
       } else if (error.message?.includes("already_exists")) {
         console.error("User already exists with this email.");
       }
@@ -185,19 +247,27 @@ export const authHelpers = {
       console.log("   User ID:", data.user.id);
       console.log("   Email:", data.user.email);
       console.log("   Metadata saved:", data.user.user_metadata);
-      console.log("   Email confirmed:", data.user.email_confirmed_at ? "Yes" : "Needs verification");
+      console.log(
+        "   Email confirmed:",
+        data.user.email_confirmed_at ? "Yes" : "Needs verification",
+      );
 
       // Important: Log session status
       if (data.session) {
         console.log("   Session created:", "Yes (user can login immediately)");
       } else {
-        console.log("   Session created:", "No (email verification required first)");
+        console.log(
+          "   Session created:",
+          "No (email verification required first)",
+        );
       }
 
       console.log("\n📧 Email verification sent with 6-digit OTP code");
       console.log("   User should check inbox (and spam folder)");
     } else {
-      console.warn("⚠️ User data not returned properly - signup may have failed");
+      console.warn(
+        "⚠️ User data not returned properly - signup may have failed",
+      );
     }
 
     return {
@@ -215,14 +285,52 @@ export const authHelpers = {
   },
 
   signOut: async () => {
-    const { error } = await supabase.auth.signOut();
-    // Also clear any session storage
-    if (Platform.OS === "web") {
-      await WebLocalStorageAdapter.removeItem("supabase.auth.token");
-    } else {
-      await ExpoSecureStoreAdapter.removeItem("supabase.auth.token");
+    try {
+      console.log("🚪 Starting signOut process...");
+
+      // Step 1: Clear storage FIRST (before calling signOut to avoid hanging)
+      console.log("🧹 Clearing storage first...");
+      if (Platform.OS === "web") {
+        await WebLocalStorageAdapter.removeItem("supabase.auth.token");
+        // Clear all Supabase keys from localStorage
+        if (typeof window !== "undefined") {
+          const keysToRemove: string[] = [];
+          for (let i = 0; i < window.localStorage.length; i++) {
+            const key = window.localStorage.key(i);
+            if (key && key.startsWith("sb-")) {
+              keysToRemove.push(key);
+            }
+          }
+          keysToRemove.forEach((key) => window.localStorage.removeItem(key));
+          console.log(`🧹 Cleared ${keysToRemove.length} localStorage keys`);
+        }
+      } else {
+        await ExpoSecureStoreAdapter.removeItem("supabase.auth.token");
+        // Clear other potential Supabase keys
+        try {
+          await ExpoSecureStoreAdapter.removeItem("sb-access-token");
+          await ExpoSecureStoreAdapter.removeItem("sb-refresh-token");
+        } catch (e) {
+          // Ignore errors for keys that might not exist
+        }
+      }
+
+      // Step 2: RECREATE the client to clear ALL internal state
+      // This is the CRITICAL FIX - don't try to fix the broken client, replace it
+      await resetSupabaseClient();
+
+      console.log("✅ SignOut complete - storage cleared and client recreated");
+      return { error: null };
+    } catch (error) {
+      console.error("Error during signOut:", error);
+      // Even on error, recreate the client
+      try {
+        await resetSupabaseClient();
+      } catch (e) {
+        console.error("Failed to reset client on error:", e);
+      }
+      return { error: error as any };
     }
-    return { error };
   },
 
   resetPassword: async (email: string) => {
