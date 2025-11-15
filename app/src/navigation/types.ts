@@ -43,6 +43,7 @@ export type RootStackParamList = {
   ApplicationsInbox: undefined;
   ApplicationDetail: { applicationId: string };
   ProviderListingDetails: { listingId: string };
+  BlockedUsers: undefined;
 };
 
 export type RootStackNavigationProp =

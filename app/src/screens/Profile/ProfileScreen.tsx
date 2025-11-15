@@ -217,8 +217,8 @@ export default function ProfileScreen() {
           .from("applications")
           .select("*", { count: "exact", head: true })
           .eq("seeker_id", user.id)
-          .is("deleted_at", null)  // Exclude soft-deleted
-          .neq("status", "withdrawn");  // Exclude withdrawn
+          .is("deleted_at", null) // Exclude soft-deleted
+          .neq("status", "withdrawn"); // Exclude withdrawn
 
         if (!error && count !== null) {
           setApplicationsCount(count);
@@ -232,7 +232,7 @@ export default function ProfileScreen() {
       }
     } catch (error) {
       console.error("Error fetching applications count:", error);
-      setApplicationsCount(0);  // Reset to 0 on error
+      setApplicationsCount(0); // Reset to 0 on error
     }
   }, [user?.id]);
 
@@ -500,6 +500,27 @@ export default function ProfileScreen() {
                   <Text style={styles.settingText}>
                     {i18n.t("profile.settings.changePassword")}
                   </Text>
+                </View>
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.gray[500]}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.settingRow}
+                onPress={() => navigation.navigate("BlockedUsers")}
+                accessibilityLabel="Manage blocked users"
+                accessibilityRole="button"
+              >
+                <View style={styles.settingLeft}>
+                  <Ionicons
+                    name="ban-outline"
+                    size={18}
+                    color={colors.gray[400]}
+                  />
+                  <Text style={styles.settingText}>Blocked Users</Text>
                 </View>
                 <Ionicons
                   name="chevron-forward"

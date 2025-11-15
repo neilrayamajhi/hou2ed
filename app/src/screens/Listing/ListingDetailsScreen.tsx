@@ -25,6 +25,7 @@ import {
 } from "../../constants/listingOptions";
 import { useSavedListings } from "../../hooks/useSavedItems";
 import { useAuthStore } from "../../state/useAuthStore";
+import { BlockButton } from "../../components/BlockButton";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -121,7 +122,7 @@ export default function ListingDetailsScreen() {
         const { data, error } = await supabase
           .from("listings")
           .select(
-            "id,title,description,amenities,services,rules,eligibility,images,address,city,state,zip_code,lat,lng",
+            "id,title,description,amenities,services,rules,eligibility,images,address,city,state,zip_code,lat,lng,provider_id",
           )
           .eq("id", id)
           .maybeSingle();
@@ -144,6 +145,7 @@ export default function ListingDetailsScreen() {
       id: routeListingId || listingFromParams.id,
       title: listingFromParams.name || listingFromParams.title || "",
       providerName: listingFromParams.provider || "",
+      providerId: listingFromParams.provider_id || listingFromParams.providerId,
       isVerified: !!listingFromParams.verified,
       isDVSensitive: !!listingFromParams.isDVSensitive,
       images: normalizeImageUrls(
@@ -177,6 +179,7 @@ export default function ListingDetailsScreen() {
     if (!dbListing) return base;
     return {
       ...base,
+      providerId: dbListing.provider_id || base.providerId,
       title: dbListing.title || base.title,
       overview: dbListing.description || base.overview,
       amenities: dbListing.amenities ?? base.amenities,
@@ -329,9 +332,25 @@ export default function ListingDetailsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
-        <Ionicons name="arrow-back" size={24} color={colors.white} />
-      </TouchableOpacity>
+      <View style={styles.headerButtons}>
+        <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
+          <Ionicons name="arrow-back" size={24} color={colors.white} />
+        </TouchableOpacity>
+        {merged.providerId && user && merged.providerId !== user.id && (
+          <View style={styles.blockBtn}>
+            <BlockButton
+              userId={merged.providerId}
+              userName={merged.providerName || 'Provider'}
+              userRole="provider"
+              variant="icon"
+              onBlockSuccess={() => {
+                // Navigate back after blocking
+                (navigation as any).goBack?.();
+              }}
+            />
+          </View>
+        )}
+      </View>
 
       <ScrollView
         style={styles.scrollView}
@@ -513,7 +532,18 @@ export default function ListingDetailsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.black },
-  backBtn: { position: "absolute", top: 40, left: 16, zIndex: 10 },
+  headerButtons: {
+    position: "absolute",
+    top: 40,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    zIndex: 10,
+  },
+  backBtn: {},
+  blockBtn: {},
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: 140 },
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },

@@ -1,6 +1,7 @@
-import { supabase } from '../lib/supabase';
-import { getDocumentSignedUrl } from './storage.service';
-import type { Database } from '../lib/supabase';
+import { supabase } from "../lib/supabase";
+import { getDocumentSignedUrl } from "./storage.service";
+import { canApplyToListing } from "./block.service";
+import type { Database } from "../lib/supabase";
 
 // Type definitions
 export interface ApplicationData {
@@ -27,32 +28,33 @@ export interface ApplicationDocument {
 }
 
 export type DocumentType =
-  | 'id'
-  | 'income_proof'
-  | 'insurance'
-  | 'referral_letter'
-  | 'medical_clearance'
-  | 'background_check'
-  | 'other';
+  | "id"
+  | "income_proof"
+  | "insurance"
+  | "referral_letter"
+  | "medical_clearance"
+  | "background_check"
+  | "other";
 
 export type DocumentStatus =
-  | 'pending'
-  | 'uploading'
-  | 'uploaded'
-  | 'verified'
-  | 'rejected'
-  | 'error';
+  | "pending"
+  | "uploading"
+  | "uploaded"
+  | "verified"
+  | "rejected"
+  | "error";
 
 export type ApplicationStatus =
-  | 'draft'
-  | 'new'
-  | 'docs_needed'
-  | 'under_review'
-  | 'interview_scheduled'
-  | 'approved'
-  | 'rejected'
-  | 'waitlisted'
-  | 'withdrawn';
+  | "draft"
+  | "new"
+  | "docs_needed"
+  | "under_review"
+  | "interview_scheduled"
+  | "approved"
+  | "rejected"
+  | "waitlisted"
+  | "withdrawn"
+  | "completed";
 
 export interface Application {
   id: string;
@@ -86,24 +88,35 @@ export interface ApplicationResult {
  * Create a new application
  */
 export async function createApplication(
-  params: CreateApplicationParams
+  params: CreateApplicationParams,
 ): Promise<ApplicationResult> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) {
       return {
         success: false,
-        error: 'User not authenticated',
+        error: "User not authenticated",
+      };
+    }
+
+    // Check if provider has blocked this user
+    const blockCheck = await canApplyToListing(supabase, params.listingId);
+    if (!blockCheck.canApply) {
+      return {
+        success: false,
+        error: blockCheck.reason || "Cannot apply to this listing",
       };
     }
 
     // Create application record
     const { data: application, error } = await supabase
-      .from('applications')
+      .from("applications")
       .insert({
         listing_id: params.listingId,
         seeker_id: user.id,
-        status: 'new',
+        status: "new",
         application_data: params.data,
         stage_timestamps: {
           new: new Date().toISOString(),
@@ -115,7 +128,7 @@ export async function createApplication(
       .single();
 
     if (error) {
-      console.error('Create application error:', error);
+      console.error("Create application error:", error);
       return {
         success: false,
         error: error.message,
@@ -124,7 +137,11 @@ export async function createApplication(
 
     // Upload documents if provided
     if (params.documents && params.documents.length > 0) {
-      await uploadApplicationDocuments(application.id, params.documents, user.id);
+      await uploadApplicationDocuments(
+        application.id,
+        params.documents,
+        user.id,
+      );
     }
 
     // Create initial thread for messaging
@@ -135,10 +152,11 @@ export async function createApplication(
       application: application as Application,
     };
   } catch (error) {
-    console.error('Create application error:', error);
+    console.error("Create application error:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to create application',
+      error:
+        error instanceof Error ? error.message : "Failed to create application",
     };
   }
 }
@@ -149,31 +167,29 @@ export async function createApplication(
 async function uploadApplicationDocuments(
   applicationId: string,
   documents: ApplicationDocument[],
-  uploadedBy: string
+  uploadedBy: string,
 ): Promise<void> {
   try {
     for (const doc of documents) {
-      if (doc.status === 'uploaded' || !doc.fileUri) continue;
+      if (doc.status === "uploaded" || !doc.fileUri) continue;
 
       // For now, save document info directly to database without storage upload
       // In production, you'd upload to storage first
-      const { error } = await supabase
-        .from('documents')
-        .insert({
-          application_id: applicationId,
-          type: doc.type,
-          file_url: doc.fileUri, // Storing the local URI for now
-          file_name: doc.fileName,
-          status: 'uploaded',
-          uploaded_by: uploadedBy,
-        });
+      const { error } = await supabase.from("documents").insert({
+        application_id: applicationId,
+        type: doc.type,
+        file_url: doc.fileUri, // Storing the local URI for now
+        file_name: doc.fileName,
+        status: "uploaded",
+        uploaded_by: uploadedBy,
+      });
 
       if (error) {
-        console.error('Error saving document:', error);
+        console.error("Error saving document:", error);
       }
     }
   } catch (error) {
-    console.error('Save documents error:', error);
+    console.error("Save documents error:", error);
     throw error;
   }
 }
@@ -184,28 +200,26 @@ async function uploadApplicationDocuments(
 async function createApplicationThread(
   applicationId: string,
   listingId: string,
-  seekerId: string
+  seekerId: string,
 ): Promise<void> {
   try {
     // Get provider ID from listing
     const { data: listing } = await supabase
-      .from('listings')
-      .select('provider_id')
-      .eq('id', listingId)
+      .from("listings")
+      .select("provider_id")
+      .eq("id", listingId)
       .single();
 
     if (!listing) return;
 
     // Create thread
-    await supabase
-      .from('threads')
-      .insert({
-        application_id: applicationId,
-        listing_id: listingId,
-        participants: [seekerId, listing.provider_id],
-      });
+    await supabase.from("threads").insert({
+      application_id: applicationId,
+      listing_id: listingId,
+      participants: [seekerId, listing.provider_id],
+    });
   } catch (error) {
-    console.error('Create thread error:', error);
+    console.error("Create thread error:", error);
     // Non-critical error, don't throw
   }
 }
@@ -216,8 +230,9 @@ async function createApplicationThread(
 export async function getApplication(id: string): Promise<Application | null> {
   try {
     const { data, error } = await supabase
-      .from('applications')
-      .select(`
+      .from("applications")
+      .select(
+        `
         *,
         listing:listings (
           id,
@@ -227,12 +242,13 @@ export async function getApplication(id: string): Promise<Application | null> {
           state,
           provider_id
         )
-      `)
-      .eq('id', id)
+      `,
+      )
+      .eq("id", id)
       .single();
 
     if (error) {
-      console.error('Get application error:', error);
+      console.error("Get application error:", error);
       return null;
     }
 
@@ -240,9 +256,9 @@ export async function getApplication(id: string): Promise<Application | null> {
     let documents = [];
     if (data) {
       const { data: docsData, error: docsError } = await supabase
-        .from('documents')
-        .select('*')
-        .eq('application_id', id);
+        .from("documents")
+        .select("*")
+        .eq("application_id", id);
 
       if (!docsError && docsData) {
         documents = docsData;
@@ -256,7 +272,7 @@ export async function getApplication(id: string): Promise<Application | null> {
     };
     return typedApplication;
   } catch (error) {
-    console.error('Get application error:', error);
+    console.error("Get application error:", error);
     return null;
   }
 }
@@ -264,13 +280,16 @@ export async function getApplication(id: string): Promise<Application | null> {
 /**
  * Get all applications for a provider (across all their listings)
  */
-export async function getProviderApplications(providerId: string): Promise<Application[]> {
+export async function getProviderApplications(
+  providerId: string,
+): Promise<Application[]> {
   try {
-    console.log('📋 Fetching applications for provider:', providerId);
+    console.log("📋 Fetching applications for provider:", providerId);
 
-    const { data, error} = await supabase
-      .from('applications')
-      .select(`
+    const { data, error } = await supabase
+      .from("applications")
+      .select(
+        `
         *,
         listing:listings!inner (
           id,
@@ -285,12 +304,13 @@ export async function getProviderApplications(providerId: string): Promise<Appli
           email,
           phone
         )
-      `)
-      .eq('listing.provider_id', providerId)
-      .order('created_at', { ascending: false });
+      `,
+      )
+      .eq("listing.provider_id", providerId)
+      .order("created_at", { ascending: false });
 
     if (error) {
-      console.error('❌ Error fetching provider applications:', error);
+      console.error("❌ Error fetching provider applications:", error);
       return [];
     }
 
@@ -304,7 +324,7 @@ export async function getProviderApplications(providerId: string): Promise<Appli
 
     return typedApplications;
   } catch (error) {
-    console.error('Failed to fetch provider applications:', error);
+    console.error("Failed to fetch provider applications:", error);
     return [];
   }
 }
@@ -314,12 +334,15 @@ export async function getProviderApplications(providerId: string): Promise<Appli
  */
 export async function getUserApplications(): Promise<Application[]> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return [];
 
     const { data, error } = await supabase
-      .from('applications')
-      .select(`
+      .from("applications")
+      .select(
+        `
         *,
         listing:listings (
           id,
@@ -330,12 +353,13 @@ export async function getUserApplications(): Promise<Application[]> {
           images,
           availability
         )
-      `)
-      .eq('seeker_id', user.id)
-      .order('created_at', { ascending: false });
+      `,
+      )
+      .eq("seeker_id", user.id)
+      .order("created_at", { ascending: false });
 
     if (error) {
-      console.error('Get user applications error:', error);
+      console.error("Get user applications error:", error);
       return [];
     }
 
@@ -346,7 +370,7 @@ export async function getUserApplications(): Promise<Application[]> {
     }));
     return typedApplications;
   } catch (error) {
-    console.error('Get user applications error:', error);
+    console.error("Get user applications error:", error);
     return [];
   }
 }
@@ -357,20 +381,20 @@ export async function getUserApplications(): Promise<Application[]> {
 export async function updateApplicationStatus(
   id: string,
   status: ApplicationStatus,
-  note?: string
+  note?: string,
 ): Promise<ApplicationResult> {
   try {
     // First, get the current application to update stage_timestamps
     const { data: currentApp, error: fetchError } = await supabase
-      .from('applications')
-      .select('stage_timestamps')
-      .eq('id', id)
+      .from("applications")
+      .select("stage_timestamps")
+      .eq("id", id)
       .single();
 
     if (fetchError) {
       return {
         success: false,
-        error: 'Failed to fetch application',
+        error: "Failed to fetch application",
       };
     }
 
@@ -391,14 +415,14 @@ export async function updateApplicationStatus(
     }
 
     const { data, error } = await supabase
-      .from('applications')
+      .from("applications")
       .update(updateData)
-      .eq('id', id)
+      .eq("id", id)
       .select()
       .single();
 
     if (error) {
-      console.error('Update application status error:', error);
+      console.error("Update application status error:", error);
       return {
         success: false,
         error: error.message,
@@ -410,10 +434,10 @@ export async function updateApplicationStatus(
       application: data as Application,
     };
   } catch (error) {
-    console.error('Update application status error:', error);
+    console.error("Update application status error:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to update status',
+      error: error instanceof Error ? error.message : "Failed to update status",
     };
   }
 }
@@ -421,46 +445,52 @@ export async function updateApplicationStatus(
 /**
  * Withdraw application
  */
-export async function withdrawApplication(id: string): Promise<ApplicationResult> {
-  return updateApplicationStatus(id, 'withdrawn', 'Withdrawn by applicant');
+export async function withdrawApplication(
+  id: string,
+): Promise<ApplicationResult> {
+  return updateApplicationStatus(id, "withdrawn", "Withdrawn by applicant");
 }
 
 /**
  * Delete application (only for seekers deleting their own applications)
  */
-export async function deleteApplication(id: string): Promise<ApplicationResult> {
+export async function deleteApplication(
+  id: string,
+): Promise<ApplicationResult> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) {
       return {
         success: false,
-        error: 'User not authenticated',
+        error: "User not authenticated",
       };
     }
 
     // First check if the application belongs to the user
     const { data: application, error: fetchError } = await supabase
-      .from('applications')
-      .select('seeker_id, status')
-      .eq('id', id)
+      .from("applications")
+      .select("seeker_id, status")
+      .eq("id", id)
       .single();
 
     if (fetchError || !application) {
       return {
         success: false,
-        error: 'Application not found',
+        error: "Application not found",
       };
     }
 
     if (application.seeker_id !== user.id) {
       return {
         success: false,
-        error: 'You can only delete your own applications',
+        error: "You can only delete your own applications",
       };
     }
 
     // Only allow deletion of certain statuses (not approved applications)
-    const deletableStatuses = ['new', 'withdrawn', 'rejected', 'draft'];
+    const deletableStatuses = ["new", "withdrawn", "rejected", "draft"];
     if (!deletableStatuses.includes(application.status)) {
       return {
         success: false,
@@ -469,34 +499,35 @@ export async function deleteApplication(id: string): Promise<ApplicationResult> 
     }
 
     // Try to use the RPC function first for proper soft delete
-    const { error: rpcError } = await supabase
-      .rpc('soft_delete_application', { application_id: id });
+    const { error: rpcError } = await supabase.rpc("soft_delete_application", {
+      application_id: id,
+    });
 
     if (rpcError) {
       // If RPC fails, fallback to direct update
-      console.log('RPC soft delete failed, using direct update:', rpcError);
+      console.log("RPC soft delete failed, using direct update:", rpcError);
 
       // Try to update with deleted_at (cast to any to bypass type checking)
       const updateData: any = {
         deleted_at: new Date().toISOString(),
-        status: 'withdrawn'
+        status: "withdrawn",
       };
 
       const { error: updateError } = await supabase
-        .from('applications')
+        .from("applications")
         .update(updateData)
-        .eq('id', id);
+        .eq("id", id);
 
       if (updateError) {
         // Final fallback: just update status
-        console.log('Direct soft delete failed, updating status only');
+        console.log("Direct soft delete failed, updating status only");
         const { error: fallbackError } = await supabase
-          .from('applications')
-          .update({ status: 'withdrawn' })
-          .eq('id', id);
+          .from("applications")
+          .update({ status: "withdrawn" })
+          .eq("id", id);
 
         if (fallbackError) {
-          console.error('Delete application error:', fallbackError);
+          console.error("Delete application error:", fallbackError);
           return {
             success: false,
             error: fallbackError.message,
@@ -509,10 +540,11 @@ export async function deleteApplication(id: string): Promise<ApplicationResult> 
       success: true,
     };
   } catch (error) {
-    console.error('Delete application error:', error);
+    console.error("Delete application error:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to delete application',
+      error:
+        error instanceof Error ? error.message : "Failed to delete application",
     };
   }
 }
@@ -522,38 +554,38 @@ export async function deleteApplication(id: string): Promise<ApplicationResult> 
  */
 export async function addDocumentToApplication(
   applicationId: string,
-  document: ApplicationDocument
+  document: ApplicationDocument,
 ): Promise<ApplicationResult> {
   try {
     if (!document.fileUri) {
       return {
         success: false,
-        error: 'No file provided',
+        error: "No file provided",
       };
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) {
       return {
         success: false,
-        error: 'User not authenticated',
+        error: "User not authenticated",
       };
     }
 
     // Create document record directly without storage upload
-    const { error } = await supabase
-      .from('documents')
-      .insert({
-        application_id: applicationId,
-        type: document.type,
-        file_url: document.fileUri, // Storing local URI for now
-        file_name: document.fileName,
-        status: 'uploaded',
-        uploaded_by: user.id,
-      });
+    const { error } = await supabase.from("documents").insert({
+      application_id: applicationId,
+      type: document.type,
+      file_url: document.fileUri, // Storing local URI for now
+      file_name: document.fileName,
+      status: "uploaded",
+      uploaded_by: user.id,
+    });
 
     if (error) {
-      console.error('Add document error:', error);
+      console.error("Add document error:", error);
       return {
         success: false,
         error: error.message,
@@ -564,10 +596,10 @@ export async function addDocumentToApplication(
       success: true,
     };
   } catch (error) {
-    console.error('Add document error:', error);
+    console.error("Add document error:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to add document',
+      error: error instanceof Error ? error.message : "Failed to add document",
     };
   }
 }
@@ -576,16 +608,16 @@ export async function addDocumentToApplication(
  * Get signed URLs for application documents
  */
 export async function getApplicationDocumentUrls(
-  applicationId: string
+  applicationId: string,
 ): Promise<Record<string, string>> {
   try {
     const { data: documents, error } = await supabase
-      .from('documents')
-      .select('type, file_url')
-      .eq('application_id', applicationId);
+      .from("documents")
+      .select("type, file_url")
+      .eq("application_id", applicationId);
 
     if (error || !documents) {
-      console.error('Get documents error:', error);
+      console.error("Get documents error:", error);
       return {};
     }
 
@@ -600,7 +632,7 @@ export async function getApplicationDocumentUrls(
 
     return urls;
   } catch (error) {
-    console.error('Get document URLs error:', error);
+    console.error("Get document URLs error:", error);
     return {};
   }
 }
@@ -610,20 +642,22 @@ export async function getApplicationDocumentUrls(
  */
 export async function hasUserApplied(listingId: string): Promise<boolean> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return false;
 
     const { data, error } = await supabase
-      .from('applications')
-      .select('id')
-      .eq('listing_id', listingId)
-      .eq('seeker_id', user.id)
-      .not('status', 'in', '["withdrawn"]')
+      .from("applications")
+      .select("id")
+      .eq("listing_id", listingId)
+      .eq("seeker_id", user.id)
+      .not("status", "in", '["withdrawn"]')
       .single();
 
     return !error && !!data;
   } catch (error) {
-    console.error('Check application error:', error);
+    console.error("Check application error:", error);
     return false;
   }
 }
@@ -639,22 +673,24 @@ export async function getExistingApplication(listingId: string): Promise<{
   message?: string;
 }> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) {
       return {
         exists: false,
         canResubmit: false,
-        message: 'User not authenticated'
+        message: "User not authenticated",
       };
     }
 
     const { data, error } = await supabase
-      .from('applications')
-      .select('*')
-      .eq('listing_id', listingId)
-      .eq('seeker_id', user.id)
-      .is('deleted_at', null) // Filter out soft-deleted applications
-      .order('created_at', { ascending: false })
+      .from("applications")
+      .select("*")
+      .eq("listing_id", listingId)
+      .eq("seeker_id", user.id)
+      .is("deleted_at", null) // Filter out soft-deleted applications
+      .order("created_at", { ascending: false })
       .limit(1);
 
     // Check if no data returned (empty array) or error occurred
@@ -675,21 +711,31 @@ export async function getExistingApplication(listingId: string): Promise<{
     const application = applicationData as Application;
 
     // If application is pending/approved, can't resubmit
-    if (['new', 'docs_needed', 'under_review', 'interview_scheduled', 'approved', 'waitlisted'].includes(application.status)) {
+    if (
+      [
+        "new",
+        "docs_needed",
+        "under_review",
+        "interview_scheduled",
+        "approved",
+        "waitlisted",
+      ].includes(application.status)
+    ) {
       return {
         exists: true,
         canResubmit: false,
         application,
-        message: `You already have a ${application.status.replace('_', ' ')} application for this listing.`
+        message: `You already have a ${application.status.replace("_", " ")} application for this listing.`,
       };
     }
 
     // If rejected, check time since rejection (24 hour cooldown)
-    if (application.status === 'rejected') {
+    if (application.status === "rejected") {
       // Try to get rejection time from stage_timestamps, fallback to updated_at
       const stageTimestamps = application.stage_timestamps as any;
       const rejectionTime = stageTimestamps?.rejected || application.updated_at;
-      const hoursSinceRejection = (Date.now() - new Date(rejectionTime).getTime()) / (1000 * 60 * 60);
+      const hoursSinceRejection =
+        (Date.now() - new Date(rejectionTime).getTime()) / (1000 * 60 * 60);
       const cooldownHours = 24; // 24 hour cooldown period
 
       if (hoursSinceRejection < cooldownHours) {
@@ -698,7 +744,7 @@ export async function getExistingApplication(listingId: string): Promise<{
           canResubmit: false,
           application,
           waitTimeHours: cooldownHours - hoursSinceRejection,
-          message: `You can resubmit after ${Math.ceil(cooldownHours - hoursSinceRejection)} hours.`
+          message: `You can resubmit after ${Math.ceil(cooldownHours - hoursSinceRejection)} hours.`,
         };
       }
 
@@ -707,17 +753,27 @@ export async function getExistingApplication(listingId: string): Promise<{
         exists: true,
         canResubmit: true,
         application,
-        message: 'You can now resubmit your application.'
+        message: "You can now resubmit your application.",
       };
     }
 
     // If withdrawn, allow immediate resubmission
-    if (application.status === 'withdrawn') {
+    if (application.status === "withdrawn") {
       return {
         exists: true,
         canResubmit: true,
         application,
-        message: 'You can submit a new application.'
+        message: "You can submit a new application.",
+      };
+    }
+
+    // If completed, allow immediate reapplication
+    if (application.status === "completed") {
+      return {
+        exists: true,
+        canResubmit: true,
+        application,
+        message: "Your previous stay has been completed. You can apply again.",
       };
     }
 
@@ -725,14 +781,14 @@ export async function getExistingApplication(listingId: string): Promise<{
     return {
       exists: true,
       canResubmit: false,
-      application
+      application,
     };
   } catch (error) {
-    console.error('Check existing application error:', error);
+    console.error("Check existing application error:", error);
     return {
       exists: false,
       canResubmit: false,
-      message: 'Error checking application status'
+      message: "Error checking application status",
     };
   }
 }
@@ -747,15 +803,17 @@ export async function getUserApplicationStats(): Promise<{
   rejected: number;
 }> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) {
       return { total: 0, pending: 0, approved: 0, rejected: 0 };
     }
 
     const { data, error } = await supabase
-      .from('applications')
-      .select('status')
-      .eq('seeker_id', user.id);
+      .from("applications")
+      .select("status")
+      .eq("seeker_id", user.id);
 
     if (error || !data) {
       return { total: 0, pending: 0, approved: 0, rejected: 0 };
@@ -763,12 +821,14 @@ export async function getUserApplicationStats(): Promise<{
 
     return {
       total: data.length,
-      pending: data.filter(a => ['new', 'docs_needed', 'under_review'].includes(a.status)).length,
-      approved: data.filter(a => a.status === 'approved').length,
-      rejected: data.filter(a => a.status === 'rejected').length,
+      pending: data.filter((a) =>
+        ["new", "docs_needed", "under_review"].includes(a.status),
+      ).length,
+      approved: data.filter((a) => a.status === "approved").length,
+      rejected: data.filter((a) => a.status === "rejected").length,
     };
   } catch (error) {
-    console.error('Get application stats error:', error);
+    console.error("Get application stats error:", error);
     return { total: 0, pending: 0, approved: 0, rejected: 0 };
   }
 }
@@ -778,23 +838,28 @@ export async function getUserApplicationStats(): Promise<{
  */
 export async function saveApplicationDraft(
   listingId: string,
-  data: Partial<ApplicationData>
+  data: Partial<ApplicationData>,
 ): Promise<void> {
   try {
     const key = `application_draft_${listingId}`;
-    localStorage.setItem(key, JSON.stringify({
-      data,
-      timestamp: Date.now(),
-    }));
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        data,
+        timestamp: Date.now(),
+      }),
+    );
   } catch (error) {
-    console.error('Save draft error:', error);
+    console.error("Save draft error:", error);
   }
 }
 
 /**
  * Get application draft
  */
-export function getApplicationDraft(listingId: string): Partial<ApplicationData> | null {
+export function getApplicationDraft(
+  listingId: string,
+): Partial<ApplicationData> | null {
   try {
     const key = `application_draft_${listingId}`;
     const draft = localStorage.getItem(key);
@@ -804,7 +869,7 @@ export function getApplicationDraft(listingId: string): Partial<ApplicationData>
     const parsed = JSON.parse(draft);
 
     // Check if draft is older than 7 days
-    const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     if (parsed.timestamp < sevenDaysAgo) {
       localStorage.removeItem(key);
       return null;
@@ -812,7 +877,7 @@ export function getApplicationDraft(listingId: string): Partial<ApplicationData>
 
     return parsed.data;
   } catch (error) {
-    console.error('Get draft error:', error);
+    console.error("Get draft error:", error);
     return null;
   }
 }
@@ -825,6 +890,6 @@ export function clearApplicationDraft(listingId: string): void {
     const key = `application_draft_${listingId}`;
     localStorage.removeItem(key);
   } catch (error) {
-    console.error('Clear draft error:', error);
+    console.error("Clear draft error:", error);
   }
 }

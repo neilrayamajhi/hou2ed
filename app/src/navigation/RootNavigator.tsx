@@ -26,6 +26,7 @@ import GeoTest from "../screens/Provider/GeoTest";
 import AddressPicker from "../screens/Provider/AddressPicker";
 import ApplicationsInbox from "../screens/Provider/ApplicationsInbox";
 import ApplicationDetail from "../screens/Provider/ApplicationDetail";
+import BlockedUsersScreen from "../screens/Settings/BlockedUsersScreen";
 import { RootStackParamList } from "./types";
 
 // Create a stack navigator - this manages screens that stack on top of each other
@@ -104,6 +105,9 @@ export default function RootNavigator() {
         <Stack.Screen name="AddressPicker" component={AddressPicker} />
         <Stack.Screen name="ApplicationsInbox" component={ApplicationsInbox} />
         <Stack.Screen name="ApplicationDetail" component={ApplicationDetail} />
+
+        {/* Settings Screens */}
+        <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

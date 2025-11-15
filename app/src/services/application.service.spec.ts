@@ -1,4 +1,4 @@
-import fc from 'fast-check';
+import fc from "fast-check";
 import {
   createApplication,
   getApplication,
@@ -7,18 +7,19 @@ import {
   withdrawApplication,
   addDocumentToApplication,
   hasUserApplied,
+  getExistingApplication,
   getUserApplicationStats,
   saveApplicationDraft,
   getApplicationDraft,
   clearApplicationDraft,
   type ApplicationData,
   type CreateApplicationParams,
-} from './application.service';
-import { supabase } from '../lib/supabase';
-import { uploadApplicationDocument } from './storage.service';
+} from "./application.service";
+import { supabase } from "../lib/supabase";
+import { uploadApplicationDocument } from "./storage.service";
 
 // Mock dependencies
-jest.mock('../lib/supabase', () => ({
+jest.mock("../lib/supabase", () => ({
   supabase: {
     auth: {
       getUser: jest.fn(),
@@ -27,19 +28,19 @@ jest.mock('../lib/supabase', () => ({
   },
 }));
 
-jest.mock('./storage.service', () => ({
+jest.mock("./storage.service", () => ({
   uploadApplicationDocument: jest.fn(),
   getDocumentSignedUrl: jest.fn(),
   validateDocumentFile: jest.fn(),
 }));
 
-describe('createApplication', () => {
-  const mockUser = { id: 'user-123', email: 'test@example.com' };
+describe("createApplication", () => {
+  const mockUser = { id: "user-123", email: "test@example.com" };
   const mockApplicationData: ApplicationData = {
-    fullName: 'John Doe',
-    phone: '555-0123',
-    email: 'john@example.com',
-    eligibilityTags: ['veteran', 'single'],
+    fullName: "John Doe",
+    phone: "555-0123",
+    email: "john@example.com",
+    eligibilityTags: ["veteran", "single"],
   };
 
   beforeEach(() => {
@@ -50,12 +51,12 @@ describe('createApplication', () => {
     } as any);
   });
 
-  test('should create application successfully', async () => {
+  test("should create application successfully", async () => {
     const mockApplication = {
-      id: 'app-123',
-      listing_id: 'listing-456',
+      id: "app-123",
+      listing_id: "listing-456",
       seeker_id: mockUser.id,
-      status: 'new',
+      status: "new",
       application_data: mockApplicationData,
     };
 
@@ -69,18 +70,18 @@ describe('createApplication', () => {
     };
 
     (supabase.from as jest.Mock).mockImplementation((table) => {
-      if (table === 'applications') return fromMock as any;
-      if (table === 'listings') {
+      if (table === "applications") return fromMock as any;
+      if (table === "listings") {
         return {
           select: jest.fn().mockReturnThis(),
           eq: jest.fn().mockReturnThis(),
           single: jest.fn().mockResolvedValue({
-            data: { provider_id: 'provider-789' },
+            data: { provider_id: "provider-789" },
             error: null,
           }),
         } as any;
       }
-      if (table === 'threads') {
+      if (table === "threads") {
         return {
           insert: jest.fn().mockResolvedValue({ error: null }),
         } as any;
@@ -89,67 +90,67 @@ describe('createApplication', () => {
     });
 
     const params: CreateApplicationParams = {
-      listingId: 'listing-456',
+      listingId: "listing-456",
       data: mockApplicationData,
-      signature: 'John Doe',
+      signature: "John Doe",
     };
 
     const result = await createApplication(params);
 
     expect(result.success).toBe(true);
-    expect(result.application?.id).toBe('app-123');
+    expect(result.application?.id).toBe("app-123");
     expect(fromMock.insert).toHaveBeenCalledWith({
-      listing_id: 'listing-456',
+      listing_id: "listing-456",
       seeker_id: mockUser.id,
-      status: 'new',
+      status: "new",
       application_data: mockApplicationData,
       stage_timestamps: {
         new: expect.any(String),
       },
-      consent_signature: 'John Doe',
+      consent_signature: "John Doe",
       consent_timestamp: expect.any(String),
     });
   });
 
-  test('should handle unauthenticated user', async () => {
+  test("should handle unauthenticated user", async () => {
     (supabase.auth.getUser as jest.Mock).mockResolvedValue({
       data: { user: null },
       error: null,
     } as any);
 
     const result = await createApplication({
-      listingId: 'listing-456',
+      listingId: "listing-456",
       data: mockApplicationData,
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe('User not authenticated');
+    expect(result.error).toBe("User not authenticated");
   });
 
-  test('should upload documents if provided', async () => {
+  test("should upload documents if provided", async () => {
     const mockApplication = {
-      id: 'app-123',
-      listing_id: 'listing-456',
+      id: "app-123",
+      listing_id: "listing-456",
       seeker_id: mockUser.id,
     };
 
     const documents = [
       {
-        id: 'doc-1',
-        type: 'id' as const,
-        fileName: 'id.pdf',
-        fileUri: 'file://id.pdf',
-        status: 'pending' as const,
+        id: "doc-1",
+        type: "id" as const,
+        fileName: "id.pdf",
+        fileUri: "file://id.pdf",
+        status: "pending" as const,
       },
     ];
 
     (uploadApplicationDocument as jest.Mock).mockResolvedValue({
       success: true,
-      path: 'documents/id.pdf',
+      path: "documents/id.pdf",
     });
 
     (supabase.from as jest.Mock).mockImplementation((table) => {
-      if (table === 'applications') {
+      if (table === "applications") {
         return {
           insert: jest.fn().mockReturnThis(),
           select: jest.fn().mockReturnThis(),
@@ -159,16 +160,18 @@ describe('createApplication', () => {
           }),
         } as any;
       }
-      if (table === 'documents') {
+      if (table === "documents") {
         return {
           insert: jest.fn().mockResolvedValue({ error: null }),
         } as any;
       }
-      if (table === 'listings' || table === 'threads') {
+      if (table === "listings" || table === "threads") {
         return {
           select: jest.fn().mockReturnThis(),
           eq: jest.fn().mockReturnThis(),
-          single: jest.fn().mockResolvedValue({ data: { provider_id: 'p-1' }, error: null }),
+          single: jest
+            .fn()
+            .mockResolvedValue({ data: { provider_id: "p-1" }, error: null }),
           insert: jest.fn().mockResolvedValue({ error: null }),
         } as any;
       }
@@ -176,22 +179,22 @@ describe('createApplication', () => {
     });
 
     const result = await createApplication({
-      listingId: 'listing-456',
+      listingId: "listing-456",
       data: mockApplicationData,
       documents,
     });
 
     expect(result.success).toBe(true);
     expect(uploadApplicationDocument).toHaveBeenCalledWith(
-      'file://id.pdf',
-      'app-123',
-      'id'
+      "file://id.pdf",
+      "app-123",
+      "id",
     );
   });
 });
 
-describe('getUserApplications', () => {
-  const mockUser = { id: 'user-123' };
+describe("getUserApplications", () => {
+  const mockUser = { id: "user-123" };
 
   beforeEach(() => {
     (supabase.auth.getUser as jest.Mock).mockResolvedValue({
@@ -200,19 +203,19 @@ describe('getUserApplications', () => {
     } as any);
   });
 
-  test('should fetch user applications', async () => {
+  test("should fetch user applications", async () => {
     const mockApplications = [
       {
-        id: 'app-1',
-        listing_id: 'listing-1',
-        status: 'new',
-        created_at: '2024-01-01',
+        id: "app-1",
+        listing_id: "listing-1",
+        status: "new",
+        created_at: "2024-01-01",
       },
       {
-        id: 'app-2',
-        listing_id: 'listing-2',
-        status: 'approved',
-        created_at: '2024-01-02',
+        id: "app-2",
+        listing_id: "listing-2",
+        status: "approved",
+        created_at: "2024-01-02",
       },
     ];
 
@@ -230,11 +233,13 @@ describe('getUserApplications', () => {
     const result = await getUserApplications();
 
     expect(result).toHaveLength(2);
-    expect(fromMock.eq).toHaveBeenCalledWith('seeker_id', mockUser.id);
-    expect(fromMock.order).toHaveBeenCalledWith('created_at', { ascending: false });
+    expect(fromMock.eq).toHaveBeenCalledWith("seeker_id", mockUser.id);
+    expect(fromMock.order).toHaveBeenCalledWith("created_at", {
+      ascending: false,
+    });
   });
 
-  test('should return empty array when user not authenticated', async () => {
+  test("should return empty array when user not authenticated", async () => {
     (supabase.auth.getUser as jest.Mock).mockResolvedValue({
       data: { user: null },
       error: null,
@@ -246,11 +251,11 @@ describe('getUserApplications', () => {
   });
 });
 
-describe('updateApplicationStatus', () => {
-  test('should update application status successfully', async () => {
+describe("updateApplicationStatus", () => {
+  test("should update application status successfully", async () => {
     const mockUpdatedApplication = {
-      id: 'app-123',
-      status: 'under_review',
+      id: "app-123",
+      status: "under_review",
       updated_at: new Date().toISOString(),
     };
 
@@ -266,42 +271,46 @@ describe('updateApplicationStatus', () => {
 
     (supabase.from as jest.Mock).mockReturnValue(fromMock as any);
 
-    const result = await updateApplicationStatus('app-123', 'under_review', 'Reviewing documents');
+    const result = await updateApplicationStatus(
+      "app-123",
+      "under_review",
+      "Reviewing documents",
+    );
 
     expect(result.success).toBe(true);
-    expect(result.application?.status).toBe('under_review');
+    expect(result.application?.status).toBe("under_review");
     expect(fromMock.update).toHaveBeenCalledWith({
-      status: 'under_review',
+      status: "under_review",
       updated_at: expect.any(String),
-      'stage_timestamps.under_review': expect.any(String),
-      notes: 'Reviewing documents',
+      "stage_timestamps.under_review": expect.any(String),
+      notes: "Reviewing documents",
     });
   });
 
-  test('should handle update error', async () => {
+  test("should handle update error", async () => {
     const fromMock = {
       update: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
       single: jest.fn().mockResolvedValue({
         data: null,
-        error: new Error('Update failed'),
+        error: new Error("Update failed"),
       }),
     };
 
     (supabase.from as jest.Mock).mockReturnValue(fromMock as any);
 
-    const result = await updateApplicationStatus('app-123', 'rejected');
+    const result = await updateApplicationStatus("app-123", "rejected");
 
     expect(result.success).toBe(false);
     expect(result.error).toBeDefined();
   });
 });
 
-describe('hasUserApplied', () => {
-  test('should return true when user has applied', async () => {
+describe("hasUserApplied", () => {
+  test("should return true when user has applied", async () => {
     (supabase.auth.getUser as jest.Mock).mockResolvedValue({
-      data: { user: { id: 'user-123' } },
+      data: { user: { id: "user-123" } },
       error: null,
     } as any);
 
@@ -310,21 +319,21 @@ describe('hasUserApplied', () => {
       eq: jest.fn().mockReturnThis(),
       not: jest.fn().mockReturnThis(),
       single: jest.fn().mockResolvedValue({
-        data: { id: 'app-123' },
+        data: { id: "app-123" },
         error: null,
       }),
     };
 
     (supabase.from as jest.Mock).mockReturnValue(fromMock as any);
 
-    const result = await hasUserApplied('listing-456');
+    const result = await hasUserApplied("listing-456");
 
     expect(result).toBe(true);
   });
 
-  test('should return false when user has not applied', async () => {
+  test("should return false when user has not applied", async () => {
     (supabase.auth.getUser as jest.Mock).mockResolvedValue({
-      data: { user: { id: 'user-123' } },
+      data: { user: { id: "user-123" } },
       error: null,
     } as any);
 
@@ -334,31 +343,138 @@ describe('hasUserApplied', () => {
       not: jest.fn().mockReturnThis(),
       single: jest.fn().mockResolvedValue({
         data: null,
-        error: { code: 'PGRST116' }, // No rows found
+        error: { code: "PGRST116" }, // No rows found
       }),
     };
 
     (supabase.from as jest.Mock).mockReturnValue(fromMock as any);
 
-    const result = await hasUserApplied('listing-456');
+    const result = await hasUserApplied("listing-456");
 
     expect(result).toBe(false);
   });
 });
 
-describe('getUserApplicationStats', () => {
-  test('should calculate application statistics correctly', async () => {
+describe("getExistingApplication", () => {
+  const mockUser = { id: "user-123", email: "test@example.com" };
+  const listingId = "listing-456";
+
+  beforeEach(() => {
+    jest.clearAllMocks();
     (supabase.auth.getUser as jest.Mock).mockResolvedValue({
-      data: { user: { id: 'user-123' } },
+      data: { user: mockUser },
+      error: null,
+    } as any);
+  });
+
+  test("allows reapplication when previous application is completed", async () => {
+    const mockCompletedApplication = {
+      id: "app-123",
+      listing_id: listingId,
+      seeker_id: mockUser.id,
+      status: "completed",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      stage_timestamps: {},
+    };
+
+    const fromMock = {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      is: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockResolvedValue({
+        data: [mockCompletedApplication],
+        error: null,
+      }),
+    };
+
+    (supabase.from as jest.Mock).mockReturnValue(fromMock as any);
+
+    const result = await getExistingApplication(listingId);
+
+    expect(result.exists).toBe(true);
+    expect(result.canResubmit).toBe(true);
+    expect(result.message).toContain("previous stay has been completed");
+    expect(result.application?.status).toBe("completed");
+  });
+
+  test("prevents reapplication when application is approved", async () => {
+    const mockApprovedApplication = {
+      id: "app-456",
+      listing_id: listingId,
+      seeker_id: mockUser.id,
+      status: "approved",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      stage_timestamps: {},
+    };
+
+    const fromMock = {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      is: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockResolvedValue({
+        data: [mockApprovedApplication],
+        error: null,
+      }),
+    };
+
+    (supabase.from as jest.Mock).mockReturnValue(fromMock as any);
+
+    const result = await getExistingApplication(listingId);
+
+    expect(result.exists).toBe(true);
+    expect(result.canResubmit).toBe(false);
+    expect(result.message).toContain("approved");
+  });
+
+  test("allows reapplication when application is withdrawn", async () => {
+    const mockWithdrawnApplication = {
+      id: "app-789",
+      listing_id: listingId,
+      seeker_id: mockUser.id,
+      status: "withdrawn",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      stage_timestamps: {},
+    };
+
+    const fromMock = {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      is: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockResolvedValue({
+        data: [mockWithdrawnApplication],
+        error: null,
+      }),
+    };
+
+    (supabase.from as jest.Mock).mockReturnValue(fromMock as any);
+
+    const result = await getExistingApplication(listingId);
+
+    expect(result.exists).toBe(true);
+    expect(result.canResubmit).toBe(true);
+    expect(result.message).toContain("new application");
+  });
+});
+
+describe("getUserApplicationStats", () => {
+  test("should calculate application statistics correctly", async () => {
+    (supabase.auth.getUser as jest.Mock).mockResolvedValue({
+      data: { user: { id: "user-123" } },
       error: null,
     } as any);
 
     const mockApplications = [
-      { status: 'new' },
-      { status: 'docs_needed' },
-      { status: 'under_review' },
-      { status: 'approved' },
-      { status: 'rejected' },
+      { status: "new" },
+      { status: "docs_needed" },
+      { status: "under_review" },
+      { status: "approved" },
+      { status: "rejected" },
     ];
 
     const fromMock = {
@@ -382,20 +498,20 @@ describe('getUserApplicationStats', () => {
   });
 });
 
-describe('Application Draft Functions', () => {
+describe("Application Draft Functions", () => {
   beforeEach(() => {
     localStorage.clear();
   });
 
-  test('should save application draft', () => {
+  test("should save application draft", () => {
     const draftData = {
-      fullName: 'John Doe',
-      email: 'john@example.com',
+      fullName: "John Doe",
+      email: "john@example.com",
     };
 
-    saveApplicationDraft('listing-123', draftData);
+    saveApplicationDraft("listing-123", draftData);
 
-    const stored = localStorage.getItem('application_draft_listing-123');
+    const stored = localStorage.getItem("application_draft_listing-123");
     expect(stored).toBeTruthy();
 
     const parsed = JSON.parse(stored!);
@@ -403,69 +519,77 @@ describe('Application Draft Functions', () => {
     expect(parsed.timestamp).toBeDefined();
   });
 
-  test('should retrieve valid draft', () => {
+  test("should retrieve valid draft", () => {
     const draftData = {
-      fullName: 'John Doe',
-      email: 'john@example.com',
+      fullName: "John Doe",
+      email: "john@example.com",
     };
 
     localStorage.setItem(
-      'application_draft_listing-123',
+      "application_draft_listing-123",
       JSON.stringify({
         data: draftData,
         timestamp: Date.now(),
-      })
+      }),
     );
 
-    const retrieved = getApplicationDraft('listing-123');
+    const retrieved = getApplicationDraft("listing-123");
 
     expect(retrieved).toEqual(draftData);
   });
 
-  test('should return null for expired draft', () => {
-    const eightDaysAgo = Date.now() - (8 * 24 * 60 * 60 * 1000);
+  test("should return null for expired draft", () => {
+    const eightDaysAgo = Date.now() - 8 * 24 * 60 * 60 * 1000;
 
     localStorage.setItem(
-      'application_draft_listing-123',
+      "application_draft_listing-123",
       JSON.stringify({
-        data: { fullName: 'Old Draft' },
+        data: { fullName: "Old Draft" },
         timestamp: eightDaysAgo,
-      })
+      }),
     );
 
-    const retrieved = getApplicationDraft('listing-123');
+    const retrieved = getApplicationDraft("listing-123");
 
     expect(retrieved).toBeNull();
-    expect(localStorage.getItem('application_draft_listing-123')).toBeNull();
+    expect(localStorage.getItem("application_draft_listing-123")).toBeNull();
   });
 
-  test('should clear draft', () => {
+  test("should clear draft", () => {
     localStorage.setItem(
-      'application_draft_listing-123',
+      "application_draft_listing-123",
       JSON.stringify({
-        data: { fullName: 'Test' },
+        data: { fullName: "Test" },
         timestamp: Date.now(),
-      })
+      }),
     );
 
-    clearApplicationDraft('listing-123');
+    clearApplicationDraft("listing-123");
 
-    expect(localStorage.getItem('application_draft_listing-123')).toBeNull();
+    expect(localStorage.getItem("application_draft_listing-123")).toBeNull();
   });
 });
 
-describe('Property-based tests', () => {
-  describe('Application Data validation', () => {
-    test('should handle any valid application data shape', () => {
+describe("Property-based tests", () => {
+  describe("Application Data validation", () => {
+    test("should handle any valid application data shape", () => {
       fc.assert(
         fc.property(
           fc.record({
             fullName: fc.string({ minLength: 1, maxLength: 100 }),
             email: fc.emailAddress(),
-            phone: fc.string({ minLength: 10, maxLength: 15 }).map(s => s.replace(/[^0-9]/g, '')),
+            phone: fc
+              .string({ minLength: 10, maxLength: 15 })
+              .map((s) => s.replace(/[^0-9]/g, "")),
             eligibilityTags: fc.array(
-              fc.constantFrom('veteran', 'single', 'family', 'disabled', 'senior'),
-              { minLength: 0, maxLength: 10 }
+              fc.constantFrom(
+                "veteran",
+                "single",
+                "family",
+                "disabled",
+                "senior",
+              ),
+              { minLength: 0, maxLength: 10 },
             ),
           }),
           (data) => {
@@ -480,14 +604,21 @@ describe('Property-based tests', () => {
 
             // Property: Phone should only contain digits
             expect(data.phone).toMatch(/^[0-9]+$/);
-          }
+          },
         ),
-        { numRuns: 100 }
+        { numRuns: 100 },
       );
     });
 
-    test('application status transitions should be valid', () => {
-      const validStatuses = ['new', 'docs_needed', 'under_review', 'approved', 'rejected', 'waitlisted'] as const;
+    test("application status transitions should be valid", () => {
+      const validStatuses = [
+        "new",
+        "docs_needed",
+        "under_review",
+        "approved",
+        "rejected",
+        "waitlisted",
+      ] as const;
 
       fc.assert(
         fc.property(
@@ -499,18 +630,18 @@ describe('Property-based tests', () => {
             expect(validStatuses).toContain(toStatus);
 
             // Property: Certain transitions should not be allowed
-            if (fromStatus === 'rejected' && toStatus === 'approved') {
+            if (fromStatus === "rejected" && toStatus === "approved") {
               // This would be a business rule violation
-              expect(fromStatus).not.toBe('rejected');
+              expect(fromStatus).not.toBe("rejected");
             }
-          }
-        )
+          },
+        ),
       );
     });
   });
 
-  describe('Draft storage properties', () => {
-    test('draft should preserve data integrity', () => {
+  describe("Draft storage properties", () => {
+    test("draft should preserve data integrity", () => {
       fc.assert(
         fc.property(
           fc.record({
@@ -535,15 +666,18 @@ describe('Property-based tests', () => {
 
             // Property: After clearing, draft should be null
             expect(getApplicationDraft(listingId)).toBeNull();
-          }
-        )
+          },
+        ),
       );
     });
 
-    test('draft key generation should be unique per listing', () => {
+    test("draft key generation should be unique per listing", () => {
       fc.assert(
         fc.property(
-          fc.array(fc.string({ minLength: 1, maxLength: 50 }), { minLength: 2, maxLength: 10 }),
+          fc.array(fc.string({ minLength: 1, maxLength: 50 }), {
+            minLength: 2,
+            maxLength: 10,
+          }),
           (listingIds) => {
             const uniqueIds = [...new Set(listingIds)];
 
@@ -559,44 +693,49 @@ describe('Property-based tests', () => {
             });
 
             // Clean up
-            uniqueIds.forEach(id => clearApplicationDraft(id));
-          }
-        )
+            uniqueIds.forEach((id) => clearApplicationDraft(id));
+          },
+        ),
       );
     });
   });
 
-  describe('Document type validation', () => {
-    test('document types should be valid enum values', () => {
-      const validTypes = ['id', 'income_proof', 'insurance', 'referral_letter', 'medical_clearance', 'background_check', 'other'];
+  describe("Document type validation", () => {
+    test("document types should be valid enum values", () => {
+      const validTypes = [
+        "id",
+        "income_proof",
+        "insurance",
+        "referral_letter",
+        "medical_clearance",
+        "background_check",
+        "other",
+      ];
 
       fc.assert(
-        fc.property(
-          fc.constantFrom(...validTypes),
-          (docType) => {
-            // Property: Document type should always be valid
-            expect(validTypes).toContain(docType);
-          }
-        )
+        fc.property(fc.constantFrom(...validTypes), (docType) => {
+          // Property: Document type should always be valid
+          expect(validTypes).toContain(docType);
+        }),
       );
     });
   });
 });
 
-describe('Parameterized edge case tests', () => {
+describe("Parameterized edge case tests", () => {
   const testCases = [
-    { name: 'empty string', value: '' },
-    { name: 'whitespace only', value: '   ' },
-    { name: 'special characters', value: '@#$%^&*()' },
-    { name: 'very long string', value: 'a'.repeat(1000) },
-    { name: 'unicode characters', value: '你好世界🌍' },
-    { name: 'SQL injection attempt', value: "'; DROP TABLE applications; --" },
-    { name: 'XSS attempt', value: '<script>alert("xss")</script>' },
+    { name: "empty string", value: "" },
+    { name: "whitespace only", value: "   " },
+    { name: "special characters", value: "@#$%^&*()" },
+    { name: "very long string", value: "a".repeat(1000) },
+    { name: "unicode characters", value: "你好世界🌍" },
+    { name: "SQL injection attempt", value: "'; DROP TABLE applications; --" },
+    { name: "XSS attempt", value: '<script>alert("xss")</script>' },
   ];
 
   testCases.forEach(({ name, value }) => {
     test(`should handle ${name} in application data safely`, async () => {
-      const mockUser = { id: 'user-123' };
+      const mockUser = { id: "user-123" };
       (supabase.auth.getUser as jest.Mock).mockResolvedValue({
         data: { user: mockUser },
         error: null,
@@ -607,18 +746,18 @@ describe('Parameterized edge case tests', () => {
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
           data: null,
-          error: new Error('Validation error'),
+          error: new Error("Validation error"),
         }),
       };
 
       (supabase.from as jest.Mock).mockReturnValue(fromMock as any);
 
       const result = await createApplication({
-        listingId: 'listing-123',
+        listingId: "listing-123",
         data: {
           fullName: value,
-          email: 'test@example.com',
-          phone: '555-0123',
+          email: "test@example.com",
+          phone: "555-0123",
           eligibilityTags: [],
         },
       });
@@ -629,8 +768,8 @@ describe('Parameterized edge case tests', () => {
     });
   });
 
-  describe('Concurrent operations', () => {
-    test('should handle multiple simultaneous draft saves', async () => {
+  describe("Concurrent operations", () => {
+    test("should handle multiple simultaneous draft saves", async () => {
       const operations = Array.from({ length: 10 }, (_, i) => ({
         listingId: `listing-${i}`,
         data: { fullName: `User ${i}` },
@@ -639,8 +778,8 @@ describe('Parameterized edge case tests', () => {
       // Save all drafts concurrently
       await Promise.all(
         operations.map(({ listingId, data }) =>
-          Promise.resolve(saveApplicationDraft(listingId, data))
-        )
+          Promise.resolve(saveApplicationDraft(listingId, data)),
+        ),
       );
 
       // Verify all drafts were saved correctly
@@ -652,37 +791,37 @@ describe('Parameterized edge case tests', () => {
     });
   });
 
-  describe('Boundary value tests', () => {
-    test('should handle minimum and maximum field lengths', () => {
+  describe("Boundary value tests", () => {
+    test("should handle minimum and maximum field lengths", () => {
       const testData = [
-        { field: 'fullName', min: 1, max: 100 },
-        { field: 'phone', min: 10, max: 15 },
-        { field: 'email', min: 5, max: 254 }, // RFC 5321
+        { field: "fullName", min: 1, max: 100 },
+        { field: "phone", min: 10, max: 15 },
+        { field: "email", min: 5, max: 254 }, // RFC 5321
       ];
 
       testData.forEach(({ field, min, max }) => {
         // Test minimum length
-        const minData = { [field]: 'a'.repeat(min) };
-        saveApplicationDraft('test-min', minData);
-        expect(getApplicationDraft('test-min')).toEqual(minData);
+        const minData = { [field]: "a".repeat(min) };
+        saveApplicationDraft("test-min", minData);
+        expect(getApplicationDraft("test-min")).toEqual(minData);
 
         // Test maximum length
-        const maxData = { [field]: 'a'.repeat(max) };
-        saveApplicationDraft('test-max', maxData);
-        expect(getApplicationDraft('test-max')).toEqual(maxData);
+        const maxData = { [field]: "a".repeat(max) };
+        saveApplicationDraft("test-max", maxData);
+        expect(getApplicationDraft("test-max")).toEqual(maxData);
 
         // Clean up
-        clearApplicationDraft('test-min');
-        clearApplicationDraft('test-max');
+        clearApplicationDraft("test-min");
+        clearApplicationDraft("test-max");
       });
     });
 
-    test('should handle array size limits for eligibility tags', () => {
+    test("should handle array size limits for eligibility tags", () => {
       const testCases = [
-        { count: 0, description: 'empty array' },
-        { count: 1, description: 'single tag' },
-        { count: 10, description: 'moderate number of tags' },
-        { count: 100, description: 'large number of tags' },
+        { count: 0, description: "empty array" },
+        { count: 1, description: "single tag" },
+        { count: 10, description: "moderate number of tags" },
+        { count: 100, description: "large number of tags" },
       ];
 
       testCases.forEach(({ count, description }) => {
