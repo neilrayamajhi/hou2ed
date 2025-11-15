@@ -191,6 +191,17 @@ export default function EditListing() {
       return;
     }
 
+    // Validate bed counts
+    const totalBedsNum = Number(totalBeds);
+    const availableBedsNum = Number(availableBeds || 0);
+    if (availableBedsNum > totalBedsNum) {
+      Alert.alert(
+        "Invalid Bed Count",
+        `Available beds (${availableBedsNum}) cannot exceed total beds (${totalBedsNum}). Please correct this before saving.`,
+      );
+      return;
+    }
+
     saveChanges();
   };
 

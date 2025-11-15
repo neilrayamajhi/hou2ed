@@ -287,6 +287,17 @@ export async function createListing(
   listingData: CreateListingInput,
 ): Promise<{ success: boolean; listingId?: string; error?: string }> {
   try {
+    // Validate bed counts - available beds cannot exceed total beds
+    if (
+      listingData.availableBeds !== undefined &&
+      listingData.availableBeds > listingData.totalBeds
+    ) {
+      return {
+        success: false,
+        error: `Available beds (${listingData.availableBeds}) cannot exceed total beds (${listingData.totalBeds})`,
+      };
+    }
+
     // Build amenities object from array
     const amenitiesObj: any = {};
     if (listingData.amenities && listingData.amenities.length > 0) {
@@ -485,6 +496,18 @@ export async function updateListing(
   updates: UpdateListingInput,
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Validate bed counts - available beds cannot exceed total beds
+    if (
+      updates.totalBeds !== undefined &&
+      updates.availableBeds !== undefined &&
+      updates.availableBeds > updates.totalBeds
+    ) {
+      return {
+        success: false,
+        error: `Available beds (${updates.availableBeds}) cannot exceed total beds (${updates.totalBeds})`,
+      };
+    }
+
     // Build the update object
     const updateData: any = {
       updated_at: new Date().toISOString(),

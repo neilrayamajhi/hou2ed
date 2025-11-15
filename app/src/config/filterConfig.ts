@@ -17,99 +17,66 @@ export type FilterSections = {
   [key: string]: FilterSectionConfig;
 };
 
+// Based on EXACTLY what ListingWizard collects
 export const FILTER_SECTIONS: FilterSections = {
-  housingType: {
-    title: "Housing Type",
-    filters: [
-      { key: "emergencyShelter", label: "Emergency Shelter" },
-      { key: "transitionalHousing", label: "Transitional Housing" },
-      { key: "rapidRehousing", label: "Rapid Rehousing" },
-      { key: "permanentSupportive", label: "Permanent Supportive" },
-      { key: "soberLiving", label: "Sober Living" },
-      { key: "halfwayHouse", label: "Halfway House" },
-      { key: "veteransHousing", label: "Veterans Housing" },
-      { key: "youthHousing", label: "Youth Housing" },
-      { key: "domesticViolenceShelter", label: "DV Shelter" },
-    ],
-  },
-  unitBedType: {
-    title: "Unit & Bed Type",
-    filters: [
-      { key: "privateRoom", label: "Private Room" },
-      { key: "sharedRoom", label: "Shared Room" },
-      { key: "dormStyle", label: "Dorm Style" },
-      { key: "privateApartment", label: "Private Apartment" },
-      { key: "familyUnit", label: "Family Unit" },
-      { key: "couplesAllowed", label: "Couples Allowed" },
-      { key: "petsAllowed", label: "Pets Allowed" },
-    ],
-  },
   amenities: {
     title: "Amenities",
     filters: [
-      { key: "wifi", label: "WiFi" },
-      { key: "parking", label: "Parking" },
+      { key: "wifi", label: "Wi-Fi" },
       { key: "laundry", label: "Laundry" },
       { key: "kitchen", label: "Kitchen" },
-      { key: "mealProgram", label: "Meal Program" },
-      { key: "computerLab", label: "Computer Lab" },
-      { key: "gym", label: "Gym" },
-      { key: "outdoorSpace", label: "Outdoor Space" },
-    ],
-  },
-  accessibility: {
-    title: "Accessibility",
-    filters: [
-      { key: "wheelchairAccessible", label: "Wheelchair Accessible" },
-      { key: "elevatorsAvailable", label: "Elevators" },
-      { key: "accessibleBathroom", label: "Accessible Bathroom" },
-      { key: "serviceAnimalAllowed", label: "Service Animals OK" },
-    ],
-  },
-  eligibility: {
-    title: "Eligibility",
-    filters: [
-      { key: "noIdRequired", label: "No ID Required" },
-      { key: "noCreditCheck", label: "No Credit Check" },
-      { key: "noBackgroundCheck", label: "No Background Check" },
-      { key: "noIncomeRequirement", label: "No Income Requirement" },
-      { key: "housingVoucherAccepted", label: "Housing Vouchers OK" },
-      { key: "veteransOnly", label: "Veterans Only" },
-      { key: "familiesOnly", label: "Families Only" },
-      { key: "lgbtqFriendly", label: "LGBTQ+ Friendly" },
+      { key: "meals", label: "Meals Provided" },
+      { key: "showers", label: "Showers" },
+      { key: "storage", label: "Storage Lockers" },
+      { key: "common_area", label: "Common Area" },
+      { key: "ac", label: "Air Conditioning" },
+      { key: "heating", label: "Heating" },
     ],
   },
   supportPrograms: {
-    title: "Support Programs",
+    title: "Services",
     filters: [
-      { key: "caseManagement", label: "Case Management" },
-      { key: "mentalHealthServices", label: "Mental Health" },
-      { key: "substanceAbuseProgram", label: "Substance Abuse" },
-      { key: "jobTraining", label: "Job Training" },
-      { key: "medicalServices", label: "Medical Services" },
-      { key: "childcare", label: "Childcare" },
+      { key: "case_management", label: "Case Management" },
+      { key: "medical", label: "Medical Services" },
+      { key: "mental_health", label: "Mental Health Services" },
+      { key: "substance_abuse", label: "Substance Abuse Services" },
+      { key: "job_training", label: "Job Training" },
+      { key: "education", label: "Education Support" },
+      { key: "transportation", label: "Transportation Assistance" },
+      { key: "legal", label: "Legal Aid" },
+    ],
+  },
+  eligibility: {
+    title: "Who Can Apply",
+    filters: [
+      { key: "all_genders", label: "All Genders Welcome" },
+      { key: "men_only", label: "Men Only" },
+      { key: "women_only", label: "Women Only" },
+      { key: "families", label: "Families Welcome" },
+      { key: "veterans", label: "Veterans Welcome" },
+      { key: "lgbtq", label: "LGBTQ+ Friendly" },
+      { key: "youth", label: "Youth (18-24)" },
+      { key: "seniors", label: "Seniors (55+)" },
+    ],
+  },
+  rules: {
+    title: "Policies",
+    filters: [
+      { key: "pets_allowed", label: "Pets Allowed" },
+      { key: "service_only", label: "Service Animals Only" },
     ],
   },
   costPayment: {
-    title: "Cost & Payment",
+    title: "Cost",
     filters: [
       { key: "free", label: "Free" },
-      { key: "slidingScale", label: "Sliding Scale" },
-      { key: "under500", label: "Under $500" },
-      { key: "under1000", label: "Under $1000" },
-      { key: "noDeposit", label: "No Deposit" },
-      { key: "utilitiesIncluded", label: "Utilities Included" },
+      { key: "under500", label: "Under $500/mo" },
+      { key: "under1000", label: "Under $1000/mo" },
     ],
   },
   availabilityIntake: {
     title: "Availability",
-    filters: [
-      { key: "availableNow", label: "Available Now" },
-      { key: "waitlistOpen", label: "Waitlist Open" },
-      { key: "sameDay", label: "Same Day Intake" },
-      { key: "walkInsAccepted", label: "Walk-ins OK" },
-      { key: "emergencyPlacement", label: "Emergency Placement" },
-    ],
+    filters: [{ key: "available_now", label: "Available Now (beds today)" }],
   },
 };
 
@@ -121,7 +88,7 @@ export function getFilterCount(filters: Record<string, boolean>): number {
 // Helper function to get all filter keys for a category
 export function getCategoryFilterKeys(categoryKey: string): string[] {
   const category = FILTER_SECTIONS[categoryKey];
-  return category ? category.filters.map(f => f.key) : [];
+  return category ? category.filters.map((f) => f.key) : [];
 }
 
 // Helper function to get filter label by key
@@ -129,6 +96,6 @@ export function getFilterLabel(categoryKey: string, filterKey: string): string {
   const category = FILTER_SECTIONS[categoryKey];
   if (!category) return filterKey;
 
-  const filter = category.filters.find(f => f.key === filterKey);
+  const filter = category.filters.find((f) => f.key === filterKey);
   return filter?.label || filterKey;
 }

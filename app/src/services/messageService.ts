@@ -46,14 +46,23 @@ class MessageServiceFix {
    */
   async initialize(userId?: string): Promise<string | null> {
     try {
-      // Require userId to be provided - don't attempt auth fetch
-      if (!userId) {
-        console.error("❌ No userId provided to message service initialization");
-        throw new Error("userId is required for message service initialization");
+      // Allow missing userId: resolve from Supabase auth
+      let resolvedUserId = userId;
+      if (!resolvedUserId) {
+        const { data, error } = await supabase.auth.getUser();
+        if (error) {
+          console.error('[messageService] getUser error during init:', error);
+        }
+        resolvedUserId = data?.user?.id || null;
       }
 
-      console.log("✅ Initializing message service with userId:", userId);
-      this.userId = userId;
+      if (!resolvedUserId) {
+        console.error('[messageService] No authenticated user for message init');
+        throw new Error('userId is required for message service initialization');
+      }
+
+      console.log('[messageService] Initializing with userId:', resolvedUserId);
+      this.userId = resolvedUserId;
 
       // Check which table name to use
       await this.detectThreadTableName();
@@ -321,10 +330,21 @@ class MessageServiceFix {
             !msg.read_by?.includes(this.userId!),
         ).length;
 
+        // Last message preview (normalize body/content)
+        const lastMessage = threadMessages.length > 0
+          ? {
+              ...threadMessages[0],
+              body: (threadMessages[0] as any).body ?? (threadMessages[0] as any).content ?? "",
+              content: (threadMessages[0] as any).content ?? (threadMessages[0] as any).body ?? "",
+            }
+          : null;
+
         return {
           ...thread,
           participants,
           unread_count: unreadCount,
+          unreadCount,
+          lastMessage,
         };
       });
     } catch (error) {
@@ -372,10 +392,12 @@ class MessageServiceFix {
 
       const profileMap = await this.getBatchProfiles([...allUserIds]);
 
-      // Add sender info to messages
+      // Add sender info to messages and normalize body/content
       const messagesWithSenders =
         messages?.map((msg) => ({
           ...msg,
+          body: (msg as any).body ?? (msg as any).content ?? "",
+          content: (msg as any).content ?? (msg as any).body ?? "",
           sender: profileMap.get(msg.sender_id),
         })) || [];
 
@@ -419,7 +441,8 @@ class MessageServiceFix {
         .insert({
           thread_id: threadId,
           sender_id: this.userId,
-          content: body?.trim() || "", // Changed from 'body' to 'content'
+          body: body?.trim() || "",
+          content: body?.trim() || "",
           attachment_urls: attachmentUrls || [],
           read_by: [this.userId],
         })
@@ -537,8 +560,12 @@ class MessageServiceFix {
               // Get sender profile from cache
               const sender = await this.getCachedProfile(payload.new.sender_id);
 
+              const raw: any = payload.new || {};
               const messageWithSender: MessageWithSender = {
-                ...(payload.new as Message),
+                ...(raw as Message),
+                body: raw.body ?? raw.content ?? "",
+                // @ts-ignore normalize for UI code that may read content
+                content: raw.content ?? raw.body ?? "",
                 sender,
               };
 
@@ -561,8 +588,12 @@ class MessageServiceFix {
               // Get sender profile from cache
               const sender = await this.getCachedProfile(payload.new.sender_id);
 
+              const raw: any = payload.new || {};
               const messageWithSender: MessageWithSender = {
-                ...(payload.new as Message),
+                ...(raw as Message),
+                body: raw.body ?? raw.content ?? "",
+                // @ts-ignore normalize for UI code that may read content
+                content: raw.content ?? raw.body ?? "",
                 sender,
               };
 
@@ -755,3 +786,4 @@ class MessageServiceFix {
 
 // Export singleton instance
 export const messageService = new MessageServiceFix();
+

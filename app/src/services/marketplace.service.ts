@@ -155,16 +155,18 @@ function transformToMarketplace(
     requirements.push(...dbListing.eligibility.background);
   }
 
-  // Determine gender/family features from gender_rooming and eligibility
-  const isMale =
-    dbListing.gender_rooming === "male" || dbListing.gender_rooming === "co_ed";
-  const isFemale =
-    dbListing.gender_rooming === "female" ||
-    dbListing.gender_rooming === "co_ed";
+  // Extract eligibility from database (wizard converts to structured object)
+  // Wizard: ["women_only"] → DB: {gender: ["female"]}
+  // Wizard: ["men_only"] → DB: {gender: ["male"]}
+  // Wizard: ["all_genders"] → DB: {gender: ["all"]}
+  const genderEligibility = dbListing.eligibility?.gender || [];
+  const acceptsMen =
+    genderEligibility.includes("male") || genderEligibility.includes("all");
+  const acceptsWomen =
+    genderEligibility.includes("female") || genderEligibility.includes("all");
   const acceptsFamilies =
-    dbListing.gender_rooming === "family" ||
-    dbListing.eligibility?.family_status?.includes("families") ||
-    false;
+    dbListing.eligibility?.family_status?.includes("families") || false;
+  const acceptsVeterans = dbListing.eligibility?.veterans || false;
 
   // Check for accessibility features
   const wheelchairAccessible = !!(
@@ -217,9 +219,9 @@ function transformToMarketplace(
     requirements: requirements.slice(0, 3), // Top 3 requirements
     features: {
       acceptsFamilies,
-      acceptsVeterans: dbListing.eligibility?.veterans || false,
-      acceptsSingleMen: isMale,
-      acceptsSingleWomen: isFemale,
+      acceptsVeterans,
+      acceptsSingleMen: acceptsMen,
+      acceptsSingleWomen: acceptsWomen,
       petsAllowed: dbListing.rules?.pets === "allowed",
       wheelchairAccessible,
       lgbtqFriendly: true, // Default to true for inclusivity
@@ -242,12 +244,128 @@ function transformToMarketplace(
 }
 
 /**
+ * Apply filters to listings
+ */
+function applyFilters(
+  listings: MarketplaceListing[],
+  filters: any,
+): MarketplaceListing[] {
+  return listings.filter((listing) => {
+    // Amenities filters - match ListingWizard amenities exactly
+    if (filters.amenities) {
+      const activeAmenities = Object.keys(filters.amenities).filter(
+        (k) => filters.amenities[k],
+      );
+      for (const amenity of activeAmenities) {
+        const found = listing.amenities.some(
+          (a) =>
+            a.toLowerCase().includes(amenity.toLowerCase()) ||
+            a.toLowerCase().replace(/[_\s]/g, "") ===
+              amenity.toLowerCase().replace(/[_\s]/g, ""),
+        );
+        if (!found) return false;
+      }
+    }
+
+    // Services filters - match ListingWizard services
+    if (filters.supportPrograms) {
+      const activeServices = Object.keys(filters.supportPrograms).filter(
+        (k) => filters.supportPrograms[k],
+      );
+      for (const service of activeServices) {
+        const found =
+          listing.amenities.some((a) =>
+            a.toLowerCase().includes(service.toLowerCase()),
+          ) ||
+          listing.requirements.some((r) =>
+            r.toLowerCase().includes(service.toLowerCase()),
+          );
+        if (!found) return false;
+      }
+    }
+
+    // Eligibility filters - match ListingWizard eligibility options
+    if (filters.eligibility) {
+      if (filters.eligibility.veterans && !listing.features.acceptsVeterans)
+        return false;
+      if (filters.eligibility.families && !listing.features.acceptsFamilies)
+        return false;
+      if (filters.eligibility.men_only && !listing.features.acceptsSingleMen)
+        return false;
+      if (
+        filters.eligibility.women_only &&
+        !listing.features.acceptsSingleWomen
+      )
+        return false;
+    }
+
+    // Pets policy filter - match ListingWizard petsPolicy
+    if (filters.rulesRequirements) {
+      if (
+        filters.rulesRequirements.pets_allowed &&
+        !listing.features.petsAllowed
+      )
+        return false;
+    }
+
+    // Cost filters - match ListingWizard pricing
+    if (filters.costPayment) {
+      if (filters.costPayment.free && !listing.price.isFree) return false;
+      if (filters.costPayment.under500 && listing.price.min >= 500)
+        return false;
+      if (filters.costPayment.under1000 && listing.price.min >= 1000)
+        return false;
+    }
+
+    // Availability filter - beds available today
+    if (filters.availabilityIntake) {
+      if (
+        filters.availabilityIntake.available_now &&
+        listing.bedsAvailable <= 0
+      )
+        return false;
+    }
+
+    // Price range filter
+    if (filters.priceRange) {
+      if (
+        listing.price.min < filters.priceRange.min ||
+        listing.price.min > filters.priceRange.max
+      ) {
+        return false;
+      }
+    }
+
+    // Location filter (city or zipCode)
+    if (filters.location) {
+      if (
+        filters.location.city &&
+        !listing.address.city
+          ?.toLowerCase()
+          .includes(filters.location.city.toLowerCase())
+      ) {
+        return false;
+      }
+      if (
+        filters.location.zipCode &&
+        listing.address.zipCode !== filters.location.zipCode
+      ) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}
+
+/**
  * Fetch all active listings from database for the seeker marketplace
  */
 export async function getMarketplaceListings(
   userLat?: number,
   userLng?: number,
   radiusMiles: number = 50,
+  filters?: any,
 ): Promise<MarketplaceListing[]> {
   try {
     console.log("🔵 START getMarketplaceListings");
@@ -340,6 +458,15 @@ export async function getMarketplaceListings(
       });
       console.log(
         `✅ Filtered from ${beforeFilter} to ${listings.length} listings within ${radiusMiles} miles`,
+      );
+    }
+
+    // Apply filters if provided
+    if (filters) {
+      const beforeFilter = listings.length;
+      listings = applyFilters(listings, filters);
+      console.log(
+        `✅ Applied filters: ${beforeFilter} -> ${listings.length} listings`,
       );
     }
 

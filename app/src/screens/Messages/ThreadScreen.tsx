@@ -35,6 +35,7 @@ import {
   ThreadWithDetails,
 } from "../../services/messageService";
 import { supabase } from "../../lib/supabase";
+import { useAuthStore } from "../../state/useAuthStore";
 
 interface Attachment {
   id: string;
@@ -92,12 +93,14 @@ export default function ThreadScreen() {
   const { threadId, participantId, propertyTitle, senderName } =
     route.params || {};
 
+  const storeUserId = useAuthStore((s) => s.user?.id);
+
   // Initialize and load thread
   useEffect(() => {
     async function loadThread() {
       try {
-        // Initialize message service
-        const userId = await messageService.initialize();
+        // Initialize message service with current auth user if available
+        const userId = await messageService.initialize(storeUserId || undefined);
         console.log("[ThreadScreen] Initialized with userId:", userId);
         setCurrentUserId(userId);
 
@@ -114,7 +117,13 @@ export default function ThreadScreen() {
           if (threadData) {
             console.log("[ThreadScreen] Thread loaded:", threadData.id);
             setThread(threadData);
-            setMessages(threadData.messages || []);
+            // Normalize legacy messages that may use `content` instead of `body`
+            const normalized = (threadData.messages || []).map((m: any) => ({
+              ...m,
+              body: m?.body ?? m?.content ?? "",
+              content: m?.content ?? m?.body ?? "",
+            }));
+            setMessages(normalized);
           } else {
             console.error("[ThreadScreen] Failed to load thread:", threadId);
             Alert.alert(
@@ -160,7 +169,7 @@ export default function ThreadScreen() {
     }
 
     loadThread();
-  }, [threadId, participantId, propertyTitle]);
+  }, [threadId, participantId, propertyTitle, storeUserId]);
 
   // Subscribe to real-time messages
   useEffect(() => {
@@ -238,6 +247,23 @@ export default function ThreadScreen() {
         hasAttachments: !!attachmentUrls,
       });
 
+      // Optimistically add message to UI
+      const tempId = `temp-${Date.now()}`;
+      const optimistic = {
+        id: tempId,
+        thread_id: thread.id,
+        sender_id: currentUserId,
+        body: inputText.trim(),
+        attachment_urls: attachmentUrls || [],
+        read_by: [currentUserId],
+        deleted_at: null,
+        edited_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        sender: undefined as any,
+      } as MessageWithSender;
+      setMessages((prev) => [...prev, optimistic]);
+
       // Send message
       const sentMessage = await messageService.sendMessage(
         thread.id,
@@ -254,19 +280,30 @@ export default function ThreadScreen() {
           sentMessage.id,
         );
 
-        // Message will be added via real-time subscription
+        // Replace optimistic message with server message (or leave if realtime updates it)
+        setMessages((prev) => {
+          const idx = prev.findIndex((m) => m.id === tempId);
+          if (idx === -1) return prev;
+          const next = [...prev];
+          next[idx] = sentMessage as any;
+          return next;
+        });
       } else {
         console.error("[ThreadScreen] sendMessage returned null");
         Alert.alert(
           "Error",
           "Failed to send message. This may be a database issue. Please check that messaging tables exist.",
         );
+        // Rollback optimistic
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
       }
     } catch (error) {
       console.error("[ThreadScreen] Error sending message:", error);
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
       Alert.alert("Error", `Failed to send message: ${errorMessage}`);
+      // Rollback optimistic
+      setMessages((prev) => prev.filter((m) => !m.id?.toString().startsWith('temp-')));
     } finally {
       setSending(false);
     }
@@ -383,11 +420,11 @@ export default function ThreadScreen() {
               isUser ? styles.userBubble : styles.providerBubble,
             ]}
           >
-            {item.body ? (
+            {(item.body || (item as any).content) ? (
               <Text
                 style={[styles.messageText, isUser && styles.userMessageText]}
               >
-                {item.body}
+                {item.body || (item as any).content}
               </Text>
             ) : null}
 

@@ -21,6 +21,7 @@ export type RootStackParamList = {
     propertyTitle: string;
     senderName: string;
     participantId?: string;
+    userId: string;
   };
   DevMenu: undefined;
   ProviderDashboard: undefined;

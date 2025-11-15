@@ -111,6 +111,14 @@ export default function ListingWizard() {
       const availableBedsNum = availableBeds
         ? Number(availableBeds)
         : undefined;
+
+      // Validate bed counts
+      if (availableBedsNum !== undefined && availableBedsNum > totalBedsNum) {
+        throw new Error(
+          `Available beds (${availableBedsNum}) cannot exceed total beds (${totalBedsNum}). Please correct this before saving.`,
+        );
+      }
+
       const priceNum = price ? Number(price) : undefined;
       // Prepare custom fields (split by comma or newline)
       const customAmenitiesArray = customAmenities

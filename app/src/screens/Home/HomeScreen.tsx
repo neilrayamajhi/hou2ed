@@ -74,9 +74,22 @@ export default function HomeScreen() {
   // Get user location
   const { location, loading: locationLoading, refreshLocation } = useLocation();
 
-  // Store state
-  const { quickFilters, toggleQuickFilter, searchQuery, setSearchQuery } =
-    useFilterStore();
+  // Store state - subscribe to all filter categories to trigger re-renders
+  const {
+    quickFilters,
+    toggleQuickFilter,
+    searchQuery,
+    setSearchQuery,
+    snapshot,
+    amenities,
+    supportPrograms,
+    eligibility,
+    rulesRequirements,
+    costPayment,
+    availabilityIntake,
+    priceRange,
+    location: filterLocation,
+  } = useFilterStore();
 
   // Local state
   const [listings, setListings] = useState<Listing[]>([]);
@@ -115,11 +128,13 @@ export default function HomeScreen() {
       try {
         console.log("📍 Loading listings with location:", location);
 
-        // Fetch real listings from Supabase database
+        // Fetch real listings from Supabase database with filters
+        const currentFilters = snapshot();
         const dbListings = await getMarketplaceListings(
           location?.latitude,
           location?.longitude,
           50, // 50 mile radius
+          currentFilters,
         );
 
         // Check if component was unmounted or effect was re-run
@@ -168,7 +183,20 @@ export default function HomeScreen() {
     return () => {
       isCancelled = true;
     };
-  }, [quickFilters, location, locationLoading]);
+  }, [
+    quickFilters,
+    location,
+    locationLoading,
+    // Add all filter categories so changes trigger re-fetch
+    amenities,
+    supportPrograms,
+    eligibility,
+    rulesRequirements,
+    costPayment,
+    availabilityIntake,
+    priceRange,
+    filterLocation,
+  ]);
 
   // Update map region when user location is loaded
   useEffect(() => {

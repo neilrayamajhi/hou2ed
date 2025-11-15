@@ -67,29 +67,36 @@ export default function InboxScreen() {
   // Initialize and fetch threads
   const loadThreads = useCallback(async () => {
     try {
-      // Wait for auth to be ready
-      if (!isReady) {
-        console.log("⏳ Auth not ready yet, waiting...");
-        return;
+      // Try to get user from auth store OR from Supabase auth directly
+      let userId = user?.id;
+
+      if (!userId) {
+        console.log("⏳ [InboxScreen] No user in store, trying Supabase auth...");
+        const { data } = await supabase.auth.getUser();
+        userId = data?.user?.id;
       }
 
-      // Check if user exists
-      if (!user || !user.id) {
-        console.warn("No user found in auth store for InboxScreen");
+      if (!userId) {
+        console.warn("❌ [InboxScreen] No user found");
         setLoading(false);
         return;
       }
 
-      // Initialize message service with user ID from store
-      const userId = await messageService.initialize(user.id);
-      setCurrentUserId(userId);
+      console.log("📥 [InboxScreen] Loading threads for user:", userId);
+
+      // Initialize message service with user ID
+      const initializedUserId = await messageService.initialize(userId);
+      setCurrentUserId(initializedUserId);
 
       // Fetch threads
+      console.log("🔍 [InboxScreen] Calling getThreads...");
       const fetchedThreads = await messageService.getThreads();
+      console.log("✅ [InboxScreen] Fetched", fetchedThreads.length, "threads");
+
       setThreads(fetchedThreads);
       setTablesMissing(false);
     } catch (error) {
-      console.error("Error loading threads:", error);
+      console.error("❌ [InboxScreen] Error loading threads:", error);
       // Check if this is a missing table error
       if (error?.message?.includes("table") || error?.code === "PGRST205") {
         setTablesMissing(true);
@@ -98,7 +105,7 @@ export default function InboxScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user, isReady]);
+  }, [user]);
 
   // Load threads on mount and when screen focuses
   useFocusEffect(

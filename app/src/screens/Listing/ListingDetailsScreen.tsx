@@ -121,7 +121,28 @@ export default function ListingDetailsScreen() {
         const { data, error } = await supabase
           .from("listings")
           .select(
-            "id,title,description,amenities,services,rules,eligibility,images,address,city,state,zip_code,lat,lng",
+            `
+            id,
+            title,
+            description,
+            amenities,
+            services,
+            rules,
+            eligibility,
+            images,
+            address,
+            city,
+            state,
+            zip_code,
+            lat,
+            lng,
+            provider_id,
+            provider:profiles!listings_provider_id_fkey (
+              id,
+              full_name,
+              username
+            )
+          `,
           )
           .eq("id", id)
           .maybeSingle();
@@ -142,6 +163,7 @@ export default function ListingDetailsScreen() {
   const merged = useMemo(() => {
     const base = {
       id: routeListingId || listingFromParams.id,
+      providerId: listingFromParams.provider_id || "",
       title: listingFromParams.name || listingFromParams.title || "",
       providerName: listingFromParams.provider || "",
       isVerified: !!listingFromParams.verified,
@@ -175,8 +197,18 @@ export default function ListingDetailsScreen() {
     };
 
     if (!dbListing) return base;
+
+    // Extract provider name from the joined provider profile
+    const providerName =
+      (dbListing as any).provider?.full_name ||
+      (dbListing as any).provider?.username ||
+      base.providerName ||
+      "Provider";
+
     return {
       ...base,
+      providerId: (dbListing as any).provider_id || base.providerId,
+      providerName,
       title: dbListing.title || base.title,
       overview: dbListing.description || base.overview,
       amenities: dbListing.amenities ?? base.amenities,
@@ -264,14 +296,17 @@ export default function ListingDetailsScreen() {
 
     // Check for existing application before allowing to proceed
     try {
-      const { getExistingApplication } = await import("../../services/application.service");
+      const { getExistingApplication } = await import(
+        "../../services/application.service"
+      );
       const existingApp = await getExistingApplication(merged.id);
 
       if (existingApp.exists && !existingApp.canResubmit) {
         // User already has an active application
         Alert.alert(
           "Application Already Exists",
-          existingApp.message || "You already have an active application for this listing.",
+          existingApp.message ||
+            "You already have an active application for this listing.",
           [
             {
               text: "View My Applications",
@@ -284,7 +319,7 @@ export default function ListingDetailsScreen() {
               text: "OK",
               style: "cancel",
             },
-          ]
+          ],
         );
         return;
       }
@@ -293,12 +328,16 @@ export default function ListingDetailsScreen() {
         // User has a rejected/withdrawn application - allow resubmission
         Alert.alert(
           "Previous Application Found",
-          existingApp.message || "You can submit a new application for this listing.",
+          existingApp.message ||
+            "You can submit a new application for this listing.",
           [
             {
               text: "Continue",
               onPress: () => {
-                console.log("✅ Navigating to ApplyWizard with listingId:", merged.id);
+                console.log(
+                  "✅ Navigating to ApplyWizard with listingId:",
+                  merged.id,
+                );
                 // @ts-ignore
                 navigation.navigate("ApplyWizard", { listingId: merged.id });
               },
@@ -307,7 +346,7 @@ export default function ListingDetailsScreen() {
               text: "Cancel",
               style: "cancel",
             },
-          ]
+          ],
         );
         return;
       }
@@ -326,6 +365,62 @@ export default function ListingDetailsScreen() {
       setCheckingApplication(false);
     }
   }, [navigation, merged.id, user, checkingApplication]);
+
+  const handleMessageProvider = useCallback(async () => {
+    console.log("🔵 Message Provider clicked");
+    console.log("User:", user);
+    console.log("Provider ID:", merged.providerId);
+    console.log("Listing ID:", merged.id);
+
+    if (!user) {
+      console.log("❌ No user - navigating to sign in");
+      // @ts-ignore
+      navigation.navigate("Auth", { screen: "SignIn" });
+      return;
+    }
+
+    if (!merged.providerId) {
+      Alert.alert("Error", "Provider information not available");
+      return;
+    }
+
+    try {
+      // Import message service
+      const { messageService } = await import("../../services/messageService");
+
+      // Initialize message service with current user
+      await messageService.initialize(user.id);
+
+      // Create or get existing thread with provider
+      const thread = await messageService.createThread(
+        [merged.providerId],
+        `Re: ${merged.title}`,
+        merged.id,
+      );
+
+      console.log("✅ Thread created/found:", thread.id);
+
+      // Navigate to thread screen
+      // @ts-ignore
+      navigation.navigate("Thread", {
+        threadId: thread.id,
+        participantId: merged.providerId,
+        propertyTitle: merged.title,
+        senderName: merged.providerName,
+        userId: user.id,
+      });
+    } catch (error) {
+      console.error("Error creating message thread:", error);
+      Alert.alert("Error", "Failed to start conversation. Please try again.");
+    }
+  }, [
+    navigation,
+    user,
+    merged.providerId,
+    merged.id,
+    merged.title,
+    merged.providerName,
+  ]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -496,7 +591,17 @@ export default function ListingDetailsScreen() {
           )}
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.applyButton, checkingApplication && styles.applyButtonDisabled]}
+          style={styles.messageButton}
+          onPress={handleMessageProvider}
+        >
+          <Ionicons name="chatbubble-outline" size={20} color={colors.gold} />
+          <Text style={styles.messageButtonText}>Message</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.applyButton,
+            checkingApplication && styles.applyButtonDisabled,
+          ]}
           onPress={handleApply}
           disabled={checkingApplication}
         >
@@ -604,6 +709,22 @@ const styles = StyleSheet.create({
     borderColor: colors.white,
     justifyContent: "center",
     alignItems: "center",
+  },
+  messageButton: {
+    height: 48,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+  },
+  messageButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.gold,
   },
   applyButton: {
     flex: 1,

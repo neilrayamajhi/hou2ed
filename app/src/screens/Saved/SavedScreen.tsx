@@ -11,6 +11,7 @@ import {
   Dimensions,
   Pressable,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -145,6 +146,7 @@ export default function SavedScreen() {
       const title = listingData.title || "Housing Listing";
       const address =
         `${listingData.city || ""}, ${listingData.state || ""}`.trim();
+      const imageUrl = listingData.images?.[0];
 
       return (
         <Pressable
@@ -155,13 +157,21 @@ export default function SavedScreen() {
         >
           <View style={styles.card}>
             <View style={styles.imageContainer}>
-              <View style={styles.imagePlaceholder}>
-                <Ionicons
-                  name="image-outline"
-                  size={40}
-                  color={colors.gray[400]}
+              {imageUrl ? (
+                <Image
+                  source={{ uri: imageUrl }}
+                  style={styles.image}
+                  resizeMode="cover"
                 />
-              </View>
+              ) : (
+                <View style={styles.imagePlaceholder}>
+                  <Ionicons
+                    name="image-outline"
+                    size={40}
+                    color={colors.gray[400]}
+                  />
+                </View>
+              )}
 
               <TouchableOpacity
                 style={styles.shareButton}
@@ -318,6 +328,10 @@ const styles = StyleSheet.create({
     height: CARD_WIDTH * 0.75,
     backgroundColor: colors.gray[800],
     position: "relative",
+  },
+  image: {
+    width: "100%",
+    height: "100%",
   },
   imagePlaceholder: {
     flex: 1,

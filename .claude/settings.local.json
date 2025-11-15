@@ -21,7 +21,11 @@
       "Bash(src/types/database.types.ts)",
       "Bash(echo:*)",
       "Bash(git add:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(npx prettier:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run)"
     ],
     "deny": [],
     "ask": []
