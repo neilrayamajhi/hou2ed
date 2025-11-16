@@ -202,14 +202,8 @@ export default function ProfileScreen() {
     try {
       const { supabase } = await import("../../lib/supabase");
 
-      // Check user's role first
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-      const userRole = profile?.role || "seeker";
+      // Use role from auth store for consistency
+      const userRole = user.role || "seeker";
 
       // Only count applications for seekers
       if (userRole === "seeker") {
@@ -249,8 +243,11 @@ export default function ProfileScreen() {
   }, [navigation, fetchApplicationsCount]);
 
   const handleApplications = useCallback(() => {
+    console.log("🚀 [ProfileScreen] Navigating to ApplicationsList");
+    console.log("🚀 [ProfileScreen] User ID:", user?.id, "Role:", user?.role);
     navigation.navigate("ApplicationsList");
-  }, [navigation]);
+    console.log("🚀 [ProfileScreen] Navigation triggered");
+  }, [navigation, user]);
 
   const handleSavedSearches = useCallback(() => {
     Alert.alert(

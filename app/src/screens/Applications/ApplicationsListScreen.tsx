@@ -15,15 +15,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
 import { useAuthStore } from "../../state/useAuthStore";
 import { supabase } from "../../lib/supabase";
-import { deleteApplication, withdrawApplication } from "../../services/application.service";
+import {
+  deleteApplication,
+  withdrawApplication,
+} from "../../services/application.service";
 import type { Application, Listing } from "../../lib/supabase-types";
 import { RootStackNavigationProp } from "../../navigation/types";
 
 type ApplicationWithListing = Application & {
-  listing: Pick<
-    Listing,
-    "id" | "title" | "housing_type" | "city" | "state"
-  >;
+  listing: Pick<Listing, "id" | "title" | "housing_type" | "city" | "state">;
   seeker?: {
     id: string;
     email: string;
@@ -33,12 +33,20 @@ type ApplicationWithListing = Application & {
 
 const getStatusColor = (status: Application["status"]) => {
   switch (status) {
+    case "new":
+      return colors.primary[500];
     case "submitted":
       return colors.primary[500];
     case "under_review":
       return colors.primary[400];
+    case "docs_needed":
+      return colors.yellow;
+    case "interview_scheduled":
+      return colors.primary[300];
     case "approved":
       return "#10b981"; // green
+    case "waitlisted":
+      return colors.yellow;
     case "rejected":
       return colors.red;
     case "withdrawn":
@@ -51,12 +59,20 @@ const getStatusColor = (status: Application["status"]) => {
 
 const getStatusLabel = (status: Application["status"]) => {
   switch (status) {
+    case "new":
+      return "New";
     case "submitted":
       return "Submitted";
     case "under_review":
       return "Under Review";
+    case "docs_needed":
+      return "Docs Needed";
+    case "interview_scheduled":
+      return "Interview Scheduled";
     case "approved":
       return "Approved";
+    case "waitlisted":
+      return "Waitlisted";
     case "rejected":
       return "Rejected";
     case "withdrawn":
@@ -77,8 +93,13 @@ const formatDate = (dateString: string) => {
 };
 
 export default function ApplicationsListScreen() {
+  console.log("🔵 ApplicationsListScreen mounted");
+
   const navigation = useNavigation<RootStackNavigationProp>();
   const { user } = useAuthStore();
+
+  console.log("👤 User from store:", user?.id, user?.email);
+
   const [applications, setApplications] = useState<ApplicationWithListing[]>(
     [],
   );
@@ -87,31 +108,28 @@ export default function ApplicationsListScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchApplications = useCallback(async () => {
+    console.log("🔍 fetchApplications called, user.id:", user?.id);
+
     if (!user?.id) {
+      console.log("❌ No user ID, aborting fetch");
       setError("User not authenticated");
       setLoading(false);
       return;
     }
 
     try {
+      console.log("✅ Starting to fetch applications...");
       setError(null);
 
-      // First, check the user's role
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-      if (profileError) {
-        console.error("Error fetching user profile:", profileError);
-      }
-
-      const userRole = profile?.role || "seeker";
+      // Use role from auth store instead of querying database
+      // This ensures consistency with how the rest of the app works
+      const userRole = user.role || "seeker";
+      console.log("👤 User role from auth store:", userRole);
 
       // Adjust query based on role to include relevant information
-      const selectQuery = userRole === "provider"
-        ? `
+      const selectQuery =
+        userRole === "provider"
+          ? `
           *,
           listing:listings (
             id,
@@ -126,7 +144,7 @@ export default function ApplicationsListScreen() {
             full_name
           )
         `
-        : `
+          : `
           *,
           listing:listings (
             id,
@@ -137,40 +155,51 @@ export default function ApplicationsListScreen() {
           )
         `;
 
-      let query = supabase
-        .from("applications")
-        .select(selectQuery);
+      console.log("🔧 Building query...");
+      let query = supabase.from("applications").select(selectQuery);
 
       // Query based on user role
       if (userRole === "provider") {
+        console.log("🏢 User is provider, fetching their listings...");
         // For providers, get applications for their listings
         const { data: providerListings } = await supabase
           .from("listings")
           .select("id")
           .eq("provider_id", user.id);
 
-        const listingIds = providerListings?.map(l => l.id) || [];
+        const listingIds = providerListings?.map((l) => l.id) || [];
+        console.log("🏢 Provider has", listingIds.length, "listings");
 
         if (listingIds.length > 0) {
           query = query.in("listing_id", listingIds);
         } else {
           // Provider has no listings, show empty
+          console.log("⚠️ Provider has no listings, returning empty");
           setApplications([]);
           setLoading(false);
           return;
         }
       } else {
         // For seekers, get their own applications
+        console.log("👤 User is seeker, querying for seeker_id:", user.id);
         query = query.eq("seeker_id", user.id);
       }
 
       // Filter out soft-deleted applications and withdrawn applications for both providers and seekers
-      query = query
-        .is("deleted_at", null)
-        .neq("status", "withdrawn");
+      console.log("🔍 Adding filters: deleted_at IS NULL, status != withdrawn");
+      query = query.is("deleted_at", null).neq("status", "withdrawn");
 
-      const { data, error: fetchError } = await query
-        .order("created_at", { ascending: false });
+      console.log("📡 Executing query...");
+      const { data, error: fetchError } = await query.order("created_at", {
+        ascending: false,
+      });
+
+      console.log(
+        "📡 Query completed. Error:",
+        !!fetchError,
+        "Data count:",
+        data?.length || 0,
+      );
 
       if (fetchError) {
         throw fetchError;
@@ -179,7 +208,20 @@ export default function ApplicationsListScreen() {
       setApplications((data as ApplicationWithListing[]) || []);
 
       // Log for debugging
-      console.log(`User role: ${userRole}, Applications found: ${data?.length || 0}`);
+      console.log(
+        `User role: ${userRole}, Applications found: ${data?.length || 0}`,
+      );
+      if (data && data.length > 0) {
+        console.log("Applications data:", JSON.stringify(data, null, 2));
+      } else {
+        console.log("No applications found. User ID:", user.id);
+        // Log the actual query to help debug
+        console.log(
+          "Query filters: seeker_id =",
+          user.id,
+          "deleted_at IS NULL, status != withdrawn",
+        );
+      }
     } catch (err) {
       console.error("Error fetching applications:", err);
       setError("Failed to load applications. Please try again.");
@@ -190,6 +232,7 @@ export default function ApplicationsListScreen() {
   }, [user?.id]);
 
   useEffect(() => {
+    console.log("🎯 useEffect triggered, calling fetchApplications");
     fetchApplications();
   }, [fetchApplications]);
 
@@ -198,86 +241,98 @@ export default function ApplicationsListScreen() {
     fetchApplications();
   }, [fetchApplications]);
 
-  const handleDeleteApplication = useCallback(async (applicationId: string, status: string) => {
-    // Show confirmation dialog
-    Alert.alert(
-      "Delete Application",
-      "Are you sure you want to delete this application? This action cannot be undone.",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const result = await deleteApplication(applicationId);
-              if (result.success) {
-                // Immediately remove from local state for instant UI update
-                setApplications(prevApps =>
-                  prevApps.filter(app => app.id !== applicationId)
-                );
-
-                Alert.alert("Success", "Application deleted successfully");
-
-                // Also fetch from server to ensure consistency
-                setTimeout(() => {
-                  fetchApplications();
-                }, 500); // Small delay to ensure database update completes
-              } else {
-                Alert.alert("Error", result.error || "Failed to delete application");
-              }
-            } catch (error) {
-              Alert.alert("Error", "An unexpected error occurred");
-              console.error("Delete error:", error);
-            }
+  const handleDeleteApplication = useCallback(
+    async (applicationId: string, status: string) => {
+      // Show confirmation dialog
+      Alert.alert(
+        "Delete Application",
+        "Are you sure you want to delete this application? This action cannot be undone.",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
           },
-        },
-      ]
-    );
-  }, [fetchApplications]);
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                const result = await deleteApplication(applicationId);
+                if (result.success) {
+                  // Immediately remove from local state for instant UI update
+                  setApplications((prevApps) =>
+                    prevApps.filter((app) => app.id !== applicationId),
+                  );
 
-  const handleWithdrawApplication = useCallback(async (applicationId: string) => {
-    Alert.alert(
-      "Withdraw Application",
-      "Are you sure you want to withdraw this application?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Withdraw",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const result = await withdrawApplication(applicationId);
-              if (result.success) {
-                // Immediately remove from local state for instant UI update
-                setApplications(prevApps =>
-                  prevApps.filter(app => app.id !== applicationId)
-                );
+                  Alert.alert("Success", "Application deleted successfully");
 
-                Alert.alert("Success", "Application withdrawn successfully");
-
-                // Also fetch from server to ensure consistency
-                setTimeout(() => {
-                  fetchApplications();
-                }, 500); // Small delay to ensure database update completes
-              } else {
-                Alert.alert("Error", result.error || "Failed to withdraw application");
+                  // Also fetch from server to ensure consistency
+                  setTimeout(() => {
+                    fetchApplications();
+                  }, 500); // Small delay to ensure database update completes
+                } else {
+                  Alert.alert(
+                    "Error",
+                    result.error || "Failed to delete application",
+                  );
+                }
+              } catch (error) {
+                Alert.alert("Error", "An unexpected error occurred");
+                console.error("Delete error:", error);
               }
-            } catch (error) {
-              Alert.alert("Error", "An unexpected error occurred");
-              console.error("Withdraw error:", error);
-            }
+            },
           },
-        },
-      ]
-    );
-  }, [fetchApplications]);
+        ],
+      );
+    },
+    [fetchApplications],
+  );
+
+  const handleWithdrawApplication = useCallback(
+    async (applicationId: string) => {
+      Alert.alert(
+        "Withdraw Application",
+        "Are you sure you want to withdraw this application?",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Withdraw",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                const result = await withdrawApplication(applicationId);
+                if (result.success) {
+                  // Immediately remove from local state for instant UI update
+                  setApplications((prevApps) =>
+                    prevApps.filter((app) => app.id !== applicationId),
+                  );
+
+                  Alert.alert("Success", "Application withdrawn successfully");
+
+                  // Also fetch from server to ensure consistency
+                  setTimeout(() => {
+                    fetchApplications();
+                  }, 500); // Small delay to ensure database update completes
+                } else {
+                  Alert.alert(
+                    "Error",
+                    result.error || "Failed to withdraw application",
+                  );
+                }
+              } catch (error) {
+                Alert.alert("Error", "An unexpected error occurred");
+                console.error("Withdraw error:", error);
+              }
+            },
+          },
+        ],
+      );
+    },
+    [fetchApplications],
+  );
 
   const renderApplicationItem = useCallback(
     ({ item, index }: { item: ApplicationWithListing; index: number }) => {
@@ -316,8 +371,7 @@ export default function ApplicationsListScreen() {
                 color={colors.gray[400]}
               />
               <Text style={styles.detailText}>
-                {item.listing?.city || "N/A"},{" "}
-                {item.listing?.state || "N/A"}
+                {item.listing?.city || "N/A"}, {item.listing?.state || "N/A"}
               </Text>
             </View>
 
@@ -347,20 +401,28 @@ export default function ApplicationsListScreen() {
           <View style={styles.cardFooter}>
             <View style={styles.actionButtons}>
               {/* Show different actions based on status */}
-              {(item.status === 'new' || item.status === 'under_review' ||
-                item.status === 'docs_needed' || item.status === 'interview_scheduled') && (
+              {(item.status === "new" ||
+                item.status === "under_review" ||
+                item.status === "docs_needed" ||
+                item.status === "interview_scheduled") && (
                 <TouchableOpacity
                   style={[styles.actionButton, styles.withdrawButton]}
                   onPress={() => handleWithdrawApplication(item.id)}
                   accessibilityLabel="Withdraw application"
                 >
-                  <Ionicons name="close-circle-outline" size={18} color={colors.yellow} />
+                  <Ionicons
+                    name="close-circle-outline"
+                    size={18}
+                    color={colors.yellow}
+                  />
                   <Text style={styles.withdrawButtonText}>Withdraw</Text>
                 </TouchableOpacity>
               )}
 
-              {(item.status === 'withdrawn' || item.status === 'rejected' ||
-                item.status === 'new' || item.status === 'draft') && (
+              {(item.status === "withdrawn" ||
+                item.status === "rejected" ||
+                item.status === "new" ||
+                item.status === "draft") && (
                 <TouchableOpacity
                   style={[styles.actionButton, styles.deleteButton]}
                   onPress={() => handleDeleteApplication(item.id, item.status)}

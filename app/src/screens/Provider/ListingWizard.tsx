@@ -103,6 +103,10 @@ export default function ListingWizard() {
   const [selectedEligibility, setSelectedEligibility] = useState<string[]>([]);
   const [customEligibility, setCustomEligibility] = useState("");
 
+  // Required documents state
+  const [requiredDocuments, setRequiredDocuments] = useState<string[]>([]);
+  const [newDocumentName, setNewDocumentName] = useState("");
+
   const { mutate: submit, isPending } = useMutation({
     mutationFn: async () => {
       const providerId = await getCurrentProviderId();
@@ -170,6 +174,8 @@ export default function ListingWizard() {
           customEligibilityArray.length > 0
             ? customEligibilityArray
             : undefined,
+        requiredDocuments:
+          requiredDocuments.length > 0 ? requiredDocuments : undefined,
       });
       // If photos selected and created successfully, upload and attach
       if (created.success && created.listingId) {
@@ -736,6 +742,82 @@ export default function ListingWizard() {
           placeholderTextColor={colors.gray[500]}
           multiline
         />
+
+        {/* Required Documents Section */}
+        <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>
+          Required Documents
+        </Text>
+        <Text style={styles.sectionDescription}>
+          Add documents that applicants must upload when applying
+        </Text>
+
+        {/* List of required documents */}
+        {requiredDocuments.length > 0 && (
+          <View style={{ marginBottom: spacing.md }}>
+            {requiredDocuments.map((doc, index) => (
+              <View key={index} style={styles.documentItem}>
+                <Text style={styles.documentName}>{doc}</Text>
+                <TouchableOpacity
+                  onPress={() =>
+                    setRequiredDocuments(
+                      requiredDocuments.filter((_, i) => i !== index),
+                    )
+                  }
+                  style={styles.removeButton}
+                >
+                  <Ionicons
+                    name="close-circle"
+                    size={24}
+                    color={colors.red[500]}
+                  />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Add new document */}
+        <View style={{ flexDirection: "row", gap: spacing.sm }}>
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            value={newDocumentName}
+            onChangeText={setNewDocumentName}
+            placeholder="e.g., Cal Aid Form, Pay Stub, Veteran ID"
+            placeholderTextColor={colors.gray[500]}
+          />
+          <TouchableOpacity
+            style={[
+              styles.addButton,
+              !newDocumentName.trim() && styles.addButtonDisabled,
+            ]}
+            onPress={() => {
+              if (newDocumentName.trim()) {
+                setRequiredDocuments([
+                  ...requiredDocuments,
+                  newDocumentName.trim(),
+                ]);
+                setNewDocumentName("");
+              }
+            }}
+            disabled={!newDocumentName.trim()}
+          >
+            <Ionicons
+              name="add-circle"
+              size={24}
+              color={
+                newDocumentName.trim() ? colors.primary[500] : colors.gray[600]
+              }
+            />
+            <Text
+              style={[
+                styles.addButtonText,
+                !newDocumentName.trim() && styles.addButtonTextDisabled,
+              ]}
+            >
+              Add
+            </Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     );
   };
@@ -1286,5 +1368,42 @@ const styles = StyleSheet.create({
   chipTextSelected: {
     color: colors.gray[900],
     fontWeight: "600",
+  },
+  documentItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: colors.gray[800],
+    padding: spacing.md,
+    borderRadius: radius.md,
+    marginBottom: spacing.sm,
+  },
+  documentName: {
+    color: colors.gray[50],
+    fontSize: typography.sizes.md,
+  },
+  removeButton: {
+    padding: spacing.xs,
+  },
+  addButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    backgroundColor: colors.primary[500],
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+  },
+  addButtonDisabled: {
+    backgroundColor: colors.gray[800],
+    opacity: 0.5,
+  },
+  addButtonText: {
+    color: colors.gray[900],
+    fontSize: typography.sizes.sm,
+    fontWeight: "600",
+  },
+  addButtonTextDisabled: {
+    color: colors.gray[600],
   },
 });

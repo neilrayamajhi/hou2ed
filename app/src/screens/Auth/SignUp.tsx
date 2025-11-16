@@ -368,18 +368,11 @@ export default function SignUp() {
             {
               text: "Continue",
               onPress: () => {
-                // Route based on user role
-                if (result.user.role === "provider") {
-                  navigation.reset({
-                    index: 0,
-                    routes: [{ name: "ProviderDashboard" }],
-                  });
-                } else {
-                  navigation.reset({
-                    index: 0,
-                    routes: [{ name: "Tabs" }],
-                  });
-                }
+                // All users go to Tabs - TabNavigator shows correct tabs based on role
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: "Tabs" }],
+                });
               },
             },
           ]);

@@ -34,6 +34,7 @@ export interface MarketplaceListing {
   totalBeds: number;
   amenities: string[];
   requirements: string[];
+  requiredDocuments: string[];
   features: {
     acceptsFamilies: boolean;
     acceptsVeterans: boolean;
@@ -155,6 +156,15 @@ function transformToMarketplace(
     requirements.push(...dbListing.eligibility.background);
   }
 
+  // Extract required documents from intake
+  const requiredDocuments: string[] = [];
+  if (
+    dbListing.intake?.required_documents &&
+    Array.isArray(dbListing.intake.required_documents)
+  ) {
+    requiredDocuments.push(...dbListing.intake.required_documents);
+  }
+
   // Extract eligibility from database (wizard converts to structured object)
   // Wizard: ["women_only"] → DB: {gender: ["female"]}
   // Wizard: ["men_only"] → DB: {gender: ["male"]}
@@ -217,6 +227,7 @@ function transformToMarketplace(
     totalBeds,
     amenities: amenities.slice(0, 5), // Top 5 amenities
     requirements: requirements.slice(0, 3), // Top 3 requirements
+    requiredDocuments,
     features: {
       acceptsFamilies,
       acceptsVeterans,

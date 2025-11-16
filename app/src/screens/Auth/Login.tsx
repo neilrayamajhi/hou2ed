@@ -157,20 +157,12 @@ export default function Login() {
       if (result.success && result.user) {
         setUser(result.user);
 
-        // Route based on user role
-        if (result.user.role === "provider") {
-          // Providers go to Provider Dashboard
-          navigation.reset({
-            index: 0,
-            routes: [{ name: "ProviderDashboard" }],
-          });
-        } else {
-          // Seekers go to main tabs
-          navigation.reset({
-            index: 0,
-            routes: [{ name: "Tabs" }],
-          });
-        }
+        // All users (providers and seekers) go to Tabs
+        // TabNavigator will show the correct tabs based on role
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "Tabs" }],
+        });
       } else {
         const errorCode = result.errorCode || AUTH_ERROR_CODES.UNKNOWN;
 

@@ -10,6 +10,7 @@ import {
   RefreshControl,
   Linking,
   Alert,
+  Image,
 } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -211,12 +212,11 @@ export default function InboxScreen() {
           <View style={styles.messageContent}>
             <View style={styles.avatarContainer}>
               {otherParticipant.avatar_url ? (
-                <View style={styles.avatar}>
-                  {/* In a real app, you'd use an Image component here */}
-                  <Text style={styles.avatarText}>
-                    {getInitials(otherParticipant.full_name)}
-                  </Text>
-                </View>
+                <Image
+                  source={{ uri: otherParticipant.avatar_url }}
+                  style={styles.avatar}
+                  defaultSource={require("../../../assets/icon.png")}
+                />
               ) : (
                 <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
                   <Text style={styles.avatarText}>

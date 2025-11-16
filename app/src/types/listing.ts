@@ -122,6 +122,7 @@ export interface Cost {
   accepts?: string[];
   sliding_scale?: boolean;
   free?: boolean;
+  is_free?: boolean; // Alternative field name for free
 }
 
 // Document Requirement for listings
@@ -136,6 +137,7 @@ export interface DocumentRequirement {
     | "medical"
     | "reference"
     | "legal"
+    | "custom"
     | "other";
   isCustom?: boolean; // Is this a custom requirement added by provider?
 }
@@ -145,6 +147,7 @@ export interface Intake {
   process?: "walk_in" | "appointment" | "referral" | "waitlist";
   hours?: string;
   documents_required?: string[] | DocumentRequirement[]; // Support both legacy and new format
+  required_documents?: string[]; // Custom required documents from provider
   response_time?: string;
 }
 

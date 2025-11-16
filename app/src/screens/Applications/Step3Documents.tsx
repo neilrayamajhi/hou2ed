@@ -104,15 +104,38 @@ export default function Step3Documents({
             );
           }
         } else {
-          // No requirements specified, use defaults
-          setDocumentRequirements(
-            DOCUMENT_TYPES.map((dt) => ({
-              id: dt.id,
-              label: dt.label,
-              required: dt.required,
-              category: "other" as const,
-            })),
-          );
+          // Start with default requirements
+          const defaultRequirements = DOCUMENT_TYPES.map((dt) => ({
+            id: dt.id,
+            label: dt.label,
+            required: dt.required,
+            category: "other" as const,
+          }));
+
+          // Add custom required documents from provider if they exist
+          const customDocs = data?.intake?.required_documents;
+          if (
+            customDocs &&
+            Array.isArray(customDocs) &&
+            customDocs.length > 0
+          ) {
+            // Convert custom document names to document requirements
+            const customRequirements = customDocs.map(
+              (docName: string, index: number) => ({
+                id: `custom_${index}_${docName.toLowerCase().replace(/\s+/g, "_")}`,
+                label: docName,
+                required: true, // Custom documents are required
+                category: "custom" as const,
+              }),
+            );
+            setDocumentRequirements([
+              ...defaultRequirements,
+              ...customRequirements,
+            ]);
+          } else {
+            // No custom documents, just use defaults
+            setDocumentRequirements(defaultRequirements);
+          }
         }
       } catch (error) {
         console.error("Error in fetchDocumentRequirements:", error);
@@ -193,12 +216,12 @@ export default function Step3Documents({
         );
 
         // Wait a bit for UI effect
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         // Mark as ready for upload (not actually uploaded yet)
         const result = {
           success: true,
-          path: null // No path yet, will be uploaded on submit
+          path: null, // No path yet, will be uploaded on submit
         };
 
         if (result.success) {
@@ -212,7 +235,7 @@ export default function Step3Documents({
                     // Keep original URI for actual upload on submit
                     storagePath: null,
                     // Mark as ready (not uploaded yet)
-                    uploaded: false
+                    uploaded: false,
                   }
                 : d,
             ),
@@ -369,7 +392,9 @@ export default function Step3Documents({
     return documentRequirements
       .filter((req) => req.required)
       .every((req) =>
-        documents.some((doc) => doc.type === req.id && doc.uploadProgress === 100),
+        documents.some(
+          (doc) => doc.type === req.id && doc.uploadProgress === 100,
+        ),
       );
   }, [documents, documentRequirements]);
 

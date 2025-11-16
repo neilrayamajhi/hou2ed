@@ -41,6 +41,7 @@ export interface CreateListingInput {
   maxAge?: number;
   eligibility?: string[];
   customEligibility?: string[];
+  requiredDocuments?: string[];
 }
 
 // Type for updating a listing
@@ -66,6 +67,7 @@ export interface UpdateListingInput {
   maxAge?: number;
   eligibility?: string[];
   customEligibility?: string[];
+  requiredDocuments?: string[];
 }
 
 /**
@@ -431,7 +433,11 @@ export async function createListing(
       cost: listingData.price
         ? { monthly: listingData.price }
         : { is_free: true },
-      intake: {},
+      intake:
+        listingData.requiredDocuments &&
+        listingData.requiredDocuments.length > 0
+          ? { required_documents: listingData.requiredDocuments }
+          : {},
       availability: {
         beds_today: listingData.availableBeds || listingData.totalBeds,
         beds_week: listingData.totalBeds,
