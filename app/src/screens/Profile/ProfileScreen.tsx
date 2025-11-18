@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Alert,
-  Switch,
   Modal,
   TextInput,
   Pressable,
@@ -19,9 +18,8 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
 import { useAuthStore } from "../../state/useAuthStore";
-import { useSavedSearches } from "../../hooks/useSavedItems";
 import { RootStackNavigationProp } from "../../navigation/types";
-import { useI18n, LANGUAGES } from "../../i18n";
+import { useI18n } from "../../i18n";
 import { supabase } from "../../lib/supabase";
 import { transformUserData } from "../../utils/auth";
 
@@ -37,16 +35,12 @@ interface ProfileSection {
 export default function ProfileScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
   const { user, logout, setUser } = useAuthStore();
-  const { savedSearches } = useSavedSearches();
   const i18n = useI18n();
 
   const [avatarUri, setAvatarUri] = useState<string | null>(
     user?.avatar_url || null,
   );
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [pushNotifications, setPushNotifications] = useState(true);
   const [changePasswordModalVisible, setChangePasswordModalVisible] =
     useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -217,8 +211,8 @@ export default function ProfileScreen() {
           .from("applications")
           .select("*", { count: "exact", head: true })
           .eq("seeker_id", user.id)
-          .is("deleted_at", null)  // Exclude soft-deleted
-          .neq("status", "withdrawn");  // Exclude withdrawn
+          .is("deleted_at", null) // Exclude soft-deleted
+          .neq("status", "withdrawn"); // Exclude withdrawn
 
         if (!error && count !== null) {
           setApplicationsCount(count);
@@ -232,7 +226,7 @@ export default function ProfileScreen() {
       }
     } catch (error) {
       console.error("Error fetching applications count:", error);
-      setApplicationsCount(0);  // Reset to 0 on error
+      setApplicationsCount(0); // Reset to 0 on error
     }
   }, [user?.id]);
 
@@ -251,13 +245,6 @@ export default function ProfileScreen() {
   const handleApplications = useCallback(() => {
     navigation.navigate("ApplicationsList");
   }, [navigation]);
-
-  const handleSavedSearches = useCallback(() => {
-    Alert.alert(
-      "Saved Searches",
-      `You have ${savedSearches.length} saved searches`,
-    );
-  }, [savedSearches]);
 
   const handleChangePassword = useCallback(() => {
     setChangePasswordModalVisible(true);
@@ -362,65 +349,6 @@ export default function ProfileScreen() {
     ]);
   }, [logout, navigation]);
 
-  const handleSwitchRole = useCallback(async () => {
-    const newRole = user?.role === "provider" ? "seeker" : "provider";
-    Alert.alert(
-      "Switch Role",
-      `Switch to ${newRole === "provider" ? "Housing Provider" : "Housing Seeker"}?`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Switch",
-          onPress: async () => {
-            try {
-              const { supabase } = await import("../../lib/supabase");
-              const {
-                data: { user: authUser },
-              } = await supabase.auth.getUser();
-
-              if (!authUser) {
-                Alert.alert("Error", "Not logged in");
-                return;
-              }
-
-              const { error } = await supabase
-                .from("profiles")
-                .update({ role: newRole })
-                .eq("id", authUser.id);
-
-              if (error) {
-                Alert.alert("Error", "Failed to switch role");
-                return;
-              }
-
-              Alert.alert(
-                "Success",
-                `Switched to ${newRole}. Please sign out and back in to see changes.`,
-                [
-                  {
-                    text: "OK",
-                    onPress: () => {
-                      logout();
-                      navigation.reset({
-                        index: 0,
-                        routes: [{ name: "Login" }],
-                      });
-                    },
-                  },
-                ],
-              );
-            } catch (err) {
-              Alert.alert("Error", "Failed to switch role");
-            }
-          },
-        },
-      ],
-    );
-  }, [user?.role, logout, navigation]);
-
   const profileSections: ProfileSection[] = useMemo(
     () => [
       // Provider Dashboard - only show if user is a provider
@@ -444,14 +372,6 @@ export default function ProfileScreen() {
         showArrow: true,
       },
       {
-        id: "saved-searches",
-        title: i18n.t("profile.sections.savedSearches"),
-        icon: "search-outline",
-        onPress: handleSavedSearches,
-        badge: savedSearches.length,
-        showArrow: true,
-      },
-      {
         id: "account-settings",
         title: i18n.t("profile.sections.accountSettings"),
         icon: "settings-outline",
@@ -463,8 +383,6 @@ export default function ProfileScreen() {
       user?.role,
       i18n.language,
       handleApplications,
-      handleSavedSearches,
-      savedSearches.length,
       applicationsCount,
       navigation,
     ],
@@ -506,99 +424,6 @@ export default function ProfileScreen() {
                   size={18}
                   color={colors.gray[500]}
                 />
-              </TouchableOpacity>
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingLeft}>
-                  <Ionicons
-                    name="notifications-outline"
-                    size={18}
-                    color={colors.gray[400]}
-                  />
-                  <Text style={styles.settingText}>
-                    {i18n.t("profile.settings.pushNotifications")}
-                  </Text>
-                </View>
-                <Switch
-                  value={pushNotifications}
-                  onValueChange={setPushNotifications}
-                  trackColor={{
-                    false: colors.gray[700],
-                    true: colors.primary[600],
-                  }}
-                  thumbColor={
-                    pushNotifications ? colors.primary[400] : colors.gray[400]
-                  }
-                  accessibilityLabel="Push notifications toggle"
-                  accessibilityRole="switch"
-                />
-              </View>
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingLeft}>
-                  <Ionicons
-                    name="mail-outline"
-                    size={18}
-                    color={colors.gray[400]}
-                  />
-                  <Text style={styles.settingText}>
-                    {i18n.t("profile.settings.emailNotifications")}
-                  </Text>
-                </View>
-                <Switch
-                  value={emailNotifications}
-                  onValueChange={setEmailNotifications}
-                  trackColor={{
-                    false: colors.gray[700],
-                    true: colors.primary[600],
-                  }}
-                  thumbColor={
-                    emailNotifications ? colors.primary[400] : colors.gray[400]
-                  }
-                  accessibilityLabel="Email notifications toggle"
-                  accessibilityRole="switch"
-                />
-              </View>
-
-              <TouchableOpacity
-                style={styles.settingRow}
-                onPress={() => {
-                  Alert.alert(
-                    i18n.t("profile.settings.selectLanguage"),
-                    i18n.t("profile.settings.chooseLanguage"),
-                    [
-                      ...LANGUAGES.map((lang) => ({
-                        text: `${lang.nativeName} (${lang.name})`,
-                        onPress: () => i18n.setLanguage(lang.code),
-                      })),
-                      { text: i18n.t("common.cancel"), style: "cancel" },
-                    ],
-                  );
-                }}
-                accessibilityLabel="Change language"
-                accessibilityRole="button"
-              >
-                <View style={styles.settingLeft}>
-                  <Ionicons
-                    name="language-outline"
-                    size={18}
-                    color={colors.gray[400]}
-                  />
-                  <Text style={styles.settingText}>
-                    {i18n.t("profile.settings.language")}
-                  </Text>
-                </View>
-                <View style={styles.settingRight}>
-                  <Text style={styles.settingValue}>
-                    {LANGUAGES.find((l) => l.code === i18n.language)?.name ||
-                      "English"}
-                  </Text>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={18}
-                    color={colors.gray[500]}
-                  />
-                </View>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -655,17 +480,7 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       );
     },
-    [
-      pushNotifications,
-      emailNotifications,
-      handleChangePassword,
-      handleDeleteAccount,
-      handleApplications,
-      handleSavedSearches,
-      savedSearches.length,
-      i18n.language,
-      i18n.t,
-    ],
+    [handleChangePassword, handleDeleteAccount, i18n.language, i18n.t],
   );
 
   return (
@@ -728,41 +543,6 @@ export default function ProfileScreen() {
         {/* Profile Sections */}
         <View style={styles.sectionsContainer}>
           {profileSections.map(renderSection)}
-        </View>
-
-        {/* Dev Tools Section */}
-        <View style={styles.devToolsSection}>
-          <Text style={styles.devToolsTitle}>Developer Tools</Text>
-
-          <TouchableOpacity
-            style={styles.devButton}
-            onPress={() => navigation.navigate("DevMenu")}
-            accessibilityLabel="Open dev menu"
-            accessibilityRole="button"
-          >
-            <Ionicons
-              name="code-outline"
-              size={20}
-              color={colors.primary[500]}
-            />
-            <Text style={styles.devButtonText}>Dev Menu</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.devButton}
-            onPress={handleSwitchRole}
-            accessibilityLabel="Switch role"
-            accessibilityRole="button"
-          >
-            <Ionicons
-              name="swap-horizontal-outline"
-              size={20}
-              color={colors.primary[500]}
-            />
-            <Text style={styles.devButtonText}>
-              Switch to {user?.role === "provider" ? "Seeker" : "Provider"}
-            </Text>
-          </TouchableOpacity>
         </View>
 
         {/* Sign Out Button */}
@@ -1020,36 +800,6 @@ const styles = StyleSheet.create({
   },
   dangerText: {
     color: colors.red,
-  },
-  devToolsSection: {
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.xl,
-    marginBottom: spacing.md,
-  },
-  devToolsTitle: {
-    fontSize: typography.sizes.xs,
-    fontWeight: "600",
-    color: colors.gray[500],
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: spacing.md,
-  },
-  devButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.gray[850],
-    borderWidth: 1,
-    borderColor: colors.primary[500],
-    marginBottom: spacing.sm,
-  },
-  devButtonText: {
-    fontSize: typography.sizes.sm,
-    fontWeight: "500",
-    color: colors.primary[500],
-    marginLeft: spacing.sm,
   },
   signOutButton: {
     flexDirection: "row",

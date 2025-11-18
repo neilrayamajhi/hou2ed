@@ -15,6 +15,7 @@ import ListingDetailsScreen from "../screens/Listing/ListingDetailsScreen";
 import ProviderListingDetails from "../screens/Provider/ListingDetails";
 import ApplyWizard from "../screens/Applications/ApplyWizard";
 import ApplicationsListScreen from "../screens/Applications/ApplicationsListScreen";
+import SavedSearchesScreen from "../screens/Saved/SavedSearchesScreen";
 import ThreadScreen from "../screens/Messages/ThreadScreen";
 import DevMenu from "../screens/Dev/DevMenu";
 import ProviderDashboard from "../screens/Provider/ProviderDashboard";
@@ -83,6 +84,12 @@ export default function RootNavigator() {
         <Stack.Screen
           name="ApplicationsList"
           component={ApplicationsListScreen}
+        />
+
+        {/* Saved Searches */}
+        <Stack.Screen
+          name="SavedSearchesScreen"
+          component={SavedSearchesScreen}
         />
 
         {/* Thread Screen */}

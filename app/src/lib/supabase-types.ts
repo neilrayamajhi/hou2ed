@@ -6,6 +6,26 @@
 export type Database = {
   public: {
     Tables: {
+      blocks: {
+        Row: {
+          id: string;
+          blocker_id: string;
+          blocked_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          blocker_id: string;
+          blocked_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          blocker_id?: string;
+          blocked_id?: string;
+          created_at?: string;
+        };
+      };
       profiles: {
         Row: {
           id: string;
@@ -19,6 +39,9 @@ export type Database = {
           phone?: string;
           avatar_url?: string;
           is_verified: boolean;
+          push_notifications_enabled: boolean;
+          email_notifications_enabled: boolean;
+          
         };
         Insert: {
           id?: string;
@@ -32,6 +55,8 @@ export type Database = {
           phone?: string;
           avatar_url?: string;
           is_verified?: boolean;
+          push_notifications_enabled?: boolean;
+          email_notifications_enabled?: boolean;
         };
         Update: {
           id?: string;
@@ -45,6 +70,8 @@ export type Database = {
           phone?: string;
           avatar_url?: string;
           is_verified?: boolean;
+          push_notifications_enabled?: boolean;
+          email_notifications_enabled?: boolean;
         };
       };
       providers: {
@@ -95,7 +122,7 @@ export type Database = {
         Row: {
           id: string;
           provider_id: string;
-          name: string;
+          title: string;
           description?: string;
           housing_type:
             | "emergency"
@@ -117,13 +144,30 @@ export type Database = {
           application_process?: string;
           coordinates?: { lat: number; lng: number };
           address?: string;
-          district: string;
-          island: "Oahu" | "Maui" | "BigIsland" | "Kauai" | "Molokai" | "Lanai";
+          city: string;
+          state: string;
+          zip_code?: string;
           contact_phone?: string;
           contact_email?: string;
           photos?: string[];
           domestic_violence_focus: boolean;
           active: boolean;
+          intake?: {
+            documents_required?: Array<{
+              id: string;
+              label: string;
+              description?: string;
+              required: boolean;
+              category?:
+                | "identification"
+                | "financial"
+                | "medical"
+                | "reference"
+                | "legal"
+                | "custom"
+                | "other";
+            }>;
+          };
           created_at: string;
           updated_at: string;
           last_confirmed: string;
@@ -131,7 +175,7 @@ export type Database = {
         Insert: {
           id?: string;
           provider_id: string;
-          name: string;
+          title: string;
           description?: string;
           housing_type:
             | "emergency"
@@ -153,13 +197,30 @@ export type Database = {
           application_process?: string;
           coordinates?: { lat: number; lng: number };
           address?: string;
-          district: string;
-          island: "Oahu" | "Maui" | "BigIsland" | "Kauai" | "Molokai" | "Lanai";
+          city: string;
+          state: string;
+          zip_code?: string;
           contact_phone?: string;
           contact_email?: string;
           photos?: string[];
           domestic_violence_focus?: boolean;
           active?: boolean;
+          intake?: {
+            documents_required?: Array<{
+              id: string;
+              label: string;
+              description?: string;
+              required: boolean;
+              category?:
+                | "identification"
+                | "financial"
+                | "medical"
+                | "reference"
+                | "legal"
+                | "custom"
+                | "other";
+            }>;
+          };
           created_at?: string;
           updated_at?: string;
           last_confirmed?: string;
@@ -202,6 +263,22 @@ export type Database = {
           photos?: string[];
           domestic_violence_focus?: boolean;
           active?: boolean;
+          intake?: {
+            documents_required?: Array<{
+              id: string;
+              label: string;
+              description?: string;
+              required: boolean;
+              category?:
+                | "identification"
+                | "financial"
+                | "medical"
+                | "reference"
+                | "legal"
+                | "custom"
+                | "other";
+            }>;
+          };
           created_at?: string;
           updated_at?: string;
           last_confirmed?: string;
@@ -214,10 +291,14 @@ export type Database = {
           seeker_id: string;
           status:
             | "draft"
+            | "new"
             | "submitted"
+            | "docs_needed"
             | "under_review"
+            | "interview_scheduled"
             | "approved"
             | "rejected"
+            | "waitlisted"
             | "withdrawn";
           urgency_level: "low" | "medium" | "high" | "critical";
           household_size: number;
@@ -242,10 +323,14 @@ export type Database = {
           seeker_id: string;
           status?:
             | "draft"
+            | "new"
             | "submitted"
+            | "docs_needed"
             | "under_review"
+            | "interview_scheduled"
             | "approved"
             | "rejected"
+            | "waitlisted"
             | "withdrawn";
           urgency_level?: "low" | "medium" | "high" | "critical";
           household_size?: number;
@@ -270,10 +355,14 @@ export type Database = {
           seeker_id?: string;
           status?:
             | "draft"
+            | "new"
             | "submitted"
+            | "docs_needed"
             | "under_review"
+            | "interview_scheduled"
             | "approved"
             | "rejected"
+            | "waitlisted"
             | "withdrawn";
           urgency_level?: "low" | "medium" | "high" | "critical";
           household_size?: number;
@@ -443,7 +532,7 @@ export type Database = {
         Row: {
           id: string;
           user_id: string;
-          name: string;
+          title: string;
           description?: string;
           filters: any; // JSON type for search filters
           notification_enabled: boolean;
@@ -455,7 +544,7 @@ export type Database = {
         Insert: {
           id?: string;
           user_id: string;
-          name: string;
+          title: string;
           description?: string;
           filters: any;
           notification_enabled?: boolean;
@@ -553,7 +642,7 @@ export type Database = {
         Row: {
           id: string;
           provider_id: string;
-          name: string;
+          title: string;
           description?: string;
           housing_type: string;
           unit_beds: string;
@@ -602,7 +691,7 @@ export type Database = {
         Returns: {
           listing_id: string;
           provider_id: string;
-          name: string;
+          title: string;
           description: string;
           housing_type: string;
           unit_beds: string;

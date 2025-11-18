@@ -112,6 +112,18 @@ export default function AuthProvider({
 
       if (error) {
         console.error(ERROR_MESSAGES.AUTH.SESSION_ERROR, error);
+
+        // If refresh token is invalid, clear storage and start fresh
+        if (
+          error.message?.includes("Invalid Refresh Token") ||
+          error.message?.includes("Refresh Token Not Found")
+        ) {
+          console.log(
+            "[AuthProvider] Invalid refresh token detected - clearing storage and starting fresh",
+          );
+          await authHelpers.signOut();
+          return;
+        }
       }
 
       if (existingSession) {
@@ -128,8 +140,23 @@ export default function AuthProvider({
         );
         await queryClient.invalidateQueries();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(ERROR_MESSAGES.AUTH.SESSION_ERROR, error);
+
+      // If refresh token is invalid, clear storage and start fresh
+      if (
+        error?.message?.includes("Invalid Refresh Token") ||
+        error?.message?.includes("Refresh Token Not Found")
+      ) {
+        console.log(
+          "[AuthProvider] Invalid refresh token detected - clearing storage and starting fresh",
+        );
+        try {
+          await authHelpers.signOut();
+        } catch (signOutError) {
+          console.error("Error clearing invalid session:", signOutError);
+        }
+      }
     } finally {
       setLoading(false);
     }

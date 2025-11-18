@@ -19,6 +19,7 @@ import {
   Alert,
   Pressable,
   ActivityIndicator,
+  ActionSheetIOS,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -35,6 +36,12 @@ import {
   ThreadWithDetails,
 } from "../../services/messageService";
 import { supabase } from "../../lib/supabase";
+import { useAuthStore } from "../../state/useAuthStore";
+import {
+  blockUser,
+  unblockUser,
+  hasBlockedUser,
+} from "../../services/blockingService";
 
 interface Attachment {
   id: string;
@@ -88,16 +95,22 @@ export default function ThreadScreen() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [loadingBlockStatus, setLoadingBlockStatus] = useState(true);
 
   const { threadId, participantId, propertyTitle, senderName } =
     route.params || {};
+
+  const storeUserId = useAuthStore((s) => s.user?.id);
 
   // Initialize and load thread
   useEffect(() => {
     async function loadThread() {
       try {
-        // Initialize message service
-        const userId = await messageService.initialize();
+        // Initialize message service with current auth user if available
+        const userId = await messageService.initialize(
+          storeUserId || undefined,
+        );
         console.log("[ThreadScreen] Initialized with userId:", userId);
         setCurrentUserId(userId);
 
@@ -114,7 +127,13 @@ export default function ThreadScreen() {
           if (threadData) {
             console.log("[ThreadScreen] Thread loaded:", threadData.id);
             setThread(threadData);
-            setMessages(threadData.messages || []);
+            // Normalize legacy messages that may use `content` instead of `body`
+            const normalized = (threadData.messages || []).map((m: any) => ({
+              ...m,
+              body: m?.body ?? m?.content ?? "",
+              content: m?.content ?? m?.body ?? "",
+            }));
+            setMessages(normalized);
           } else {
             console.error("[ThreadScreen] Failed to load thread:", threadId);
             Alert.alert(
@@ -160,7 +179,7 @@ export default function ThreadScreen() {
     }
 
     loadThread();
-  }, [threadId, participantId, propertyTitle]);
+  }, [threadId, participantId, propertyTitle, storeUserId]);
 
   // Subscribe to real-time messages
   useEffect(() => {
@@ -200,6 +219,23 @@ export default function ThreadScreen() {
     };
   }, [threadId, currentUserId]);
 
+  // Load block status
+  useEffect(() => {
+    async function loadBlockStatus() {
+      if (!participantId || !currentUserId) {
+        setLoadingBlockStatus(false);
+        return;
+      }
+
+      setLoadingBlockStatus(true);
+      const blocked = await hasBlockedUser(participantId);
+      setIsBlocked(blocked);
+      setLoadingBlockStatus(false);
+    }
+
+    loadBlockStatus();
+  }, [participantId, currentUserId]);
+
   const handleSend = useCallback(async () => {
     if (!inputText.trim() && selectedAttachments.length === 0) return;
 
@@ -238,6 +274,23 @@ export default function ThreadScreen() {
         hasAttachments: !!attachmentUrls,
       });
 
+      // Optimistically add message to UI
+      const tempId = `temp-${Date.now()}`;
+      const optimistic = {
+        id: tempId,
+        thread_id: thread.id,
+        sender_id: currentUserId,
+        body: inputText.trim(),
+        attachment_urls: attachmentUrls || [],
+        read_by: [currentUserId],
+        deleted_at: null,
+        edited_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        sender: undefined as any,
+      } as MessageWithSender;
+      setMessages((prev) => [...prev, optimistic]);
+
       // Send message
       const sentMessage = await messageService.sendMessage(
         thread.id,
@@ -254,19 +307,32 @@ export default function ThreadScreen() {
           sentMessage.id,
         );
 
-        // Message will be added via real-time subscription
+        // Replace optimistic message with server message (or leave if realtime updates it)
+        setMessages((prev) => {
+          const idx = prev.findIndex((m) => m.id === tempId);
+          if (idx === -1) return prev;
+          const next = [...prev];
+          next[idx] = sentMessage as any;
+          return next;
+        });
       } else {
         console.error("[ThreadScreen] sendMessage returned null");
         Alert.alert(
           "Error",
           "Failed to send message. This may be a database issue. Please check that messaging tables exist.",
         );
+        // Rollback optimistic
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
       }
     } catch (error) {
       console.error("[ThreadScreen] Error sending message:", error);
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
       Alert.alert("Error", `Failed to send message: ${errorMessage}`);
+      // Rollback optimistic
+      setMessages((prev) =>
+        prev.filter((m) => !m.id?.toString().startsWith("temp-")),
+      );
     } finally {
       setSending(false);
     }
@@ -343,9 +409,109 @@ export default function ThreadScreen() {
     ]);
   }, []);
 
-  const handleReportAbuse = useCallback(() => {
-    setReportModalVisible(true);
-  }, []);
+  const handleOptionsMenu = useCallback(() => {
+    if (!participantId) return;
+
+    const blockOption = isBlocked ? "Unblock User" : "Block User";
+
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["Cancel", "Report Abuse", blockOption],
+          destructiveButtonIndex: isBlocked ? undefined : 2,
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) {
+            setReportModalVisible(true);
+          } else if (buttonIndex === 2) {
+            handleBlockUnblock();
+          }
+        },
+      );
+    } else {
+      // Android - show Alert with options
+      Alert.alert("Options", `Choose an action for ${senderName}`, [
+        {
+          text: "Report Abuse",
+          onPress: () => setReportModalVisible(true),
+        },
+        {
+          text: blockOption,
+          style: isBlocked ? "default" : "destructive",
+          onPress: () => handleBlockUnblock(),
+        },
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+      ]);
+    }
+  }, [participantId, senderName, isBlocked]);
+
+  const handleBlockUnblock = useCallback(async () => {
+    if (!participantId) return;
+
+    if (isBlocked) {
+      // Unblock
+      Alert.alert(
+        "Unblock User",
+        `Unblock ${senderName}? You'll be able to receive messages from them again.`,
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Unblock",
+            onPress: async () => {
+              const result = await unblockUser(participantId);
+              if (result.success) {
+                setIsBlocked(false);
+                Alert.alert("Unblocked", `${senderName} has been unblocked.`);
+              } else {
+                Alert.alert("Error", result.error || "Failed to unblock user");
+              }
+            },
+          },
+        ],
+      );
+    } else {
+      // Block
+      Alert.alert(
+        "Block User",
+        `Block ${senderName}? You won't receive messages from them anymore.`,
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Block",
+            style: "destructive",
+            onPress: async () => {
+              const result = await blockUser(participantId);
+              if (result.success) {
+                setIsBlocked(true);
+                Alert.alert(
+                  "User Blocked",
+                  `${senderName} has been blocked. You won't receive messages from them anymore.`,
+                  [
+                    {
+                      text: "OK",
+                      onPress: () => navigation.goBack(),
+                    },
+                  ],
+                );
+              } else {
+                Alert.alert("Error", result.error || "Failed to block user");
+              }
+            },
+          },
+        ],
+      );
+    }
+  }, [participantId, senderName, isBlocked, navigation]);
 
   const submitReport = useCallback(() => {
     if (!reportText.trim()) return;
@@ -383,11 +549,11 @@ export default function ThreadScreen() {
               isUser ? styles.userBubble : styles.providerBubble,
             ]}
           >
-            {item.body ? (
+            {item.body || (item as any).content ? (
               <Text
                 style={[styles.messageText, isUser && styles.userMessageText]}
               >
-                {item.body}
+                {item.body || (item as any).content}
               </Text>
             ) : null}
 
@@ -487,7 +653,11 @@ export default function ThreadScreen() {
           </Text>
         </View>
 
-        <TouchableOpacity style={styles.menuButton} onPress={handleReportAbuse}>
+        <TouchableOpacity
+          style={styles.menuButton}
+          onPress={handleOptionsMenu}
+          disabled={loadingBlockStatus}
+        >
           <Ionicons
             name="ellipsis-vertical"
             size={20}

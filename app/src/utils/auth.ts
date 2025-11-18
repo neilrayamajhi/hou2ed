@@ -75,8 +75,8 @@ export const extractEmailFromInput = (input: string): string | null => {
  */
 export const retryWithBackoff = async <T>(
   fn: () => Promise<T>,
-  maxRetries = 2,  // Reduced from 3 to 2
-  initialDelay = 500,  // Reduced from 1000ms to 500ms
+  maxRetries = 2, // Reduced from 3 to 2
+  initialDelay = 500, // Reduced from 1000ms to 500ms
 ): Promise<T> => {
   let lastError: Error;
 
@@ -95,6 +95,8 @@ export const retryWithBackoff = async <T>(
         lastError.message?.includes("User already registered") ||
         lastError.message?.includes("Email already registered") ||
         lastError.message?.includes("Username already taken") ||
+        lastError.message?.includes("Invalid Refresh Token") ||
+        lastError.message?.includes("Refresh Token Not Found") ||
         lastError.message?.includes("fetch") ||
         lastError.message?.includes("Network request failed") ||
         lastError.message?.includes("aborted")
@@ -104,7 +106,7 @@ export const retryWithBackoff = async <T>(
 
       // Shorter exponential backoff
       if (i < maxRetries - 1) {
-        const delay = initialDelay * Math.pow(1.5, i);  // Less aggressive backoff (1.5x instead of 2x)
+        const delay = initialDelay * Math.pow(1.5, i); // Less aggressive backoff (1.5x instead of 2x)
         console.log(`Waiting ${delay}ms before retry...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
       }

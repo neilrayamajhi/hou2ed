@@ -3,7 +3,7 @@
  * Tracks search and map performance with P95 metrics
  */
 
-import React from 'react';
+import React from "react";
 
 interface PerformanceMetric {
   name: string;
@@ -91,7 +91,7 @@ class PerformanceTracker {
     if (__DEV__) {
       if (target && duration > target) {
         console.warn(
-          `⚠️ [PERF] ${name} took ${duration.toFixed(2)}ms (target: ${target}ms)`
+          `⚠️ [PERF] ${name} took ${duration.toFixed(2)}ms (target: ${target}ms)`,
         );
       } else {
         console.log(`✅ [PERF] ${name}: ${duration.toFixed(2)}ms`);
@@ -127,8 +127,8 @@ class PerformanceTracker {
     }
 
     const durations = metricsList
-      .filter(m => m.duration !== undefined)
-      .map(m => m.duration!);
+      .filter((m) => m.duration !== undefined)
+      .map((m) => m.duration!);
 
     if (durations.length === 0) {
       return null;
@@ -188,26 +188,28 @@ class PerformanceTracker {
 
     const stats = this.getAllStats();
 
-    console.log('📊 Performance Summary:');
-    console.log('========================');
+    console.log("📊 Performance Summary:");
+    console.log("========================");
 
     Object.entries(stats).forEach(([name, stat]) => {
       const targetKey = this.getTargetKey(name);
       const target = this.targets[targetKey as keyof typeof this.targets];
-      const p95Status = target && stat.p95 > target ? '❌' : '✅';
+      const p95Status = target && stat.p95 > target ? "❌" : "✅";
 
-      console.log(`
+      console.log(
+        `
 ${name}:
   Count: ${stat.count}
   Mean: ${stat.mean.toFixed(2)}ms
   Median: ${stat.median.toFixed(2)}ms
   P95: ${stat.p95.toFixed(2)}ms ${p95Status}
   Range: ${stat.min.toFixed(2)}ms - ${stat.max.toFixed(2)}ms
-  ${target ? `Target: <${target}ms` : ''}
-      `.trim());
+  ${target ? `Target: <${target}ms` : ""}
+      `.trim(),
+      );
     });
 
-    console.log('========================');
+    console.log("========================");
   }
 
   /**
@@ -231,18 +233,21 @@ ${name}:
     return values.reduce((sum, val) => sum + val, 0) / values.length;
   }
 
-  private calculatePercentile(sortedValues: number[], percentile: number): number {
+  private calculatePercentile(
+    sortedValues: number[],
+    percentile: number,
+  ): number {
     const index = Math.ceil((percentile / 100) * sortedValues.length) - 1;
     return sortedValues[Math.max(0, index)];
   }
 
   private getTargetKey(metricName: string): string {
     // Extract base metric type from name
-    if (metricName.includes('search')) return 'search';
-    if (metricName.includes('map')) return 'mapUpdate';
-    if (metricName.includes('listing')) return 'listingLoad';
-    if (metricName.includes('image')) return 'imageLoad';
-    if (metricName.includes('nav')) return 'navigation';
+    if (metricName.includes("search")) return "search";
+    if (metricName.includes("map")) return "mapUpdate";
+    if (metricName.includes("listing")) return "listingLoad";
+    if (metricName.includes("image")) return "imageLoad";
+    if (metricName.includes("nav")) return "navigation";
     return metricName;
   }
 }
@@ -252,14 +257,24 @@ export const perfTracker = new PerformanceTracker();
 
 /**
  * React Hook for performance tracking
+ * Memoized to prevent unnecessary re-renders
  */
 export function usePerformance(metricName: string) {
-  const start = () => perfTracker.start(metricName);
-  const end = () => perfTracker.end(metricName);
-  const measure = async <T>(operation: () => Promise<T>) =>
-    perfTracker.measure(metricName, operation);
+  const start = React.useCallback(
+    () => perfTracker.start(metricName),
+    [metricName],
+  );
+  const end = React.useCallback(
+    () => perfTracker.end(metricName),
+    [metricName],
+  );
+  const measure = React.useCallback(
+    async <T>(operation: () => Promise<T>) =>
+      perfTracker.measure(metricName, operation),
+    [metricName],
+  );
 
-  return { start, end, measure };
+  return React.useMemo(() => ({ start, end, measure }), [start, end, measure]);
 }
 
 /**
@@ -267,7 +282,7 @@ export function usePerformance(metricName: string) {
  */
 export function withPerformance<P extends object>(
   Component: React.ComponentType<P>,
-  metricName: string
+  metricName: string,
 ) {
   return (props: P) => {
     React.useEffect(() => {
@@ -281,18 +296,8 @@ export function withPerformance<P extends object>(
   };
 }
 
-/**
- * Log performance stats periodically in development
- */
-if (__DEV__) {
-  // Log summary every 30 seconds in development
-  setInterval(() => {
-    const stats = perfTracker.getAllStats();
-    if (Object.keys(stats).length > 0) {
-      perfTracker.logSummary();
-    }
-  }, 30000);
-}
+// REMOVED: Global setInterval that was causing re-render issues
+// Performance summaries can be triggered manually via perfTracker.logSummary()
 
 /**
  * Feature flag for PostHog integration
@@ -312,7 +317,7 @@ export function sendMetricsToPostHog(): void {
   // posthog.capture('performance_metrics', metrics);
 
   if (__DEV__) {
-    console.log('📤 [PERF] Would send to PostHog:', metrics);
+    console.log("📤 [PERF] Would send to PostHog:", metrics);
   }
 }
 

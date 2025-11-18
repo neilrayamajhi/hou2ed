@@ -14,6 +14,7 @@ export type RootStackParamList = {
   ListingDetails: { listingId?: string };
   ApplyWizard: { listingId?: string };
   ApplicationsList: undefined;
+  SavedSearchesScreen: undefined;
   Thread: {
     threadId?: string;
     messageId: string;
@@ -43,6 +44,7 @@ export type RootStackParamList = {
   ApplicationsInbox: undefined;
   ApplicationDetail: { applicationId: string };
   ProviderListingDetails: { listingId: string };
+  SearchScreen: { savedFilters?: any };
 };
 
 export type RootStackNavigationProp =

@@ -1,4 +1,10 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 import {
   View,
   StyleSheet,
@@ -11,6 +17,8 @@ import {
   FlatList,
   Animated,
   ActivityIndicator,
+  Linking,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MapView, Marker, PROVIDER_GOOGLE } from "../../components/MapView";
@@ -21,14 +29,14 @@ import ListingCard from "../../components/ListingCard";
 import FiltersSheet from "../Search/FiltersSheet";
 import { useFilterStore } from "../../state/useFilterStore";
 import { useLocation } from "../../hooks/useLocation";
-import { filterListingsByQuick } from "../../data/mockListings";
+import { filterMarketplaceListingsByQuick } from "../../data/mockListings";
 import { fetchRealShelters } from "../../services/shelterService";
+import type { ShelterWebsiteUrls } from "../../services/shelterWebsiteMapping";
 import {
   getMarketplaceListings,
   type MarketplaceListing,
 } from "../../services/marketplace.service";
 import { usePerformance } from "../../utils/perf";
-import type { Listing } from "../../types/listing";
 import type { RootStackNavigationProp } from "../../navigation/types";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
@@ -65,21 +73,126 @@ const MAP_DARK_STYLE = [
   },
 ];
 
+// Memoized marker component defined OUTSIDE HomeScreen to prevent recreation
+const MarkerComponent = React.memo(
+  ({
+    listing,
+    index,
+    isActive,
+    onPress,
+  }: {
+    listing: MarketplaceListing;
+    index: number;
+    isActive: boolean;
+    onPress: (index: number) => void;
+  }) => {
+    // Memoize the style array to prevent new references on every render
+    const markerStyle = React.useMemo(
+      () => [
+        styles.mapMarker,
+        listing.availability === "available"
+          ? styles.markerAvailable
+          : styles.markerFull,
+        isActive && styles.markerActive,
+      ],
+      [listing.availability, isActive],
+    );
+
+    return (
+      <Marker
+        key={listing.id}
+        coordinate={listing.coordinates}
+        onPress={() => onPress(index)}
+      >
+        <View style={markerStyle}>
+          {/* Price */}
+          <Text style={styles.markerText}>
+            {listing.price.isFree ? "FREE" : `$${listing.price.min}`}
+          </Text>
+          {/* Distance - only show if available */}
+          {listing.distance !== undefined && (
+            <View style={styles.markerDistanceRow}>
+              <Ionicons name="navigate" size={10} color="#000000" />
+              <Text style={styles.markerDistanceText}>
+                {listing.distance.toFixed(1)} mi
+              </Text>
+            </View>
+          )}
+        </View>
+      </Marker>
+    );
+  },
+  (prev, next) =>
+    prev.listing.id === next.listing.id &&
+    prev.isActive === next.isActive &&
+    prev.listing.price.isFree === next.listing.price.isFree &&
+    prev.listing.price.min === next.listing.price.min &&
+    prev.listing.availability === next.listing.availability &&
+    prev.listing.distance === next.listing.distance &&
+    prev.listing.coordinates.latitude === next.listing.coordinates.latitude &&
+    prev.listing.coordinates.longitude === next.listing.coordinates.longitude,
+);
+
+MarkerComponent.displayName = "MarkerComponent";
+
+/**
+ * Helper function to open a website with fallback URLs
+ * Tries primary URL first, then fallbacks in order
+ */
+async function openWebsiteWithFallback(
+  urls: ShelterWebsiteUrls | null | undefined,
+): Promise<void> {
+  if (!urls) {
+    console.log("No website URLs available");
+    return;
+  }
+
+  const allUrls = [urls.primary, ...urls.fallbacks].filter(Boolean);
+
+  for (const url of allUrls) {
+    try {
+      // Ensure URL has proper protocol
+      let finalUrl = url.trim();
+      if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
+        finalUrl = "https://" + finalUrl;
+      }
+
+      console.log(`🌐 Attempting to open: ${finalUrl}`);
+
+      // Try to open the URL directly without canOpenURL (unreliable on Android 11+)
+      await Linking.openURL(finalUrl);
+      console.log(`✅ Successfully opened: ${finalUrl}`);
+      return; // Success - stop trying
+    } catch (error) {
+      console.warn(`❌ Failed to open ${url}, trying fallback...`, error);
+      continue; // Try next URL
+    }
+  }
+
+  // All URLs failed
+  Alert.alert(
+    "Unable to Open Website",
+    "Please check your internet connection or try again later.",
+  );
+}
+
 export default function HomeScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<React.ElementRef<typeof MapView>>(null);
   const listRef = useRef<FlatList>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
 
   // Get user location
   const { location, loading: locationLoading, refreshLocation } = useLocation();
 
-  // Store state
-  const { quickFilters, toggleQuickFilter, searchQuery, setSearchQuery } =
-    useFilterStore();
+  // Store state - Use individual selectors to prevent unnecessary re-renders
+  const quickFilters = useFilterStore((state) => state.quickFilters);
+  const toggleQuickFilter = useFilterStore((state) => state.toggleQuickFilter);
+  const searchQuery = useFilterStore((state) => state.searchQuery);
+  const setSearchQuery = useFilterStore((state) => state.setSearchQuery);
 
   // Local state
-  const [listings, setListings] = useState<Listing[]>([]);
+  const [listings, setListings] = useState<MarketplaceListing[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [showListView, setShowListView] = useState(false);
@@ -95,7 +208,6 @@ export default function HomeScreen() {
   const [searchText, setSearchText] = useState("");
 
   // Performance tracking
-  const mapPerf = usePerformance("mapUpdate");
   const listingLoadPerf = usePerformance("listingLoad");
 
   // Load real listings from database or fall back to mock data
@@ -115,7 +227,7 @@ export default function HomeScreen() {
       try {
         console.log("📍 Loading listings with location:", location);
 
-        // Fetch real listings from Supabase database
+        // Fetch Hou2ed partner listings from Supabase database
         const dbListings = await getMarketplaceListings(
           location?.latitude,
           location?.longitude,
@@ -128,26 +240,87 @@ export default function HomeScreen() {
           return;
         }
 
-        let allListings: Listing[];
+        // Fetch external listings from OpenStreetMap (free, no API key needed)
+        let osmListings: MarketplaceListing[] = [];
+        try {
+          const userLat = location?.latitude || 34.0522; // LA default
+          const userLng = location?.longitude || -118.2437; // LA default
 
-        if (dbListings && dbListings.length > 0) {
-          // Use database listings
-          allListings = dbListings as any;
           console.log(
-            `✅ Found ${dbListings.length} real listings from database with proper distances`,
+            `🔍 Fetching OSM listings with user location:`,
+            `\n   latitude: ${location?.latitude} (using: ${userLat})`,
+            `\n   longitude: ${location?.longitude} (using: ${userLng})`,
+            `\n   Location available: ${!!location?.latitude && !!location?.longitude}`,
           );
-          setIsRealData(true);
-          setDataSource("Live Database");
-        } else {
-          // No database listings — show empty list (no mock)
-          console.log("No database listings found");
-          allListings = [] as any;
-          setIsRealData(true);
-          setDataSource("Live Database");
+
+          osmListings = await fetchRealShelters(userLat, userLng, 16);
+          console.log(`✅ Found ${osmListings.length} OSM external listings`);
+
+          // Debug: Check distances in returned listings
+          console.log(`\n📍 DISTANCE CHECK - First 3 OSM listings:`);
+          osmListings.slice(0, 3).forEach((listing, i) => {
+            console.log(
+              `   ${i + 1}. ${listing.name}`,
+              `\n      distance: ${listing.distance !== undefined ? listing.distance.toFixed(2) + " miles" : "UNDEFINED"}`,
+              `\n      coords: (${listing.coordinates.latitude}, ${listing.coordinates.longitude})`,
+            );
+          });
+
+          // Also calculate distance manually for first listing to verify
+          if (osmListings.length > 0) {
+            const first = osmListings[0];
+            console.log(
+              `\n🧪 MANUAL VERIFICATION for "${first.name}":`,
+              `\n   User: (${userLat}, ${userLng})`,
+              `\n   Shelter: (${first.coordinates.latitude}, ${first.coordinates.longitude})`,
+            );
+          }
+
+          // Debug: Check if all listings have unique websites
+          const websites = osmListings
+            .map((l) => l.contact?.website)
+            .filter(Boolean);
+          const uniqueWebsites = new Set(websites);
+          console.log(
+            `   Unique websites: ${uniqueWebsites.size} out of ${websites.length}`,
+          );
+          if (uniqueWebsites.size < websites.length) {
+            console.warn(`⚠️ WARNING: Duplicate websites detected!`);
+            websites.forEach((w, i) => {
+              console.log(`   ${i + 1}. ${osmListings[i].name}: ${w}`);
+            });
+          }
+        } catch (osmError) {
+          console.warn("⚠️ Failed to fetch OSM listings:", osmError);
+          // Continue without OSM listings if they fail
         }
 
-        const filtered = filterListingsByQuick(allListings, quickFilters);
-        setListings(filtered);
+        // Combine Hou2ed partners + OSM external listings
+        const allListings: MarketplaceListing[] = [
+          ...(dbListings || []),
+          ...osmListings,
+        ];
+
+        // Sort: Partners first, then by distance
+        allListings.sort((a, b) => {
+          // Hou2ed partners come first
+          if (a.source === "hou2ed" && b.source !== "hou2ed") return -1;
+          if (a.source !== "hou2ed" && b.source === "hou2ed") return 1;
+          // Then sort by distance
+          return (a.distance || 999) - (b.distance || 999);
+        });
+
+        console.log(
+          `✅ Total listings: ${allListings.length} (${dbListings?.length || 0} partners + ${osmListings.length} external)`,
+        );
+
+        setIsRealData(true);
+        setDataSource(
+          `${dbListings?.length || 0} Partners + ${osmListings.length} Community`,
+        );
+
+        // Set combined listings - filtering will be done via useMemo
+        setListings(allListings);
       } catch (error) {
         if (!isCancelled) {
           console.error("Error loading listings:", error);
@@ -168,7 +341,22 @@ export default function HomeScreen() {
     return () => {
       isCancelled = true;
     };
-  }, [quickFilters, location, locationLoading]);
+  }, [location?.latitude, location?.longitude, locationLoading]);
+
+  // Memoize filtered listings to prevent unnecessary re-renders
+  const filteredListings = useMemo(() => {
+    return filterMarketplaceListingsByQuick(listings, quickFilters);
+  }, [listings, quickFilters]);
+
+  // Validate and reset activeIndex when filtered listings change
+  useEffect(() => {
+    if (activeIndex >= filteredListings.length && filteredListings.length > 0) {
+      console.log("⚠️ activeIndex out of bounds, resetting to 0");
+      setActiveIndex(0);
+    } else if (filteredListings.length === 0 && activeIndex !== 0) {
+      setActiveIndex(0);
+    }
+  }, [filteredListings.length, activeIndex]);
 
   // Update map region when user location is loaded
   useEffect(() => {
@@ -179,11 +367,13 @@ export default function HomeScreen() {
         latitudeDelta: 0.0922,
         longitudeDelta: 0.0421,
       };
-      setMapRegion(newRegion);
 
       // Animate to the new region if map is ready
       if (mapRef.current) {
         mapRef.current.animateToRegion(newRegion, 1000);
+      } else {
+        // Only update state if map ref not available (shouldn't cause re-render issues on mount)
+        setMapRegion(newRegion);
       }
     }
   }, [location, locationLoading]);
@@ -216,8 +406,8 @@ export default function HomeScreen() {
 
   // Navigate to listing details
   const openDetails = useCallback(
-    (listing: Listing) => {
-      console.log("Opening details for:", listing.title);
+    (listing: MarketplaceListing) => {
+      console.log("Opening details for:", listing.name);
       // @ts-ignore - Navigation types will be updated
       navigation.navigate("ListingDetails", { listingId: listing.id, listing });
     },
@@ -242,7 +432,7 @@ export default function HomeScreen() {
       if (mapRef.current) {
         mapRef.current.animateToRegion(userRegion, 500);
       }
-      setMapRegion(userRegion);
+      // Removed setMapRegion - mapRef.animateToRegion handles the region update
     } else {
       // Try to get location again if not available
       await refreshLocation();
@@ -254,55 +444,79 @@ export default function HomeScreen() {
     item,
     index,
   }: {
-    item: Listing;
+    item: MarketplaceListing;
     index: number;
-  }) => (
-    <TouchableOpacity
-      style={styles.listItem}
-      onPress={() => openDetails(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.listItemContent}>
-        <View style={styles.listItemHeader}>
-          <Text style={styles.listItemTitle}>{item.name}</Text>
-          <View
-            style={[
-              styles.availabilityBadge,
-              item.availability === "available"
-                ? styles.availableBadge
-                : styles.fullBadge,
-            ]}
-          >
-            <Text style={styles.badgeText}>
-              {item.availability === "available"
-                ? `${item.bedsAvailable} beds`
-                : "Full"}
-            </Text>
+  }) => {
+    // Check if this is an OSM listing (minimal display)
+    // OSM listings always show minimal display since they lack full details
+    // Note: All OSM listings are guaranteed to have a website (filtered at API level)
+    const isOsmListing = item.source === "osm";
+
+    // Unified listing display for both OSM and HOU2ED partner listings
+    return (
+      <TouchableOpacity
+        style={styles.listItem}
+        onPress={() => openDetails(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.listItemContent}>
+          <View style={styles.listItemHeader}>
+            <View style={styles.listItemTitleRow}>
+              <Text style={styles.listItemTitle}>{item.name}</Text>
+              {/* Badge based on source */}
+              {isOsmListing ? (
+                <View style={styles.communityBadge}>
+                  <Ionicons name="people-outline" size={12} color="#8a8a8a" />
+                  <Text style={styles.communityBadgeText}>Community</Text>
+                </View>
+              ) : (
+                <View style={styles.partnerBadge}>
+                  <Ionicons name="shield-checkmark" size={12} color="#D4AF37" />
+                  <Text style={styles.partnerBadgeText}>Partner</Text>
+                </View>
+              )}
+            </View>
+            <View
+              style={[
+                styles.availabilityBadge,
+                item.availability === "available"
+                  ? styles.availableBadge
+                  : styles.fullBadge,
+              ]}
+            >
+              <Text style={styles.badgeText}>
+                {item.availability === "available"
+                  ? `${item.bedsAvailable} beds`
+                  : item.availability === "unknown"
+                    ? "Call"
+                    : "Full"}
+              </Text>
+            </View>
           </View>
-        </View>
 
-        <Text style={styles.listItemAddress}>
-          <Ionicons name="location" size={14} color="#8a8a8a" />{" "}
-          {item.address.street}, {item.address.city}
-        </Text>
-
-        <View style={styles.listItemFooter}>
-          <Text style={styles.listItemPrice}>
-            {item.price.isFree ? "FREE" : `$${item.price.min}/mo`}
+          <Text style={styles.listItemAddress}>
+            <Ionicons name="location" size={14} color="#8a8a8a" />{" "}
+            {item.address.street}, {item.address.city}
           </Text>
-          <View style={styles.listItemDistance}>
-            <Ionicons name="navigate" size={14} color="#D4AF37" />
-            <Text style={styles.distanceText}>
-              {item.distance !== undefined
-                ? `${item.distance} mi`
-                : "Calculating..."}
+
+          <View style={styles.listItemFooter}>
+            <Text style={styles.listItemPrice}>
+              {item.price.isFree ? "FREE" : `$${item.price.min}/mo`}
             </Text>
+            <View style={styles.listItemDistance}>
+              <Ionicons name="navigate" size={14} color="#D4AF37" />
+              <Text style={styles.distanceText}>
+                {item.distance !== undefined
+                  ? `${item.distance.toFixed(1)} mi`
+                  : "N/A"}
+              </Text>
+            </View>
           </View>
         </View>
-      </View>
-      <Ionicons name="chevron-forward" size={20} color="#8a8a8a" />
-    </TouchableOpacity>
-  );
+        <Ionicons name="chevron-forward" size={20} color="#8a8a8a" />
+      </TouchableOpacity>
+    );
+  };
 
   const renderQuickFilter = (
     key: keyof typeof quickFilters,
@@ -393,34 +607,17 @@ export default function HomeScreen() {
             provider={PROVIDER_GOOGLE}
             customMapStyle={MAP_DARK_STYLE}
             initialRegion={mapRegion}
-            onRegionChangeComplete={(region) => {
-              mapPerf.start();
-              setMapRegion(region);
-              mapPerf.end();
-            }}
             showsUserLocation
             showsMyLocationButton={false}
           >
-            {listings.map((listing, index) => (
-              <Marker
+            {filteredListings.map((listing, index) => (
+              <MarkerComponent
                 key={listing.id}
-                coordinate={listing.coordinates}
-                onPress={() => handleMarkerPress(index)}
-              >
-                <View
-                  style={[
-                    styles.mapMarker,
-                    listing.availability === "available"
-                      ? styles.markerAvailable
-                      : styles.markerFull,
-                    activeIndex === index && styles.markerActive,
-                  ]}
-                >
-                  <Text style={styles.markerText}>
-                    {listing.price.isFree ? "FREE" : `$${listing.price.min}`}
-                  </Text>
-                </View>
-              </Marker>
+                listing={listing}
+                index={index}
+                isActive={activeIndex === index}
+                onPress={handleMarkerPress}
+              />
             ))}
           </MapView>
 
@@ -459,7 +656,7 @@ export default function HomeScreen() {
         >
           <FlatList
             ref={listRef}
-            data={listings}
+            data={filteredListings}
             renderItem={renderListItem}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
@@ -478,7 +675,7 @@ export default function HomeScreen() {
             ) : (
               <>
                 <Text style={styles.resultsCount}>
-                  {listings.length} places
+                  {filteredListings.length} places
                 </Text>
                 <Text style={styles.resultsSubtext}>in this area</Text>
               </>
@@ -502,31 +699,59 @@ export default function HomeScreen() {
         </View>
 
         {/* Mini Card Preview (Map View Only) */}
-        {!showListView && listings[activeIndex] && (
+        {!showListView && filteredListings[activeIndex] && (
           <TouchableOpacity
             style={styles.miniCard}
-            onPress={() => openDetails(listings[activeIndex])}
+            onPress={() => openDetails(filteredListings[activeIndex])}
             activeOpacity={0.9}
           >
             <View style={styles.miniCardContent}>
-              <Text style={styles.miniCardTitle} numberOfLines={1}>
-                {listings[activeIndex].name}
-              </Text>
+              <View style={styles.miniCardHeader}>
+                <Text style={styles.miniCardTitle} numberOfLines={1}>
+                  {filteredListings[activeIndex].name}
+                </Text>
+                {filteredListings[activeIndex].source === "hou2ed" ? (
+                  <View style={styles.partnerBadge}>
+                    <Ionicons
+                      name="shield-checkmark"
+                      size={12}
+                      color="#10B981"
+                    />
+                    <Text style={styles.partnerBadgeText}>Partner</Text>
+                  </View>
+                ) : (
+                  <View style={styles.externalBadge}>
+                    <Ionicons name="globe-outline" size={12} color="#6B7280" />
+                    <Text style={styles.externalBadgeText}>Community</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.miniCardAddress} numberOfLines={1}>
-                {listings[activeIndex].address.street},{" "}
-                {listings[activeIndex].address.city}
+                {filteredListings[activeIndex].address.street},{" "}
+                {filteredListings[activeIndex].address.city}
               </Text>
               <View style={styles.miniCardFooter}>
                 <Text style={styles.miniCardPrice}>
-                  {listings[activeIndex].price.isFree
+                  {filteredListings[activeIndex].price.isFree
                     ? "FREE"
-                    : `$${listings[activeIndex].price.min}/mo`}
+                    : `$${filteredListings[activeIndex].price.min}/mo`}
                 </Text>
-                <View style={styles.miniCardBadge}>
+                <View
+                  style={[
+                    styles.miniCardBadge,
+                    filteredListings[activeIndex].availability === "available"
+                      ? styles.miniCardBadgeAvailable
+                      : filteredListings[activeIndex].availability === "unknown"
+                        ? styles.miniCardBadgeUnknown
+                        : styles.miniCardBadgeFull,
+                  ]}
+                >
                   <Text style={styles.miniCardBadgeText}>
-                    {listings[activeIndex].availability === "available"
-                      ? `${listings[activeIndex].bedsAvailable} beds`
-                      : "Full"}
+                    {filteredListings[activeIndex].availability === "available"
+                      ? `${filteredListings[activeIndex].bedsAvailable} beds`
+                      : filteredListings[activeIndex].availability === "unknown"
+                        ? "Call for info"
+                        : "Full"}
                   </Text>
                 </View>
               </View>
@@ -674,6 +899,17 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#000000",
   },
+  markerDistanceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    marginTop: 2,
+  },
+  markerDistanceText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#000000",
+  },
   myLocationButton: {
     position: "absolute",
     right: 16,
@@ -715,12 +951,50 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
+  listItemTitleRow: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginRight: 8,
+  },
   listItemTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: "#FFFFFF",
-    flex: 1,
-    marginRight: 8,
+    flexShrink: 1,
+  },
+  partnerBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: "rgba(212, 175, 55, 0.15)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#D4AF37",
+  },
+  partnerBadgeText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#D4AF37",
+  },
+  communityBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: "rgba(138, 138, 138, 0.15)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#8a8a8a",
+  },
+  communityBadgeText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#8a8a8a",
   },
   availabilityBadge: {
     paddingHorizontal: 10,
@@ -827,11 +1101,49 @@ const styles = StyleSheet.create({
   miniCardContent: {
     flex: 1,
   },
+  miniCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+  },
   miniCardTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: "#FFFFFF",
-    marginBottom: 4,
+    flex: 1,
+  },
+  partnerBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: "rgba(16, 185, 129, 0.15)",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#10B981",
+  },
+  partnerBadgeText: {
+    fontSize: 10,
+    color: "#10B981",
+    fontWeight: "600",
+  },
+  externalBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: "#374151",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#4B5563",
+  },
+  externalBadgeText: {
+    fontSize: 10,
+    color: "#9CA3AF",
+    fontWeight: "500",
   },
   miniCardAddress: {
     fontSize: 13,
@@ -849,10 +1161,18 @@ const styles = StyleSheet.create({
     color: "#D4AF37",
   },
   miniCardBadge: {
-    backgroundColor: "#21C55D",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
+  },
+  miniCardBadgeAvailable: {
+    backgroundColor: "#21C55D", // Green for available
+  },
+  miniCardBadgeUnknown: {
+    backgroundColor: "#6B7280", // Gray for unknown (external listings)
+  },
+  miniCardBadgeFull: {
+    backgroundColor: "#EF4444", // Red for full
   },
   miniCardBadgeText: {
     fontSize: 11,

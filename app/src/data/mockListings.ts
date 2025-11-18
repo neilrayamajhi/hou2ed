@@ -9,7 +9,7 @@ import { convertOldListingToNew } from "./fixMockListings";
 export function generateListingsAroundLocation(
   latitude: number,
   longitude: number,
-  count: number = 20
+  count: number = 20,
 ): Listing[] {
   const listings: Listing[] = [];
   const housingTypes: HousingType[] = [
@@ -51,10 +51,13 @@ export function generateListingsAroundLocation(
     const latOffset = (Math.random() - 0.5) * 0.1; // ~5 miles
     const lngOffset = (Math.random() - 0.5) * 0.1;
 
-    const housingType = housingTypes[Math.floor(Math.random() * housingTypes.length)];
+    const housingType =
+      housingTypes[Math.floor(Math.random() * housingTypes.length)];
     const isAvailable = Math.random() > 0.3;
     const totalBeds = Math.floor(Math.random() * 50) + 10;
-    const bedsAvailable = isAvailable ? Math.floor(Math.random() * totalBeds * 0.5) + 1 : 0;
+    const bedsAvailable = isAvailable
+      ? Math.floor(Math.random() * totalBeds * 0.5) + 1
+      : 0;
     const isFree = Math.random() > 0.6;
 
     const oldFormatListing = {
@@ -62,7 +65,7 @@ export function generateListingsAroundLocation(
       provider_id: `provider-${Math.floor(Math.random() * 10) + 1}`,
       name: names[i % names.length],
       type: housingType,
-      description: `24/7 ${housingType.replace(/_/g, ' ')} providing immediate housing and support services. Safe, clean environment with meals included.`,
+      description: `24/7 ${housingType.replace(/_/g, " ")} providing immediate housing and support services. Safe, clean environment with meals included.`,
       coverImage: "https://via.placeholder.com/400x300",
       coordinates: {
         latitude: latitude + latOffset,
@@ -74,7 +77,10 @@ export function generateListingsAroundLocation(
         state: "State",
         zipCode: `${Math.floor(Math.random() * 90000) + 10000}`,
       },
-      distance: Math.round(Math.sqrt(latOffset * latOffset + lngOffset * lngOffset) * 69 * 10) / 10, // Convert to miles
+      distance:
+        Math.round(
+          Math.sqrt(latOffset * latOffset + lngOffset * lngOffset) * 69 * 10,
+        ) / 10, // Convert to miles
       price: {
         min: isFree ? 0 : Math.floor(Math.random() * 500) + 200,
         max: isFree ? 0 : Math.floor(Math.random() * 800) + 400,
@@ -200,7 +206,11 @@ const oldFormatMockListings = [
       "Job Training",
       "Counseling",
     ],
-    requirements: ["Income Verification", "Clean 30 Days", "Program Participation"],
+    requirements: [
+      "Income Verification",
+      "Clean 30 Days",
+      "Program Participation",
+    ],
     features: {
       acceptsFamilies: true,
       acceptsVeterans: true,
@@ -474,14 +484,14 @@ export const mockListings: Listing[] = oldFormatMockListings.map((listing) => {
         beds_today: 0,
         beds_week: 0,
         waitlist: 0,
-        last_updated_at: null
+        last_updated_at: null,
       },
       verified: false,
       images: [],
       dv_sensitive: false,
       is_active: true,
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     } as Listing;
   }
 });
@@ -513,8 +523,8 @@ export function generateMockListings(count: number = 20): Listing[] {
         beds_today: Math.floor(Math.random() * totalBeds * 0.5),
         beds_week: Math.floor(Math.random() * totalBeds * 0.7),
         waitlist: Math.random() > 0.5 ? Math.floor(Math.random() * 10) : 0,
-        last_updated_at: new Date().toISOString()
-      }
+        last_updated_at: new Date().toISOString(),
+      },
     };
     generated.push(variation);
   }
@@ -540,7 +550,7 @@ export function filterListingsByQuick(
   if (!quickFilters) return listings;
 
   // If no filters are active, return all listings
-  const activeFilters = Object.values(quickFilters).some(v => v);
+  const activeFilters = Object.values(quickFilters).some((v) => v);
   if (!activeFilters) {
     console.log("📝 No active filters, returning all listings");
     return listings;
@@ -565,9 +575,71 @@ export function filterListingsByQuick(
 
   if (quickFilters.families) {
     // Check if accepts families
-    filtered = filtered.filter((l) =>
-      l.eligibility?.family_status?.includes("family") === true
+    filtered = filtered.filter(
+      (l) => l.eligibility?.family_status?.includes("family") === true,
     );
+  }
+
+  if (quickFilters.nearMe) {
+    // Filter by distance
+    filtered = filtered.filter((l) => (l.distance || 0) < 2);
+  }
+
+  return filtered;
+}
+
+/**
+ * Filter marketplace listings based on quick filters
+ * Works with MarketplaceListing type (transformed format used in HomeScreen)
+ */
+export function filterMarketplaceListingsByQuick<
+  T extends {
+    bedsAvailable: number;
+    price: { isFree: boolean };
+    features: { acceptsVeterans: boolean; acceptsFamilies: boolean };
+    distance?: number;
+  },
+>(
+  listings: T[],
+  quickFilters: {
+    immediate: boolean;
+    free: boolean;
+    veterans: boolean;
+    families: boolean;
+    nearMe: boolean;
+  },
+): T[] {
+  // Guard against undefined inputs
+  if (!listings) return [];
+  if (!quickFilters) return listings;
+
+  // If no filters are active, return all listings
+  const activeFilters = Object.values(quickFilters).some((v) => v);
+  if (!activeFilters) {
+    console.log("📝 No active filters, returning all listings");
+    return listings;
+  }
+
+  let filtered = [...listings];
+
+  if (quickFilters.immediate) {
+    // Check if beds are available today
+    filtered = filtered.filter((l) => l.bedsAvailable > 0);
+  }
+
+  if (quickFilters.free) {
+    // Check if cost is free
+    filtered = filtered.filter((l) => l.price?.isFree === true);
+  }
+
+  if (quickFilters.veterans) {
+    // Check if accepts veterans
+    filtered = filtered.filter((l) => l.features?.acceptsVeterans === true);
+  }
+
+  if (quickFilters.families) {
+    // Check if accepts families
+    filtered = filtered.filter((l) => l.features?.acceptsFamilies === true);
   }
 
   if (quickFilters.nearMe) {

@@ -23,7 +23,12 @@ import { useFilterStore } from "../../state/useFilterStore";
 import { supabase } from "../../lib/supabase";
 import { sortListings, SORT_OPTIONS } from "../../utils/sortListings";
 import { usePerformance } from "../../utils/perf";
-import type { Listing } from "../../types/listing";
+import type {
+  Listing,
+  Cost,
+  Availability,
+  HousingType,
+} from "../../types/listing";
 import type { SortOption } from "../../types/filters";
 
 type ViewMode = "list" | "map";
@@ -96,7 +101,7 @@ export default function SearchScreen() {
         const { data, error } = await supabase
           .from("listings")
           .select(
-            "id,title,description,address,city,state,zip_code,images,verified,availability,cost,eligibility,services"
+            "id,provider_id,title,description,address,city,state,zip_code,lat,lng,housing_type,unit_beds,ada_beds,gender_rooming,amenities,accessibility,eligibility,services,rules,cost,intake,availability,verified,certifications,images,responsiveness,dv_sensitive,is_active,created_at,updated_at",
           )
           .eq("is_active", true)
           .limit(100);
@@ -108,14 +113,21 @@ export default function SearchScreen() {
         const toArray = (v: any) => (Array.isArray(v) ? v : v ? [v] : []);
         const toStringVal = (v: any) => {
           if (v == null) return null;
-          if (typeof v === 'string') return v.trim();
-          if (typeof v === 'object' && (v as any).url) return String((v as any).url).trim();
-          try { return String(v).trim(); } catch { return null; }
+          if (typeof v === "string") return v.trim();
+          if (typeof v === "object" && (v as any).url)
+            return String((v as any).url).trim();
+          try {
+            return String(v).trim();
+          } catch {
+            return null;
+          }
         };
         const toPublicUrl = (p: string | null) => {
           if (!p) return null;
           if (/^https?:\/\//i.test(p)) return p;
-          const { data: pub } = supabase.storage.from('listing-images').getPublicUrl(p);
+          const { data: pub } = supabase.storage
+            .from("listing-images")
+            .getPublicUrl(p);
           return pub?.publicUrl || null;
         };
 
@@ -127,39 +139,64 @@ export default function SearchScreen() {
             .filter((u): u is string => !!u && /^https?:\/\//i.test(u));
           const coverImage = normalizedImages[0] || undefined;
           try {
-            console.log('[Search] listing', row.id, 'images:', normalizedImages);
+            console.log(
+              "[Search] listing",
+              row.id,
+              "images:",
+              normalizedImages,
+            );
           } catch {}
-          const price = {
-            isFree: row?.cost?.free === true || !row?.cost?.monthly,
-            min: row?.cost?.monthly || 0,
-            max: row?.cost?.monthly || 0,
-            acceptsVouchers: Array.isArray(row?.cost?.accepts) && row.cost.accepts.includes("vouchers"),
+          // Use correct Listing type structure - cost instead of price
+          const cost: Cost = {
+            monthly: row?.cost?.monthly || undefined,
+            deposit: row?.cost?.deposit || undefined,
+            program_fee: row?.cost?.program_fee || undefined,
+            accepts: row?.cost?.accepts || [],
+            sliding_scale: row?.cost?.sliding_scale || false,
+            free: row?.cost?.free === true || !row?.cost?.monthly,
           };
           const avail = row?.availability || {};
           const bedsToday = Number(avail?.beds_today || 0);
-          let availability: "available" | "waitlist" | "full" | "unknown" = "unknown";
-          if (bedsToday > 0) availability = "available";
-          else if (avail?.waitlist > 0) availability = "waitlist";
-          else availability = "full";
-          const features = {
-            acceptsFamilies: Array.isArray(row?.eligibility?.family_status) ? row.eligibility.family_status.includes("families") : false,
-            acceptsVeterans: row?.eligibility?.veterans === true,
-            wheelchairAccessible: Array.isArray(row?.accessibility?.mobility) ? row.accessibility.mobility.includes("wheelchair") : false,
-            petsAllowed: row?.rules?.pets === "allowed",
+          const availability: Availability = {
+            beds_today: bedsToday,
+            beds_week: Number(avail?.beds_week || 0),
+            waitlist: Number(avail?.waitlist || 0),
+            last_updated_at: avail?.last_updated_at || null,
           };
+
+          // Map to full Listing type
           return {
             id: row.id,
-            name: row.title,
-            provider: row.city ? `${row.city}, ${row.state}` : "",
-            coverImage,
-            images: normalizedImages,
-            verified: !!row.verified,
-            distance: undefined,
-            price,
-            rating: undefined,
-            features,
+            provider_id: row.provider_id || "",
+            title: row.title,
+            description: row.description || "",
+            address: row.address || "",
+            city: row.city || "",
+            state: row.state || "",
+            zip_code: row.zip_code || "",
+            lat: row.lat || 0,
+            lng: row.lng || 0,
+            housing_type: row.housing_type || ("shelter" as HousingType),
+            unit_beds: row.unit_beds || {},
+            ada_beds: row.ada_beds || 0,
+            gender_rooming: row.gender_rooming,
+            amenities: row.amenities,
+            accessibility: row.accessibility,
+            eligibility: row.eligibility,
+            services: row.services,
+            rules: row.rules,
+            cost,
+            intake: row.intake,
             availability,
-            bedsAvailable: bedsToday,
+            verified: !!row.verified,
+            certifications: row.certifications,
+            images: normalizedImages,
+            responsiveness: row.responsiveness,
+            dv_sensitive: row.dv_sensitive || false,
+            is_active: row.is_active !== false,
+            created_at: row.created_at || new Date().toISOString(),
+            updated_at: row.updated_at || new Date().toISOString(),
+            distance: undefined,
           };
         });
 
@@ -167,9 +204,11 @@ export default function SearchScreen() {
         const query = (searchQuery || "").toLowerCase();
         let filtered = !query
           ? mapped
-          : mapped.filter((l: any) =>
-              (l.name || "").toLowerCase().includes(query) ||
-              (l.provider || "").toLowerCase().includes(query)
+          : mapped.filter(
+              (l: Listing) =>
+                (l.title || "").toLowerCase().includes(query) ||
+                (l.city || "").toLowerCase().includes(query) ||
+                (l.address || "").toLowerCase().includes(query),
             );
 
         // TODO: Apply quickFilters mapping to DB fields if needed
@@ -208,11 +247,14 @@ export default function SearchScreen() {
   }, []);
 
   // Open details
-  const openDetails = useCallback((listing: Listing) => {
-    console.log("Open details:", listing.id);
-    // @ts-ignore - Navigation types will be updated
-    navigation.navigate("ListingDetails", { listingId: listing.id, listing });
-  }, [navigation]);
+  const openDetails = useCallback(
+    (listing: Listing) => {
+      console.log("Open details:", listing.id);
+      // @ts-ignore - Navigation types will be updated
+      navigation.navigate("ListingDetails", { listingId: listing.id, listing });
+    },
+    [navigation],
+  );
 
   // Render listing item
   const renderListingItem = useCallback(
@@ -221,7 +263,7 @@ export default function SearchScreen() {
         <ListingCard listing={item} onPress={() => openDetails(item)} />
       </View>
     ),
-    [openDetails]
+    [openDetails],
   );
 
   // List key extractor
@@ -240,11 +282,7 @@ export default function SearchScreen() {
       <View style={styles.header}>
         {/* Search Bar */}
         <View style={styles.searchBar}>
-          <Ionicons
-            name="search-outline"
-            size={20}
-            color={"#4B5563"}
-          />
+          <Ionicons name="search-outline" size={20} color={"#4B5563"} />
           <TextInput
             style={styles.searchInput}
             placeholder="Search location or shelter..."
@@ -259,7 +297,9 @@ export default function SearchScreen() {
           </TouchableOpacity>
           <TouchableOpacity onPress={openFilters} style={styles.filterButton}>
             <Ionicons name="options-outline" size={20} color={"#D4AF37"} />
-            <Text style={styles.filterButtonText}>Filters{filterCountText}</Text>
+            <Text style={styles.filterButtonText}>
+              Filters{filterCountText}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -324,11 +364,7 @@ export default function SearchScreen() {
             <Text style={styles.sortText}>
               {SORT_OPTIONS.find((o) => o.value === sortBy)?.label || "Sort"}
             </Text>
-            <Ionicons
-              name="chevron-down-outline"
-              size={16}
-              color={"#4B5563"}
-            />
+            <Ionicons name="chevron-down-outline" size={16} color={"#4B5563"} />
           </TouchableOpacity>
         </View>
       </View>
@@ -384,19 +420,23 @@ export default function SearchScreen() {
             {listings.map((listing) => (
               <Marker
                 key={listing.id}
-                coordinate={listing.coordinates}
+                coordinate={{ latitude: listing.lat, longitude: listing.lng }}
                 onPress={() => openDetails(listing)}
               >
                 <View
                   style={[
                     styles.marker,
-                    listing.availability === "available"
+                    listing.availability.beds_today > 0
                       ? styles.markerAvailable
                       : styles.markerFull,
                   ]}
                 >
                   <Text style={styles.markerText}>
-                    {listing.price.isFree ? "FREE" : `$${listing.price.min}`}
+                    {listing.cost?.free
+                      ? "FREE"
+                      : listing.cost?.monthly
+                        ? `$${listing.cost.monthly}`
+                        : "Contact"}
                   </Text>
                 </View>
               </Marker>
@@ -446,11 +486,7 @@ export default function SearchScreen() {
                     {option.label}
                   </Text>
                   {sortBy === option.value && (
-                    <Ionicons
-                      name="checkmark"
-                      size={20}
-                      color={"#D4AF37"}
-                    />
+                    <Ionicons name="checkmark" size={20} color={"#D4AF37"} />
                   )}
                 </TouchableOpacity>
               ))}
@@ -460,7 +496,10 @@ export default function SearchScreen() {
       </Modal>
 
       {/* Filters Sheet */}
-      <FiltersSheet visible={showFilters} onClose={() => setShowFilters(false)} />
+      <FiltersSheet
+        visible={showFilters}
+        onClose={() => setShowFilters(false)}
+      />
     </SafeAreaView>
   );
 }

@@ -70,7 +70,7 @@ export default function Step3Documents({
           .from("listings")
           .select("intake")
           .eq("id", draft.listingId)
-          .single();
+          .single() as { data: { intake?: { documents_required?: any[] } } | null; error: any };
 
         if (error) {
           console.error("Error fetching listing:", error);
@@ -104,15 +104,38 @@ export default function Step3Documents({
             );
           }
         } else {
-          // No requirements specified, use defaults
-          setDocumentRequirements(
-            DOCUMENT_TYPES.map((dt) => ({
-              id: dt.id,
-              label: dt.label,
-              required: dt.required,
-              category: "other" as const,
-            })),
-          );
+          // Start with default requirements
+          const defaultRequirements = DOCUMENT_TYPES.map((dt) => ({
+            id: dt.id,
+            label: dt.label,
+            required: dt.required,
+            category: "other" as const,
+          }));
+
+          // Add custom required documents from provider if they exist
+          const customDocs = data?.intake?.required_documents;
+          if (
+            customDocs &&
+            Array.isArray(customDocs) &&
+            customDocs.length > 0
+          ) {
+            // Convert custom document names to document requirements
+            const customRequirements = customDocs.map(
+              (docName: string, index: number) => ({
+                id: `custom_${index}_${docName.toLowerCase().replace(/\s+/g, "_")}`,
+                label: docName,
+                required: true, // Custom documents are required
+                category: "custom" as const,
+              }),
+            );
+            setDocumentRequirements([
+              ...defaultRequirements,
+              ...customRequirements,
+            ]);
+          } else {
+            // No custom documents, just use defaults
+            setDocumentRequirements(defaultRequirements);
+          }
         }
       } catch (error) {
         console.error("Error in fetchDocumentRequirements:", error);
@@ -193,12 +216,12 @@ export default function Step3Documents({
         );
 
         // Wait a bit for UI effect
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         // Mark as ready for upload (not actually uploaded yet)
         const result = {
           success: true,
-          path: null // No path yet, will be uploaded on submit
+          path: null, // No path yet, will be uploaded on submit
         };
 
         if (result.success) {
@@ -212,7 +235,7 @@ export default function Step3Documents({
                     // Keep original URI for actual upload on submit
                     storagePath: null,
                     // Mark as ready (not uploaded yet)
-                    uploaded: false
+                    uploaded: false,
                   }
                 : d,
             ),
@@ -369,7 +392,9 @@ export default function Step3Documents({
     return documentRequirements
       .filter((req) => req.required)
       .every((req) =>
-        documents.some((doc) => doc.type === req.id && doc.uploadProgress === 100),
+        documents.some(
+          (doc) => doc.type === req.id && doc.uploadProgress === 100,
+        ),
       );
   }, [documents, documentRequirements]);
 
@@ -554,7 +579,7 @@ export default function Step3Documents({
 
         {/* Privacy Note */}
         <View style={styles.privacyNote}>
-          <Ionicons name="lock-closed-outline" size={16} color={colors.gray} />
+          <Ionicons name="lock-closed-outline" size={16} color={colors.gray[500]} />
           <Text style={styles.privacyText}>
             Your documents are encrypted and securely stored. They will only be
             shared with the housing provider for verification purposes.
@@ -699,7 +724,7 @@ const styles = StyleSheet.create({
   },
   fileSize: {
     fontSize: 12,
-    color: colors.gray,
+    color: colors.gray[500],
   },
   progressContainer: {
     flexDirection: "row",
@@ -763,7 +788,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: spacing.sm,
     fontSize: 12,
-    color: colors.gray,
+    color: colors.gray[500],
     lineHeight: 16,
   },
   footer: {
@@ -815,7 +840,7 @@ const styles = StyleSheet.create({
   },
   footerHint: {
     fontSize: 12,
-    color: colors.gray,
+    color: colors.gray[500],
     textAlign: "center",
     marginTop: spacing.sm,
   },
@@ -826,7 +851,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
-    color: colors.gray,
+    color: colors.gray[500],
     marginTop: spacing.md,
   },
   customNoticeBox: {
@@ -835,7 +860,7 @@ const styles = StyleSheet.create({
   },
   documentDescription: {
     fontSize: 12,
-    color: colors.gray,
+    color: colors.gray[500],
     marginTop: spacing.xs,
   },
 });

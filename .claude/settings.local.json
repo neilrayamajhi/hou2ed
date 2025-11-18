@@ -21,7 +21,15 @@
       "Bash(src/types/database.types.ts)",
       "Bash(echo:*)",
       "Bash(git add:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(npx tsc:*)",
+      "Bash(git stash:*)",
+      "WebSearch",
+      "Bash(npm run web:*)",
+      "WebFetch(domain:hopethemission.org)",
+      "Bash(lsof:*)",
+      "Bash(kill:*)",
+      "Bash(npm run:*)"
     ],
     "deny": [],
     "ask": []

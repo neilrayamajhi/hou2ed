@@ -1,6 +1,7 @@
 import { supabase } from "../lib/supabase";
 import type { Listing as DBListing } from "../types/listing";
 import { env } from "../utils/env";
+import { getAllBlockedRelationships } from "./blockingService";
 
 /**
  * HomeScreen's expected listing format (simplified from mock data)
@@ -46,6 +47,11 @@ export interface MarketplaceListing {
   contact: {
     phone?: string;
     email?: string;
+    website?: string;
+    websiteUrls?: {
+      primary: string;
+      fallbacks: string[];
+    } | null;
     hours?: string;
   };
   rating: number;
@@ -53,17 +59,49 @@ export interface MarketplaceListing {
   lastUpdated: string;
   provider: string;
   verified: boolean;
+  // NEW: Source tracking for affiliated vs external listings
+  source: "hou2ed" | "google_places" | "osm";
+  // NEW: External listing metadata
+  externalMetadata?: {
+    placeId?: string; // Google Place ID or OSM ID
+    dataProvider?: string; // e.g., "Google Places", "OpenStreetMap"
+    lastSynced?: string; // When data was fetched
+    externalUrl?: string; // Link to external listing
+  };
 }
 
 /**
  * Calculate distance between two coordinates using Haversine formula
+ * Returns undefined if coordinates are invalid
  */
 function calculateDistance(
   lat1: number,
   lon1: number,
   lat2: number,
   lon2: number,
-): number {
+): number | undefined {
+  // Validate inputs - check for null, undefined, NaN, or invalid lat/lng values
+  if (
+    lat1 == null ||
+    lon1 == null ||
+    lat2 == null ||
+    lon2 == null ||
+    Number.isNaN(lat1) ||
+    Number.isNaN(lon1) ||
+    Number.isNaN(lat2) ||
+    Number.isNaN(lon2) ||
+    lat1 === 0 ||
+    lon1 === 0 ||
+    lat2 === 0 ||
+    lon2 === 0 ||
+    Math.abs(lat1) > 90 ||
+    Math.abs(lat2) > 90 ||
+    Math.abs(lon1) > 180 ||
+    Math.abs(lon2) > 180
+  ) {
+    return undefined;
+  }
+
   const R = 3959; // Radius of Earth in miles
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
@@ -172,18 +210,28 @@ function transformToMarketplace(
     dbListing.accessibility.mobility.length > 0
   );
 
-  // Price info - handle both old and new cost structures
+  // Price info - stable logic prioritizing explicit free flag
   let monthlyPrice = 0;
   let isFree = false;
 
   if (dbListing.cost) {
     if (typeof dbListing.cost === "object") {
-      monthlyPrice = dbListing.cost.monthly || 0;
-      isFree = dbListing.cost.free === true || dbListing.cost.is_free === true;
+      // Normalize monthly to 0 if null/undefined for stability
+      monthlyPrice = dbListing.cost.monthly ?? 0;
+
+      // Prioritize explicit free flag, fall back to checking if monthly is 0
+      if (dbListing.cost.free !== undefined && dbListing.cost.free !== null) {
+        isFree = dbListing.cost.free === true;
+      } else {
+        isFree = monthlyPrice === 0;
+      }
     } else if (typeof dbListing.cost === "number") {
       monthlyPrice = dbListing.cost;
       isFree = monthlyPrice === 0;
     }
+  } else {
+    // No cost info means it's free
+    isFree = true;
   }
 
   return {
@@ -238,7 +286,63 @@ function transformToMarketplace(
       dbListing.provider?.username ||
       "Provider",
     verified: dbListing.verified,
+    source: "hou2ed",
   };
+}
+
+/**
+ * Memoization cache for stable listing references
+ * Prevents unnecessary re-renders by maintaining same object references
+ */
+const listingCache = new Map<string, MarketplaceListing>();
+
+/**
+ * Get a cached listing or create a new one if data changed
+ * Ensures stable object references for React reconciliation
+ */
+function getCachedListing(
+  id: string,
+  dbListing: DBListing,
+  userLat?: number,
+  userLng?: number,
+): MarketplaceListing {
+  // Create cache key including location for distance-based caching
+  const cacheKey = `${id}-${userLat?.toFixed(4) || "null"}-${userLng?.toFixed(4) || "null"}`;
+
+  // Check if we have a cached version
+  const cached = listingCache.get(cacheKey);
+  if (cached) {
+    // Transform fresh data to compare
+    const fresh = transformToMarketplace(dbListing, userLat, userLng);
+
+    // Deep equality check on critical fields that affect UI
+    const isUnchanged =
+      cached.name === fresh.name &&
+      cached.availability === fresh.availability &&
+      cached.bedsAvailable === fresh.bedsAvailable &&
+      cached.price.isFree === fresh.price.isFree &&
+      cached.price.min === fresh.price.min &&
+      cached.distance === fresh.distance &&
+      cached.verified === fresh.verified &&
+      cached.coverImage === fresh.coverImage;
+
+    if (isUnchanged) {
+      // Data unchanged, return cached version with stable reference
+      return cached;
+    }
+  }
+
+  // Create new listing and cache it
+  const listing = transformToMarketplace(dbListing, userLat, userLng);
+  listingCache.set(cacheKey, listing);
+
+  // Clear old cache entries to prevent memory leaks (keep last 500)
+  if (listingCache.size > 500) {
+    const keysToDelete = Array.from(listingCache.keys()).slice(0, 100);
+    keysToDelete.forEach((key) => listingCache.delete(key));
+  }
+
+  return listing;
 }
 
 /**
@@ -261,10 +365,19 @@ export async function getMarketplaceListings(
     let error: any = null;
 
     console.log("   Fetching listings via direct query with RLS...");
-    console.log("   Using simplified query without joins...");
+    console.log("   Including provider info via join...");
     const queryPromise = supabase
       .from("listings")
-      .select("*")
+      .select(
+        `
+        *,
+        provider:profiles!listings_provider_id_fkey (
+          id,
+          full_name,
+          username
+        )
+      `,
+      )
       .eq("is_active", true)
       .order("created_at", { ascending: false })
       .limit(100);
@@ -306,6 +419,7 @@ export async function getMarketplaceListings(
     console.log("   First listing:", data[0]?.title, data[0]?.id);
 
     // Transform to marketplace format with actual provider info
+    // Use getCachedListing to maintain stable object references
     let listings = data.map((listing: any) => {
       const dbListing = listing as any;
 
@@ -327,10 +441,28 @@ export async function getMarketplaceListings(
         };
       }
 
-      return transformToMarketplace(dbListing as DBListing, userLat, userLng);
+      // Use cached version to prevent unnecessary re-renders
+      return getCachedListing(
+        dbListing.id,
+        dbListing as DBListing,
+        userLat,
+        userLng,
+      );
     });
 
     console.log(`✅ Transformed ${listings.length} listings`);
+
+    // Filter out blocked providers' listings
+    const blockedUserIds = await getAllBlockedRelationships();
+    if (blockedUserIds.length > 0) {
+      const beforeBlock = listings.length;
+      listings = listings.filter((listing) => {
+        return !blockedUserIds.includes(listing.provider_id);
+      });
+      console.log(
+        `🚫 Filtered out ${beforeBlock - listings.length} listings from blocked providers`,
+      );
+    }
 
     // Filter by radius if user location provided
     if (userLat && userLng) {
@@ -393,7 +525,8 @@ export async function getMarketplaceListing(
       return null;
     }
 
-    return transformToMarketplace(data as any, userLat, userLng);
+    // Use cached version to maintain stable reference
+    return getCachedListing((data as any).id, data as any, userLat, userLng);
   } catch (error) {
     console.error("Failed to fetch listing:", error);
     return null;

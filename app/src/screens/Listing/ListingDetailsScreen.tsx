@@ -9,6 +9,8 @@ import {
   Dimensions,
   ActivityIndicator,
   Alert,
+  ActionSheetIOS,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -17,6 +19,11 @@ import PhotoCarousel from "../../components/patterns/PhotoCarousel";
 import Badge from "../../components/ui/Badge";
 import { colors, spacing, radius } from "../../theme/tokens";
 import { supabase } from "../../lib/supabase";
+import {
+  blockUser,
+  unblockUser,
+  hasBlockedUser,
+} from "../../services/blockingService";
 import {
   parseAmenities,
   parseServices,
@@ -110,6 +117,8 @@ export default function ListingDetailsScreen() {
   const [dbListing, setDbListing] = useState<any>(null);
   const [loadingDb, setLoadingDb] = useState(false);
   const [checkingApplication, setCheckingApplication] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [loadingBlockStatus, setLoadingBlockStatus] = useState(true);
 
   useEffect(() => {
     const id = routeListingId;
@@ -121,7 +130,7 @@ export default function ListingDetailsScreen() {
         const { data, error } = await supabase
           .from("listings")
           .select(
-            "id,title,description,amenities,services,rules,eligibility,images,address,city,state,zip_code,lat,lng",
+            "id,title,description,amenities,services,rules,eligibility,images,address,city,state,zip_code,lat,lng,provider_id",
           )
           .eq("id", id)
           .maybeSingle();
@@ -144,6 +153,7 @@ export default function ListingDetailsScreen() {
       id: routeListingId || listingFromParams.id,
       title: listingFromParams.name || listingFromParams.title || "",
       providerName: listingFromParams.provider || "",
+      providerId: listingFromParams.provider_id || null,
       isVerified: !!listingFromParams.verified,
       isDVSensitive: !!listingFromParams.isDVSensitive,
       images: normalizeImageUrls(
@@ -179,6 +189,7 @@ export default function ListingDetailsScreen() {
       ...base,
       title: dbListing.title || base.title,
       overview: dbListing.description || base.overview,
+      providerId: (dbListing as any).provider_id ?? base.providerId,
       amenities: dbListing.amenities ?? base.amenities,
       services: dbListing.services ?? base.services,
       rules: dbListing.rules ?? base.rules,
@@ -213,6 +224,23 @@ export default function ListingDetailsScreen() {
 
   // Get auth state
   const { user } = useAuthStore();
+
+  // Load block status
+  useEffect(() => {
+    async function loadBlockStatus() {
+      if (!merged.providerId || !user || merged.providerId === user.id) {
+        setLoadingBlockStatus(false);
+        return;
+      }
+
+      setLoadingBlockStatus(true);
+      const blocked = await hasBlockedUser(merged.providerId);
+      setIsBlocked(blocked);
+      setLoadingBlockStatus(false);
+    }
+
+    loadBlockStatus();
+  }, [merged.providerId, user]);
 
   // Bookmark functionality
   const { isSaved: isListingSaved, toggleSave, isSaving } = useSavedListings();
@@ -264,14 +292,17 @@ export default function ListingDetailsScreen() {
 
     // Check for existing application before allowing to proceed
     try {
-      const { getExistingApplication } = await import("../../services/application.service");
+      const { getExistingApplication } = await import(
+        "../../services/application.service"
+      );
       const existingApp = await getExistingApplication(merged.id);
 
       if (existingApp.exists && !existingApp.canResubmit) {
         // User already has an active application
         Alert.alert(
           "Application Already Exists",
-          existingApp.message || "You already have an active application for this listing.",
+          existingApp.message ||
+            "You already have an active application for this listing.",
           [
             {
               text: "View My Applications",
@@ -284,7 +315,7 @@ export default function ListingDetailsScreen() {
               text: "OK",
               style: "cancel",
             },
-          ]
+          ],
         );
         return;
       }
@@ -293,12 +324,16 @@ export default function ListingDetailsScreen() {
         // User has a rejected/withdrawn application - allow resubmission
         Alert.alert(
           "Previous Application Found",
-          existingApp.message || "You can submit a new application for this listing.",
+          existingApp.message ||
+            "You can submit a new application for this listing.",
           [
             {
               text: "Continue",
               onPress: () => {
-                console.log("✅ Navigating to ApplyWizard with listingId:", merged.id);
+                console.log(
+                  "✅ Navigating to ApplyWizard with listingId:",
+                  merged.id,
+                );
                 // @ts-ignore
                 navigation.navigate("ApplyWizard", { listingId: merged.id });
               },
@@ -307,7 +342,7 @@ export default function ListingDetailsScreen() {
               text: "Cancel",
               style: "cancel",
             },
-          ]
+          ],
         );
         return;
       }
@@ -327,11 +362,134 @@ export default function ListingDetailsScreen() {
     }
   }, [navigation, merged.id, user, checkingApplication]);
 
+  // Handle 3-dot menu
+  const handleOptionsMenu = useCallback(() => {
+    if (!merged.providerId || !user || merged.providerId === user.id) {
+      return;
+    }
+
+    const blockOption = isBlocked ? "Unblock Provider" : "Block Provider";
+    const providerName = merged.providerName || "this provider";
+
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["Cancel", blockOption],
+          destructiveButtonIndex: isBlocked ? undefined : 1,
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) {
+            handleBlockUnblock();
+          }
+        },
+      );
+    } else {
+      // Android - show Alert with options
+      Alert.alert("Options", `Choose an action for ${providerName}`, [
+        {
+          text: blockOption,
+          style: isBlocked ? "default" : "destructive",
+          onPress: () => handleBlockUnblock(),
+        },
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+      ]);
+    }
+  }, [merged.providerId, merged.providerName, user, isBlocked]);
+
+  // Handle block/unblock
+  const handleBlockUnblock = useCallback(async () => {
+    if (!merged.providerId) return;
+
+    const providerName = merged.providerName || "this provider";
+
+    if (isBlocked) {
+      // Unblock
+      Alert.alert(
+        "Unblock Provider",
+        `Unblock ${providerName}? You'll be able to see their listings again.`,
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Unblock",
+            onPress: async () => {
+              const result = await unblockUser(merged.providerId);
+              if (result.success) {
+                setIsBlocked(false);
+                Alert.alert("Unblocked", `${providerName} has been unblocked.`);
+              } else {
+                Alert.alert(
+                  "Error",
+                  result.error || "Failed to unblock provider",
+                );
+              }
+            },
+          },
+        ],
+      );
+    } else {
+      // Block
+      Alert.alert(
+        "Block Provider",
+        `Block ${providerName}? You won't see their listings anymore and they won't be able to contact you.`,
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Block",
+            style: "destructive",
+            onPress: async () => {
+              const result = await blockUser(merged.providerId);
+              if (result.success) {
+                setIsBlocked(true);
+                Alert.alert(
+                  "Provider Blocked",
+                  `${providerName} has been blocked. You won't see their listings anymore.`,
+                  [
+                    {
+                      text: "OK",
+                      onPress: () => navigation.goBack(),
+                    },
+                  ],
+                );
+              } else {
+                Alert.alert(
+                  "Error",
+                  result.error || "Failed to block provider",
+                );
+              }
+            },
+          },
+        ],
+      );
+    }
+  }, [merged.providerId, merged.providerName, isBlocked, navigation]);
+
   return (
     <SafeAreaView style={styles.container}>
-      <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
-        <Ionicons name="arrow-back" size={24} color={colors.white} />
-      </TouchableOpacity>
+      <View style={styles.topBar}>
+        <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
+          <Ionicons name="arrow-back" size={24} color={colors.white} />
+        </TouchableOpacity>
+
+        {merged.providerId && user && merged.providerId !== user.id && (
+          <TouchableOpacity
+            style={styles.menuBtn}
+            onPress={handleOptionsMenu}
+            disabled={loadingBlockStatus}
+          >
+            <Ionicons name="ellipsis-vertical" size={24} color={colors.white} />
+          </TouchableOpacity>
+        )}
+      </View>
 
       <ScrollView
         style={styles.scrollView}
@@ -496,7 +654,10 @@ export default function ListingDetailsScreen() {
           )}
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.applyButton, checkingApplication && styles.applyButtonDisabled]}
+          style={[
+            styles.applyButton,
+            checkingApplication && styles.applyButtonDisabled,
+          ]}
           onPress={handleApply}
           disabled={checkingApplication}
         >
@@ -513,7 +674,33 @@ export default function ListingDetailsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.black },
-  backBtn: { position: "absolute", top: 40, left: 16, zIndex: 10 },
+  topBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    position: "absolute",
+    top: 40,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    paddingHorizontal: 16,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  menuBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: 140 },
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },

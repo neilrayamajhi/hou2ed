@@ -52,12 +52,20 @@ export default function ListingCard({
       onPress={onPress}
       activeOpacity={0.9}
     >
-      {/* Cover Image */}
-      <Image
-        source={{ uri: listing.images?.[0] || "https://via.placeholder.com/400x300" }}
-        style={styles.image}
-        resizeMode="cover"
-      />
+      {/* Cover Image - Only show if available */}
+      {listing.images?.[0] ? (
+        <Image
+          source={{
+            uri: listing.images[0],
+          }}
+          style={styles.image}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={[styles.image, styles.imagePlaceholder]}>
+          <Ionicons name="home-outline" size={32} color="#4B5563" />
+        </View>
+      )}
 
       {/* Content */}
       <View style={styles.content}>
@@ -83,27 +91,24 @@ export default function ListingCard({
           {/* Distance */}
           {listing.distance !== undefined && (
             <View style={styles.infoItem}>
-              <Ionicons
-                name="location-outline"
-                size={14}
-                color={"#4B5563"}
-              />
-              <Text style={styles.infoText}>{listing.distance.toFixed(1)} mi</Text>
+              <Ionicons name="location-outline" size={14} color={"#4B5563"} />
+              <Text style={styles.infoText}>
+                {listing.distance.toFixed(1)} mi
+              </Text>
             </View>
           )}
 
           {/* Price */}
           <View style={styles.infoItem}>
-            <Ionicons
-              name="cash-outline"
-              size={14}
-              color={"#4B5563"}
-            />
+            <Ionicons name="cash-outline" size={14} color={"#4B5563"} />
             <Text style={styles.infoText}>
-              {listing.cost?.free ? "Free" : listing.cost?.monthly ? `$${listing.cost.monthly}/mo` : "Contact"}
+              {listing.cost?.free
+                ? "Free"
+                : listing.cost?.monthly
+                  ? `$${listing.cost.monthly}/mo`
+                  : "Contact"}
             </Text>
           </View>
-
         </View>
 
         {/* Features */}
@@ -118,11 +123,12 @@ export default function ListingCard({
               <Text style={styles.featureText}>Veterans</Text>
             </View>
           )}
-          {listing.accessibility?.mobility?.length > 0 && (
-            <View style={styles.featureChip}>
-              <Text style={styles.featureText}>Accessible</Text>
-            </View>
-          )}
+          {listing.accessibility?.mobility &&
+            listing.accessibility.mobility.length > 0 && (
+              <View style={styles.featureChip}>
+                <Text style={styles.featureText}>Accessible</Text>
+              </View>
+            )}
           {listing.rules?.pets === "allowed" && (
             <View style={styles.featureChip}>
               <Text style={styles.featureText}>Pets OK</Text>
@@ -165,6 +171,11 @@ const styles = StyleSheet.create({
   image: {
     width: CARD_WIDTH * 0.35,
     height: "100%",
+  },
+  imagePlaceholder: {
+    backgroundColor: "#111827",
+    alignItems: "center",
+    justifyContent: "center",
   },
   content: {
     flex: 1,
