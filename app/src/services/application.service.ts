@@ -112,12 +112,12 @@ export async function createApplication(
     }
 
     // Check if provider has blocked this seeker
-    const { data: blockCheck, error: blockError } = await supabase
+    const { data: blockCheck } = await supabase
       .from('blocks')
       .select('id')
       .eq('blocker_id', listing.provider_id)
       .eq('blocked_id', user.id)
-      .single();
+      .maybeSingle();
 
     if (blockCheck) {
       return {
