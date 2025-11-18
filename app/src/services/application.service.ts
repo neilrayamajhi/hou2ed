@@ -97,6 +97,35 @@ export async function createApplication(
       };
     }
 
+    // Get listing to find provider
+    const { data: listing, error: listingError } = await supabase
+      .from('listings')
+      .select('provider_id')
+      .eq('id', params.listingId)
+      .single();
+
+    if (listingError || !listing) {
+      return {
+        success: false,
+        error: 'Listing not found',
+      };
+    }
+
+    // Check if provider has blocked this seeker
+    const { data: blockCheck, error: blockError } = await supabase
+      .from('blocks')
+      .select('id')
+      .eq('blocker_id', listing.provider_id)
+      .eq('blocked_id', user.id)
+      .single();
+
+    if (blockCheck) {
+      return {
+        success: false,
+        error: 'You cannot apply to this listing',
+      };
+    }
+
     // Create application record
     const { data: application, error } = await supabase
       .from('applications')

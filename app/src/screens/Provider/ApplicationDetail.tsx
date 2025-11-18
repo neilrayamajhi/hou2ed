@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
   Image,
   Dimensions,
 } from "react-native";
-import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -31,6 +31,7 @@ import {
 import type { ApplicationStatus } from "../../services/application.service";
 import { getDocumentSignedUrl } from "../../services/storage.service";
 import { supabase } from "../../lib/supabase";
+import { blockUser, unblockUser, hasBlockedUser } from "../../services/blockingService";
 
 type ApplicationDetailRouteProp = RouteProp<
   { ApplicationDetail: { applicationId: string } },
@@ -43,11 +44,21 @@ export default function ApplicationDetail() {
   const queryClient = useQueryClient();
   const [notes, setNotes] = useState("");
   const [seekerProfile, setSeekerProfile] = useState<any>(null);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [checkingBlock, setCheckingBlock] = useState(true);
 
   const [documents, setDocuments] = useState<any[]>([]);
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState<{ uri: string; title: string } | null>(null);
   const [imageLoadError, setImageLoadError] = useState(false);
+
+  // Refresh when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      queryClient.invalidateQueries({ queryKey: ["application", route.params.applicationId] });
+      queryClient.invalidateQueries({ queryKey: ["providerApplications"] });
+    }, [queryClient, route.params.applicationId])
+  );
 
   const { width: screenWidth } = Dimensions.get('window');
 
@@ -87,6 +98,18 @@ export default function ApplicationDetail() {
       return app;
     },
   });
+
+  // Check if seeker is blocked
+  useEffect(() => {
+    const checkBlockStatus = async () => {
+      if (seekerProfile?.id) {
+        const blocked = await hasBlockedUser(seekerProfile.id);
+        setIsBlocked(blocked);
+        setCheckingBlock(false);
+      }
+    };
+    checkBlockStatus();
+  }, [seekerProfile]);
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({
@@ -159,6 +182,65 @@ export default function ApplicationDetail() {
       note: notes || "Application under review",
     });
   };
+
+  const handleBlockUnblock = useCallback(async () => {
+    if (!seekerProfile) return;
+
+    const seekerName = seekerProfile.full_name || "this applicant";
+
+    if (isBlocked) {
+      // Unblock
+      Alert.alert(
+        "Unblock Applicant",
+        `Unblock ${seekerName}? They'll be able to apply to your listings again.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Unblock",
+            onPress: async () => {
+              const result = await unblockUser(seekerProfile.id);
+              if (result.success) {
+                setIsBlocked(false);
+                Alert.alert(
+                  "Unblocked",
+                  `${seekerName} has been unblocked.`,
+                  [{ text: "OK", onPress: () => navigation.goBack() }]
+                );
+              } else {
+                Alert.alert("Error", result.error || "Failed to unblock applicant");
+              }
+            },
+          },
+        ]
+      );
+    } else {
+      // Block
+      Alert.alert(
+        "Block Applicant",
+        `Block ${seekerName}? This will:\n• Auto-reject all their pending applications\n• Prevent them from applying to your listings\n• Hide your listings from them`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Block",
+            style: "destructive",
+            onPress: async () => {
+              const result = await blockUser(seekerProfile.id);
+              if (result.success) {
+                setIsBlocked(true);
+                Alert.alert(
+                  "Applicant Blocked",
+                  `${seekerName} has been blocked. All their pending applications have been auto-rejected.`,
+                  [{ text: "OK", onPress: () => navigation.goBack() }]
+                );
+              } else {
+                Alert.alert("Error", result.error || "Failed to block applicant");
+              }
+            },
+          },
+        ]
+      );
+    }
+  }, [seekerProfile, isBlocked, navigation]);
 
   const getStatusColor = (status: ApplicationStatus) => {
     switch (status) {
@@ -302,22 +384,42 @@ export default function ApplicationDetail() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Applicant Information</Text>
-            <TouchableOpacity
-              style={styles.messageButton}
-              onPress={() => {
-                // Navigate to messages with this seeker
-                if (seekerProfile) {
-                  // @ts-ignore
-                  navigation.navigate("Messages", {
-                    recipientId: seekerProfile.id,
-                    recipientName: seekerProfile.full_name || "Applicant",
-                  });
-                }
-              }}
-            >
-              <Ionicons name="chatbubble-outline" size={20} color={colors.primary[500]} />
-              <Text style={styles.messageButtonText}>Message</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: "row", gap: spacing.sm }}>
+              <TouchableOpacity
+                style={styles.messageButton}
+                onPress={() => {
+                  // Navigate to messages with this seeker
+                  if (seekerProfile) {
+                    // @ts-ignore
+                    navigation.navigate("Messages", {
+                      recipientId: seekerProfile.id,
+                      recipientName: seekerProfile.full_name || "Applicant",
+                    });
+                  }
+                }}
+              >
+                <Ionicons name="chatbubble-outline" size={20} color={colors.primary[500]} />
+                <Text style={styles.messageButtonText}>Message</Text>
+              </TouchableOpacity>
+
+              {!checkingBlock && seekerProfile && (
+                <TouchableOpacity
+                  style={[styles.blockButton, isBlocked && styles.unblockButton]}
+                  onPress={handleBlockUnblock}
+                  accessibilityLabel={isBlocked ? "Unblock applicant" : "Block applicant"}
+                  accessibilityRole="button"
+                >
+                  <Ionicons
+                    name={isBlocked ? "checkmark-circle-outline" : "ban-outline"}
+                    size={18}
+                    color={isBlocked ? colors.green : colors.red}
+                  />
+                  <Text style={[styles.blockButtonText, isBlocked && styles.unblockButtonText]}>
+                    {isBlocked ? "Unblock" : "Block"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
 
           <View style={styles.infoCard}>
@@ -1065,6 +1167,26 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     color: colors.primary[500],
     fontWeight: "600",
+  },
+  blockButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    backgroundColor: colors.red + "20",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+  },
+  unblockButton: {
+    backgroundColor: colors.green + "20",
+  },
+  blockButtonText: {
+    fontSize: typography.sizes.sm,
+    color: colors.red,
+    fontWeight: "600",
+  },
+  unblockButtonText: {
+    color: colors.green,
   },
   documentsContainer: {
     gap: spacing.sm,

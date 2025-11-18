@@ -427,6 +427,29 @@ export default function ProfileScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
+                style={styles.settingRow}
+                onPress={() => navigation.navigate("BlockedUsers")}
+                accessibilityLabel="Blocked users"
+                accessibilityRole="button"
+              >
+                <View style={styles.settingLeft}>
+                  <Ionicons
+                    name="ban-outline"
+                    size={18}
+                    color={colors.gray[400]}
+                  />
+                  <Text style={styles.settingText}>
+                    Blocked Users
+                  </Text>
+                </View>
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.gray[500]}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
                 style={[styles.settingRow, styles.dangerRow]}
                 onPress={handleDeleteAccount}
                 accessibilityLabel="Delete account"

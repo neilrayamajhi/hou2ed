@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import {
   colors,
@@ -35,6 +35,13 @@ export default function ApplicationsInbox() {
     isRefetching,
   } = useProviderApplications();
   const [filter, setFilter] = useState<"all" | ApplicationStatus>("all");
+
+  // Refresh when screen comes into focus (e.g., after blocking someone)
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
 
   // Filter applications based on selected filter
   const filteredApplications =

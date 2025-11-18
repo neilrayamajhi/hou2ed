@@ -286,7 +286,7 @@ function transformToMarketplace(
       dbListing.provider?.username ||
       "Provider",
     verified: dbListing.verified,
-    source: "hou2ed",
+    source: (dbListing as any).source || "hou2ed", // Use actual source from DB, default to hou2ed for existing listings
   };
 }
 

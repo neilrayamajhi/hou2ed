@@ -45,6 +45,7 @@ export type RootStackParamList = {
   ApplicationDetail: { applicationId: string };
   ProviderListingDetails: { listingId: string };
   SearchScreen: { savedFilters?: any };
+  BlockedUsers: undefined;
 };
 
 export type RootStackNavigationProp =

@@ -422,7 +422,16 @@ export default function ListingDetailsScreen() {
               const result = await unblockUser(merged.providerId);
               if (result.success) {
                 setIsBlocked(false);
-                Alert.alert("Unblocked", `${providerName} has been unblocked.`);
+                Alert.alert(
+                  "Unblocked",
+                  `${providerName} has been unblocked.`,
+                  [
+                    {
+                      text: "OK",
+                      onPress: () => navigation.goBack(),
+                    },
+                  ],
+                );
               } else {
                 Alert.alert(
                   "Error",

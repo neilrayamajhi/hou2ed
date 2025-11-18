@@ -23,15 +23,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MapView, Marker, PROVIDER_GOOGLE } from "../../components/MapView";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { theme } from "../../theme";
 import ListingCard from "../../components/ListingCard";
 import FiltersSheet from "../Search/FiltersSheet";
 import { useFilterStore } from "../../state/useFilterStore";
 import { useLocation } from "../../hooks/useLocation";
 import { filterMarketplaceListingsByQuick } from "../../data/mockListings";
-import { fetchRealShelters } from "../../services/shelterService";
-import type { ShelterWebsiteUrls } from "../../services/shelterWebsiteMapping";
 import {
   getMarketplaceListings,
   type MarketplaceListing,
@@ -135,47 +133,6 @@ const MarkerComponent = React.memo(
 
 MarkerComponent.displayName = "MarkerComponent";
 
-/**
- * Helper function to open a website with fallback URLs
- * Tries primary URL first, then fallbacks in order
- */
-async function openWebsiteWithFallback(
-  urls: ShelterWebsiteUrls | null | undefined,
-): Promise<void> {
-  if (!urls) {
-    console.log("No website URLs available");
-    return;
-  }
-
-  const allUrls = [urls.primary, ...urls.fallbacks].filter(Boolean);
-
-  for (const url of allUrls) {
-    try {
-      // Ensure URL has proper protocol
-      let finalUrl = url.trim();
-      if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
-        finalUrl = "https://" + finalUrl;
-      }
-
-      console.log(`🌐 Attempting to open: ${finalUrl}`);
-
-      // Try to open the URL directly without canOpenURL (unreliable on Android 11+)
-      await Linking.openURL(finalUrl);
-      console.log(`✅ Successfully opened: ${finalUrl}`);
-      return; // Success - stop trying
-    } catch (error) {
-      console.warn(`❌ Failed to open ${url}, trying fallback...`, error);
-      continue; // Try next URL
-    }
-  }
-
-  // All URLs failed
-  Alert.alert(
-    "Unable to Open Website",
-    "Please check your internet connection or try again later.",
-  );
-}
-
 export default function HomeScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
   const mapRef = useRef<React.ElementRef<typeof MapView>>(null);
@@ -206,9 +163,18 @@ export default function HomeScreen() {
     longitudeDelta: 0.0421,
   });
   const [searchText, setSearchText] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Performance tracking
   const listingLoadPerf = usePerformance("listingLoad");
+
+  // Refresh listings when returning from blocking/unblocking
+  useFocusEffect(
+    useCallback(() => {
+      // Trigger a refresh by incrementing the key
+      setRefreshKey((prev) => prev + 1);
+    }, [])
+  );
 
   // Load real listings from database or fall back to mock data
   useEffect(() => {
@@ -227,8 +193,8 @@ export default function HomeScreen() {
       try {
         console.log("📍 Loading listings with location:", location);
 
-        // Fetch Hou2ed partner listings from Supabase database
-        const dbListings = await getMarketplaceListings(
+        // Fetch all listings from database (includes user-created AND OSM-imported)
+        const allListings = await getMarketplaceListings(
           location?.latitude,
           location?.longitude,
           50, // 50 mile radius
@@ -240,87 +206,29 @@ export default function HomeScreen() {
           return;
         }
 
-        // Fetch external listings from OpenStreetMap (free, no API key needed)
-        let osmListings: MarketplaceListing[] = [];
-        try {
-          const userLat = location?.latitude || 34.0522; // LA default
-          const userLng = location?.longitude || -118.2437; // LA default
-
-          console.log(
-            `🔍 Fetching OSM listings with user location:`,
-            `\n   latitude: ${location?.latitude} (using: ${userLat})`,
-            `\n   longitude: ${location?.longitude} (using: ${userLng})`,
-            `\n   Location available: ${!!location?.latitude && !!location?.longitude}`,
-          );
-
-          osmListings = await fetchRealShelters(userLat, userLng, 16);
-          console.log(`✅ Found ${osmListings.length} OSM external listings`);
-
-          // Debug: Check distances in returned listings
-          console.log(`\n📍 DISTANCE CHECK - First 3 OSM listings:`);
-          osmListings.slice(0, 3).forEach((listing, i) => {
-            console.log(
-              `   ${i + 1}. ${listing.name}`,
-              `\n      distance: ${listing.distance !== undefined ? listing.distance.toFixed(2) + " miles" : "UNDEFINED"}`,
-              `\n      coords: (${listing.coordinates.latitude}, ${listing.coordinates.longitude})`,
-            );
-          });
-
-          // Also calculate distance manually for first listing to verify
-          if (osmListings.length > 0) {
-            const first = osmListings[0];
-            console.log(
-              `\n🧪 MANUAL VERIFICATION for "${first.name}":`,
-              `\n   User: (${userLat}, ${userLng})`,
-              `\n   Shelter: (${first.coordinates.latitude}, ${first.coordinates.longitude})`,
-            );
-          }
-
-          // Debug: Check if all listings have unique websites
-          const websites = osmListings
-            .map((l) => l.contact?.website)
-            .filter(Boolean);
-          const uniqueWebsites = new Set(websites);
-          console.log(
-            `   Unique websites: ${uniqueWebsites.size} out of ${websites.length}`,
-          );
-          if (uniqueWebsites.size < websites.length) {
-            console.warn(`⚠️ WARNING: Duplicate websites detected!`);
-            websites.forEach((w, i) => {
-              console.log(`   ${i + 1}. ${osmListings[i].name}: ${w}`);
-            });
-          }
-        } catch (osmError) {
-          console.warn("⚠️ Failed to fetch OSM listings:", osmError);
-          // Continue without OSM listings if they fail
-        }
-
-        // Combine Hou2ed partners + OSM external listings
-        const allListings: MarketplaceListing[] = [
-          ...(dbListings || []),
-          ...osmListings,
-        ];
-
-        // Sort: Partners first, then by distance
-        allListings.sort((a, b) => {
-          // Hou2ed partners come first
+        // Sort: Hou2ed partner listings first, then OSM imports, then by distance
+        allListings?.sort((a, b) => {
+          // Hou2ed partner listings come first
           if (a.source === "hou2ed" && b.source !== "hou2ed") return -1;
           if (a.source !== "hou2ed" && b.source === "hou2ed") return 1;
           // Then sort by distance
           return (a.distance || 999) - (b.distance || 999);
         });
 
+        const partnerListings = allListings?.filter((l) => l.source === "hou2ed").length || 0;
+        const communityListings = allListings?.filter((l) => l.source === "osm").length || 0;
+
         console.log(
-          `✅ Total listings: ${allListings.length} (${dbListings?.length || 0} partners + ${osmListings.length} external)`,
+          `✅ Total listings: ${allListings?.length || 0} (${partnerListings} partners + ${communityListings} community)`,
         );
 
         setIsRealData(true);
         setDataSource(
-          `${dbListings?.length || 0} Partners + ${osmListings.length} Community`,
+          `${partnerListings} Partners + ${communityListings} Community`,
         );
 
-        // Set combined listings - filtering will be done via useMemo
-        setListings(allListings);
+        // Set all listings - filtering will be done via useMemo
+        setListings(allListings || []);
       } catch (error) {
         if (!isCancelled) {
           console.error("Error loading listings:", error);
@@ -341,7 +249,7 @@ export default function HomeScreen() {
     return () => {
       isCancelled = true;
     };
-  }, [location?.latitude, location?.longitude, locationLoading]);
+  }, [location?.latitude, location?.longitude, locationLoading, refreshKey]);
 
   // Memoize filtered listings to prevent unnecessary re-renders
   const filteredListings = useMemo(() => {
