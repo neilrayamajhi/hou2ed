@@ -281,26 +281,34 @@ async function autoRejectApplicationsFromBlockedUser(
     }
 
     // Auto-reject all pending applications
-    const applicationIds = pendingApps.map((app) => app.id);
+    const rejectionTime = new Date().toISOString();
+    let rejectedCount = 0;
 
-    // Update all applications to rejected status
-    const { error: updateError } = await supabase
-      .from("applications")
-      .update({
-        status: "rejected",
-        stage_timestamps: supabase.raw(`
-          stage_timestamps || '{"rejected": "${new Date().toISOString()}"}'::jsonb
-        `),
-        notes: "Application auto-rejected: Provider has blocked this user",
-        updated_at: new Date().toISOString(),
-      })
-      .in("id", applicationIds);
+    // Update each application individually to properly merge stage_timestamps
+    for (const app of pendingApps) {
+      const updatedTimestamps = {
+        ...(app.stage_timestamps || {}),
+        rejected: rejectionTime,
+      };
 
-    if (updateError) {
-      console.error("Error auto-rejecting applications:", updateError);
-    } else {
-      console.log(`Auto-rejected ${applicationIds.length} application(s) from blocked user`);
+      const { error: updateError } = await supabase
+        .from("applications")
+        .update({
+          status: "rejected",
+          stage_timestamps: updatedTimestamps,
+          notes: "Application auto-rejected: Provider has blocked this user",
+          updated_at: rejectionTime,
+        })
+        .eq("id", app.id);
+
+      if (updateError) {
+        console.error(`Error rejecting application ${app.id}:`, updateError);
+      } else {
+        rejectedCount++;
+      }
     }
+
+    console.log(`Auto-rejected ${rejectedCount} of ${pendingApps.length} application(s) from blocked user`);
   } catch (error) {
     console.error("Error in autoRejectApplicationsFromBlockedUser:", error);
     // Don't throw - blocking should still succeed even if auto-reject fails
