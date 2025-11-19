@@ -13,10 +13,12 @@ import {
   Pressable,
   Image,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
 import { useAuthStore } from "../../state/useAuthStore";
 import { useSavedSearches } from "../../hooks/useSavedItems";
@@ -24,6 +26,10 @@ import { RootStackNavigationProp } from "../../navigation/types";
 import { useI18n, LANGUAGES } from "../../i18n";
 import { supabase } from "../../lib/supabase";
 import { transformUserData } from "../../utils/auth";
+import {
+  getNotificationTime,
+  saveNotificationTime,
+} from "../../services/notification.service";
 
 interface ProfileSection {
   id: string;
@@ -53,6 +59,8 @@ export default function ProfileScreen() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [applicationsCount, setApplicationsCount] = useState<number>(0);
+  const [notificationTime, setNotificationTime] = useState<Date>(new Date());
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   const handleEditAvatar = useCallback(async () => {
     console.log("[ProfileScreen] Starting avatar upload...");
@@ -242,6 +250,11 @@ export default function ProfileScreen() {
     return unsubscribe;
   }, [navigation, fetchApplicationsCount]);
 
+  // Load notification time on mount
+  React.useEffect(() => {
+    loadNotificationTime();
+  }, [loadNotificationTime]);
+
   const handleApplications = useCallback(() => {
     console.log("🚀 [ProfileScreen] Navigating to ApplicationsList");
     console.log("🚀 [ProfileScreen] User ID:", user?.id, "Role:", user?.role);
@@ -359,6 +372,105 @@ export default function ProfileScreen() {
     ]);
   }, [logout, navigation]);
 
+  // Load notification time on mount
+  const loadNotificationTime = useCallback(async () => {
+    if (!user?.id) return;
+
+    try {
+      const timeString = await getNotificationTime(user.id);
+      if (timeString) {
+        // timeString is in UTC (HH:MM:SS), convert to local time
+        const [hours, minutes] = timeString.split(":");
+        const date = new Date();
+        // Set as UTC time first
+        date.setUTCHours(parseInt(hours, 10));
+        date.setUTCMinutes(parseInt(minutes, 10));
+        date.setUTCSeconds(0);
+        // Now the Date object represents that UTC time
+        // When we display it, JavaScript automatically converts to local time
+        setNotificationTime(date);
+      }
+    } catch (error) {
+      console.error("Error loading notification time:", error);
+    }
+  }, [user?.id]);
+
+  // Handle time change
+  const handleTimeChange = useCallback(
+    async (event: any, selectedDate?: Date) => {
+      if (!selectedDate || !user?.id) return;
+
+      setNotificationTime(selectedDate);
+
+      // On Android, save immediately and dismiss picker
+      if (Platform.OS === "android") {
+        setShowTimePicker(false);
+
+        // Convert LOCAL time to UTC before saving
+        const utcHours = selectedDate.getUTCHours().toString().padStart(2, "0");
+        const utcMinutes = selectedDate
+          .getUTCMinutes()
+          .toString()
+          .padStart(2, "0");
+        const timeString = `${utcHours}:${utcMinutes}:00`;
+
+        const success = await saveNotificationTime(user.id, timeString);
+        if (success) {
+          // Show LOCAL time to user
+          const localHours = selectedDate.getHours() % 12 || 12;
+          const localMinutes = selectedDate.getMinutes();
+          const ampm = selectedDate.getHours() >= 12 ? "PM" : "AM";
+          Alert.alert(
+            "Success",
+            `Notification time set to ${localHours}:${localMinutes.toString().padStart(2, "0")} ${ampm} (your local time)`,
+          );
+        } else {
+          Alert.alert("Error", "Failed to save notification time");
+        }
+      }
+      // On iOS, just update the state - user will tap "Done" to save
+    },
+    [user?.id],
+  );
+
+  // Handle saving the time (called when user taps "Done" on iOS)
+  const handleSaveTime = useCallback(async () => {
+    if (!user?.id) return;
+
+    setShowTimePicker(false);
+
+    // Convert LOCAL time to UTC before saving
+    const utcHours = notificationTime.getUTCHours().toString().padStart(2, "0");
+    const utcMinutes = notificationTime
+      .getUTCMinutes()
+      .toString()
+      .padStart(2, "0");
+    const timeString = `${utcHours}:${utcMinutes}:00`;
+
+    const success = await saveNotificationTime(user.id, timeString);
+    if (success) {
+      // Show LOCAL time to user
+      const localHours = notificationTime.getHours() % 12 || 12;
+      const localMinutes = notificationTime.getMinutes();
+      const ampm = notificationTime.getHours() >= 12 ? "PM" : "AM";
+      Alert.alert(
+        "Success",
+        `Notification time set to ${localHours}:${localMinutes.toString().padStart(2, "0")} ${ampm} (your local time)`,
+      );
+    } else {
+      Alert.alert("Error", "Failed to save notification time");
+    }
+  }, [user?.id, notificationTime]);
+
+  // Format time for display
+  const formatNotificationTime = useCallback(() => {
+    const hours = notificationTime.getHours();
+    const minutes = notificationTime.getMinutes();
+    const ampm = hours >= 12 ? "PM" : "AM";
+    const displayHours = hours % 12 || 12;
+    return `${displayHours}:${minutes.toString().padStart(2, "0")} ${ampm}`;
+  }, [notificationTime]);
+
   const profileSections: ProfileSection[] = useMemo(
     () => [
       // Provider Dashboard - only show if user is a provider
@@ -471,6 +583,32 @@ export default function ProfileScreen() {
                   accessibilityRole="switch"
                 />
               </View>
+
+              <TouchableOpacity
+                style={styles.settingRow}
+                onPress={() => setShowTimePicker(true)}
+                accessibilityLabel="Set notification time"
+                accessibilityRole="button"
+              >
+                <View style={styles.settingLeft}>
+                  <Ionicons
+                    name="time-outline"
+                    size={18}
+                    color={colors.gray[400]}
+                  />
+                  <Text style={styles.settingText}>Notification Time</Text>
+                </View>
+                <View style={styles.settingRight}>
+                  <Text style={styles.settingValue}>
+                    {formatNotificationTime()}
+                  </Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={colors.gray[500]}
+                  />
+                </View>
+              </TouchableOpacity>
 
               <View style={styles.settingRow}>
                 <View style={styles.settingLeft}>
@@ -603,6 +741,7 @@ export default function ProfileScreen() {
       savedSearches.length,
       i18n.language,
       i18n.t,
+      formatNotificationTime,
     ],
   );
 
@@ -751,6 +890,56 @@ export default function ProfileScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Time Picker */}
+      {showTimePicker && (
+        <>
+          {Platform.OS === "ios" ? (
+            <Modal
+              visible={showTimePicker}
+              transparent
+              animationType="slide"
+              onRequestClose={() => setShowTimePicker(false)}
+            >
+              <Pressable
+                style={styles.modalOverlay}
+                onPress={() => setShowTimePicker(false)}
+              >
+                <Pressable
+                  style={styles.timePickerModal}
+                  onPress={(e) => e.stopPropagation()}
+                >
+                  <View style={styles.timePickerHeader}>
+                    <Text style={styles.timePickerTitle}>
+                      Select Notification Time
+                    </Text>
+                    <TouchableOpacity
+                      onPress={handleSaveTime}
+                      style={styles.timePickerDone}
+                    >
+                      <Text style={styles.timePickerDoneText}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <DateTimePicker
+                    value={notificationTime}
+                    mode="time"
+                    display="spinner"
+                    onChange={handleTimeChange}
+                    textColor={colors.gray[50]}
+                  />
+                </Pressable>
+              </Pressable>
+            </Modal>
+          ) : (
+            <DateTimePicker
+              value={notificationTime}
+              mode="time"
+              display="default"
+              onChange={handleTimeChange}
+            />
+          )}
+        </>
+      )}
     </SafeAreaView>
   );
 }
@@ -993,5 +1182,37 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     fontWeight: "600",
     color: colors.gray[900],
+  },
+  timePickerModal: {
+    backgroundColor: colors.gray[800],
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    paddingBottom: spacing.xl,
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  timePickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray[700],
+  },
+  timePickerTitle: {
+    fontSize: typography.sizes.lg,
+    fontWeight: "600",
+    color: colors.gray[50],
+  },
+  timePickerDone: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  timePickerDoneText: {
+    fontSize: typography.sizes.md,
+    fontWeight: "600",
+    color: colors.primary[400],
   },
 });

@@ -25,7 +25,11 @@
       "Bash(npx prettier:*)",
       "Bash(npx tsc:*)",
       "Bash(npm run typecheck:*)",
-      "Bash(npm run)"
+      "Bash(npm run)",
+      "Bash(npm install:*)",
+      "Bash(ls:*)",
+      "Bash(npx expo install:*)",
+      "Bash(git restore:*)"
     ],
     "deny": [],
     "ask": []

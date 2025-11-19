@@ -26,6 +26,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "72be2841-00ad-471b-a7fb-1a23f2a4dcb4"
+      }
+    },
+    "owner": "yahdel"
   }
 }

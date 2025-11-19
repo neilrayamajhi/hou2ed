@@ -497,7 +497,6 @@ export default function ApplicationsListScreen() {
             <Ionicons name="arrow-back" size={24} color={colors.gray[50]} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>My Applications</Text>
-          <View style={styles.placeholder} />
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary[500]} />
@@ -519,7 +518,6 @@ export default function ApplicationsListScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.gray[50]} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Applications</Text>
-        <View style={styles.placeholder} />
       </View>
 
       {error ? (
@@ -564,6 +562,9 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.gray[800],
   },
   backButton: {
+    padding: spacing.xs,
+  },
+  notificationButton: {
     padding: spacing.xs,
   },
   headerTitle: {
