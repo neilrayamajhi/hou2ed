@@ -70,7 +70,7 @@ export default function Step3Documents({
           .from("listings")
           .select("intake")
           .eq("id", draft.listingId)
-          .single() as { data: { intake?: { documents_required?: any[] } } | null; error: any };
+          .single();
 
         if (error) {
           console.error("Error fetching listing:", error);
@@ -579,7 +579,7 @@ export default function Step3Documents({
 
         {/* Privacy Note */}
         <View style={styles.privacyNote}>
-          <Ionicons name="lock-closed-outline" size={16} color={colors.gray[500]} />
+          <Ionicons name="lock-closed-outline" size={16} color={colors.gray} />
           <Text style={styles.privacyText}>
             Your documents are encrypted and securely stored. They will only be
             shared with the housing provider for verification purposes.
@@ -724,7 +724,7 @@ const styles = StyleSheet.create({
   },
   fileSize: {
     fontSize: 12,
-    color: colors.gray[500],
+    color: colors.gray,
   },
   progressContainer: {
     flexDirection: "row",
@@ -788,7 +788,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: spacing.sm,
     fontSize: 12,
-    color: colors.gray[500],
+    color: colors.gray,
     lineHeight: 16,
   },
   footer: {
@@ -840,7 +840,7 @@ const styles = StyleSheet.create({
   },
   footerHint: {
     fontSize: 12,
-    color: colors.gray[500],
+    color: colors.gray,
     textAlign: "center",
     marginTop: spacing.sm,
   },
@@ -851,7 +851,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
-    color: colors.gray[500],
+    color: colors.gray,
     marginTop: spacing.md,
   },
   customNoticeBox: {
@@ -860,7 +860,7 @@ const styles = StyleSheet.create({
   },
   documentDescription: {
     fontSize: 12,
-    color: colors.gray[500],
+    color: colors.gray,
     marginTop: spacing.xs,
   },
 });

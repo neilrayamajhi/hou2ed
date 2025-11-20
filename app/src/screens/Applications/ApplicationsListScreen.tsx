@@ -40,13 +40,13 @@ const getStatusColor = (status: Application["status"]) => {
     case "under_review":
       return colors.primary[400];
     case "docs_needed":
-      return colors.amber;
+      return colors.yellow;
     case "interview_scheduled":
       return colors.primary[300];
     case "approved":
       return "#10b981"; // green
     case "waitlisted":
-      return colors.amber;
+      return colors.yellow;
     case "rejected":
       return colors.red;
     case "withdrawn":
@@ -413,7 +413,7 @@ export default function ApplicationsListScreen() {
                   <Ionicons
                     name="close-circle-outline"
                     size={18}
-                    color={colors.amber}
+                    color={colors.yellow}
                   />
                   <Text style={styles.withdrawButtonText}>Withdraw</Text>
                 </TouchableOpacity>
@@ -497,7 +497,6 @@ export default function ApplicationsListScreen() {
             <Ionicons name="arrow-back" size={24} color={colors.gray[50]} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>My Applications</Text>
-          <View style={styles.placeholder} />
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary[500]} />
@@ -519,7 +518,6 @@ export default function ApplicationsListScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.gray[50]} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Applications</Text>
-        <View style={styles.placeholder} />
       </View>
 
       {error ? (
@@ -564,6 +562,9 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.gray[800],
   },
   backButton: {
+    padding: spacing.xs,
+  },
+  notificationButton: {
     padding: spacing.xs,
   },
   headerTitle: {
@@ -667,12 +668,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   withdrawButton: {
-    borderColor: colors.amber,
-    backgroundColor: `${colors.amber}10`,
+    borderColor: colors.yellow,
+    backgroundColor: `${colors.yellow}10`,
   },
   withdrawButtonText: {
     fontSize: typography.sizes.xs,
-    color: colors.amber,
+    color: colors.yellow,
     fontWeight: "600",
   },
   deleteButton: {
