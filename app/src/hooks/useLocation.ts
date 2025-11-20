@@ -32,9 +32,9 @@ export function useLocation(): UseLocationReturn {
 
       // Request permission
       if (!ExpoLocation) {
-        // Web: Use fallback for web platform only
-        console.log('📍 Web platform detected - using default location');
-        setLocation({ latitude: 37.7749, longitude: -122.4194 });
+        // Web: Use fallback for web platform only (Los Angeles)
+        console.log('📍 Web platform detected - using default location (Los Angeles)');
+        setLocation({ latitude: 34.0522, longitude: -118.2437 });
         return;
       }
 

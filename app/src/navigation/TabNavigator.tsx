@@ -7,7 +7,7 @@ import HomeScreen from "../screens/Home/HomeScreen";
 import InboxScreen from "../screens/Messages/InboxScreen";
 import SavedScreen from "../screens/Saved/SavedScreen";
 import ProfileScreen from "../screens/Profile/ProfileScreen";
-import ProviderDashboard from "../screens/Provider/ProviderDashboard";
+import DashboardStack from "./DashboardStack";
 import { useAuthStore } from "../state/useAuthStore";
 import { RootStackNavigationProp } from "./types";
 
@@ -21,9 +21,30 @@ export default function TabNavigator() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isProvider = user?.role === "provider";
 
+  console.log("📱 [TabNavigator] =========== RENDERING ===========");
+  console.log("   User:", user?.email || "NO USER");
+  console.log("   User ID:", user?.id || "NO ID");
+  console.log("   Role:", user?.role || "NO ROLE");
+  console.log("   Is Provider:", isProvider);
+  console.log("   Is Authenticated:", isAuthenticated);
+  console.log("   Initial Route:", isProvider ? "Dashboard" : "Home");
+  console.log("📱 [TabNavigator] =====================================");
+
+  useEffect(() => {
+    console.log("📱 [TabNavigator] Mounted");
+    console.log("   Rendering tabs for:", isProvider ? "PROVIDER" : "SEEKER");
+
+    return () => {
+      console.log("📱 [TabNavigator] Unmounting");
+    };
+  }, []);
+
   useEffect(() => {
     // If user is not authenticated, redirect to auth flow
     if (!isAuthenticated || !user) {
+      console.log(
+        "⚠️ [TabNavigator] User not authenticated, redirecting to RoleSelection",
+      );
       navigation.reset({
         index: 0,
         routes: [{ name: "RoleSelection" }],
@@ -31,8 +52,14 @@ export default function TabNavigator() {
     }
   }, [isAuthenticated, user, navigation]);
 
+  console.log(
+    "📱 [TabNavigator] About to render Tab.Navigator with",
+    isProvider ? "3 provider tabs" : "4 seeker tabs",
+  );
+
   return (
     <Tab.Navigator
+      initialRouteName={isProvider ? "Dashboard" : "Home"}
       screenOptions={{
         // Black background for tab bar
         tabBarStyle: {
@@ -51,12 +78,17 @@ export default function TabNavigator() {
         <>
           <Tab.Screen
             name="Dashboard"
-            component={ProviderDashboard}
+            component={DashboardStack}
             options={{
               tabBarIcon: ({ color, size }) => (
                 <Ionicons name="grid-outline" size={size} color={color} />
               ),
               tabBarAccessibilityLabel: "Provider dashboard tab",
+              // Keep tab bar visible for all provider screens
+              tabBarStyle: {
+                backgroundColor: "#000000",
+                borderTopWidth: 0,
+              },
             }}
           />
           <Tab.Screen

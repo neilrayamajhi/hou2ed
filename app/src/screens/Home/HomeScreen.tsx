@@ -20,7 +20,10 @@ import {
   Linking,
   Alert,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { MapView, Marker, PROVIDER_GOOGLE } from "../../components/MapView";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -182,6 +185,9 @@ export default function HomeScreen() {
   const listRef = useRef<FlatList>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
 
+  // Get safe area insets for proper spacing on all iPhone models
+  const insets = useSafeAreaInsets();
+
   // Get user location
   const { location, loading: locationLoading, refreshLocation } = useLocation();
 
@@ -193,15 +199,16 @@ export default function HomeScreen() {
 
   // Local state
   const [listings, setListings] = useState<MarketplaceListing[]>([]);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null); // null = no marker tapped yet
   const [showFilters, setShowFilters] = useState(false);
   const [showListView, setShowListView] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
   const [isRealData, setIsRealData] = useState(false);
   const [dataSource, setDataSource] = useState("Mock Data");
+  // Initialize with Los Angeles (consistent with app defaults), will update to user location when available
   const [mapRegion, setMapRegion] = useState<Region>({
-    latitude: 37.7749,
-    longitude: -122.4194,
+    latitude: 34.0522, // Los Angeles default
+    longitude: -118.2437, // Los Angeles default
     latitudeDelta: 0.0922,
     longitudeDelta: 0.0421,
   });
@@ -368,12 +375,12 @@ export default function HomeScreen() {
         longitudeDelta: 0.0421,
       };
 
-      // Animate to the new region if map is ready
+      // ALWAYS update the state so it persists when toggling views
+      setMapRegion(newRegion);
+
+      // Also animate if map is currently mounted
       if (mapRef.current) {
         mapRef.current.animateToRegion(newRegion, 1000);
-      } else {
-        // Only update state if map ref not available (shouldn't cause re-render issues on mount)
-        setMapRegion(newRegion);
       }
     }
   }, [location, locationLoading]);
@@ -429,10 +436,13 @@ export default function HomeScreen() {
         longitudeDelta: 0.02,
       };
 
+      // Update state so it persists when toggling views
+      setMapRegion(userRegion);
+
+      // Also animate if map is mounted
       if (mapRef.current) {
         mapRef.current.animateToRegion(userRegion, 500);
       }
-      // Removed setMapRegion - mapRef.animateToRegion handles the region update
     } else {
       // Try to get location again if not available
       await refreshLocation();
@@ -552,51 +562,12 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container} edges={["top"]}>
       {/* Real Data Indicator */}
       {isRealData && (
-        <View style={styles.realDataBanner}>
+        <View style={[styles.realDataBanner, { top: insets.top + 10 }]}>
           <Ionicons name="checkmark-circle" size={16} color="#21C55D" />
           <Text style={styles.realDataText}>{dataSource}</Text>
           <Text style={styles.realDataSubtext}>Live Updates</Text>
         </View>
       )}
-
-      {/* Simplified Search Bar */}
-      <View style={styles.searchWrapper}>
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color="#8a8a8a" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search by location or name"
-            placeholderTextColor="#6a6a6a"
-            value={searchText}
-            onChangeText={setSearchText}
-            onSubmitEditing={handleSearch}
-            returnKeyType="search"
-          />
-          <TouchableOpacity
-            onPress={() => setShowFilters(true)}
-            style={styles.filterIcon}
-            activeOpacity={0.7}
-          >
-            <View style={styles.filterIconBadge}>
-              <Ionicons name="filter" size={20} color="#D4AF37" />
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {/* Quick Filters - Horizontal Scroll */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.quickFiltersScroll}
-          contentContainerStyle={styles.quickFiltersContent}
-        >
-          {renderQuickFilter("immediate", "Available Now", "flash")}
-          {renderQuickFilter("free", "Free", "gift")}
-          {renderQuickFilter("veterans", "Veterans", "shield-checkmark")}
-          {renderQuickFilter("families", "Families", "people")}
-          {renderQuickFilter("nearMe", "Near Me", "location")}
-        </ScrollView>
-      </View>
 
       {/* Map View */}
       {!showListView && (
@@ -633,6 +604,83 @@ export default function HomeScreen() {
               <Ionicons name="navigate" size={24} color="#D4AF37" />
             )}
           </TouchableOpacity>
+
+          {/* Floating Listing Card */}
+          {activeIndex !== null && filteredListings[activeIndex] && (
+            <View style={styles.floatingCard}>
+              <TouchableOpacity
+                style={styles.floatingCardContent}
+                onPress={() => openDetails(filteredListings[activeIndex])}
+                activeOpacity={0.9}
+              >
+                <View style={styles.floatingCardHeader}>
+                  <View style={styles.floatingCardTitleRow}>
+                    <Text style={styles.floatingCardTitle} numberOfLines={1}>
+                      {filteredListings[activeIndex].name}
+                    </Text>
+                    {filteredListings[activeIndex].source === "osm" ? (
+                      <View style={styles.floatingCardBadge}>
+                        <Ionicons
+                          name="people-outline"
+                          size={10}
+                          color="#8a8a8a"
+                        />
+                        <Text style={styles.floatingCardBadgeText}>
+                          Community
+                        </Text>
+                      </View>
+                    ) : (
+                      <View
+                        style={[
+                          styles.floatingCardBadge,
+                          styles.floatingCardPartnerBadge,
+                        ]}
+                      >
+                        <Ionicons
+                          name="shield-checkmark"
+                          size={10}
+                          color="#D4AF37"
+                        />
+                        <Text style={styles.floatingCardPartnerBadgeText}>
+                          Partner
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    style={styles.floatingCardClose}
+                    onPress={() => setActiveIndex(null)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Ionicons name="close" size={20} color="#8a8a8a" />
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.floatingCardAddress} numberOfLines={1}>
+                  <Ionicons name="location" size={12} color="#8a8a8a" />{" "}
+                  {filteredListings[activeIndex].address.street},{" "}
+                  {filteredListings[activeIndex].address.city}
+                </Text>
+
+                <View style={styles.floatingCardFooter}>
+                  <Text style={styles.floatingCardPrice}>
+                    {filteredListings[activeIndex].price.isFree
+                      ? "FREE"
+                      : `$${filteredListings[activeIndex].price.min}/mo`}
+                  </Text>
+                  <View style={styles.floatingCardDistance}>
+                    <Ionicons name="navigate" size={12} color="#D4AF37" />
+                    <Text style={styles.floatingCardDistanceText}>
+                      {filteredListings[activeIndex].distance !== undefined
+                        ? `${filteredListings[activeIndex].distance.toFixed(1)} mi`
+                        : "N/A"}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#D4AF37" />
+                </View>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       )}
 
@@ -659,7 +707,10 @@ export default function HomeScreen() {
             data={filteredListings}
             renderItem={renderListItem}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingTop: insets.top + 100 },
+            ]}
             showsVerticalScrollIndicator={false}
             ItemSeparatorComponent={() => <View style={styles.listSeparator} />}
           />
@@ -698,67 +749,76 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Mini Card Preview (Map View Only) */}
-        {!showListView && filteredListings[activeIndex] && (
-          <TouchableOpacity
-            style={styles.miniCard}
-            onPress={() => openDetails(filteredListings[activeIndex])}
-            activeOpacity={0.9}
-          >
-            <View style={styles.miniCardContent}>
-              <View style={styles.miniCardHeader}>
-                <Text style={styles.miniCardTitle} numberOfLines={1}>
-                  {filteredListings[activeIndex].name}
-                </Text>
-                {filteredListings[activeIndex].source === "hou2ed" ? (
-                  <View style={styles.partnerBadge}>
-                    <Ionicons
-                      name="shield-checkmark"
-                      size={12}
-                      color="#10B981"
-                    />
-                    <Text style={styles.partnerBadgeText}>Partner</Text>
-                  </View>
-                ) : (
-                  <View style={styles.externalBadge}>
-                    <Ionicons name="globe-outline" size={12} color="#6B7280" />
-                    <Text style={styles.externalBadgeText}>Community</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.miniCardAddress} numberOfLines={1}>
-                {filteredListings[activeIndex].address.street},{" "}
-                {filteredListings[activeIndex].address.city}
-              </Text>
-              <View style={styles.miniCardFooter}>
-                <Text style={styles.miniCardPrice}>
-                  {filteredListings[activeIndex].price.isFree
-                    ? "FREE"
-                    : `$${filteredListings[activeIndex].price.min}/mo`}
-                </Text>
-                <View
-                  style={[
-                    styles.miniCardBadge,
-                    filteredListings[activeIndex].availability === "available"
-                      ? styles.miniCardBadgeAvailable
-                      : filteredListings[activeIndex].availability === "unknown"
-                        ? styles.miniCardBadgeUnknown
-                        : styles.miniCardBadgeFull,
-                  ]}
-                >
-                  <Text style={styles.miniCardBadgeText}>
-                    {filteredListings[activeIndex].availability === "available"
-                      ? `${filteredListings[activeIndex].bedsAvailable} beds`
-                      : filteredListings[activeIndex].availability === "unknown"
-                        ? "Call for info"
-                        : "Full"}
+        {/* Mini Card Preview (Map View Only) - Only show after user taps a marker */}
+        {!showListView &&
+          activeIndex !== null &&
+          filteredListings[activeIndex] && (
+            <TouchableOpacity
+              style={styles.miniCard}
+              onPress={() => openDetails(filteredListings[activeIndex])}
+              activeOpacity={0.9}
+            >
+              <View style={styles.miniCardContent}>
+                <View style={styles.miniCardHeader}>
+                  <Text style={styles.miniCardTitle} numberOfLines={1}>
+                    {filteredListings[activeIndex].name}
                   </Text>
+                  {filteredListings[activeIndex].source === "hou2ed" ? (
+                    <View style={styles.partnerBadge}>
+                      <Ionicons
+                        name="shield-checkmark"
+                        size={12}
+                        color="#10B981"
+                      />
+                      <Text style={styles.partnerBadgeText}>Partner</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.externalBadge}>
+                      <Ionicons
+                        name="globe-outline"
+                        size={12}
+                        color="#6B7280"
+                      />
+                      <Text style={styles.externalBadgeText}>Community</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.miniCardAddress} numberOfLines={1}>
+                  {filteredListings[activeIndex].address.street},{" "}
+                  {filteredListings[activeIndex].address.city}
+                </Text>
+                <View style={styles.miniCardFooter}>
+                  <Text style={styles.miniCardPrice}>
+                    {filteredListings[activeIndex].price.isFree
+                      ? "FREE"
+                      : `$${filteredListings[activeIndex].price.min}/mo`}
+                  </Text>
+                  <View
+                    style={[
+                      styles.miniCardBadge,
+                      filteredListings[activeIndex].availability === "available"
+                        ? styles.miniCardBadgeAvailable
+                        : filteredListings[activeIndex].availability ===
+                            "unknown"
+                          ? styles.miniCardBadgeUnknown
+                          : styles.miniCardBadgeFull,
+                    ]}
+                  >
+                    <Text style={styles.miniCardBadgeText}>
+                      {filteredListings[activeIndex].availability ===
+                      "available"
+                        ? `${filteredListings[activeIndex].bedsAvailable} beds`
+                        : filteredListings[activeIndex].availability ===
+                            "unknown"
+                          ? "Call for info"
+                          : "Full"}
+                    </Text>
+                  </View>
                 </View>
               </View>
-            </View>
-            <Ionicons name="chevron-forward" size={24} color="#D4AF37" />
-          </TouchableOpacity>
-        )}
+              <Ionicons name="chevron-forward" size={24} color="#D4AF37" />
+            </TouchableOpacity>
+          )}
       </View>
 
       {/* Filters Sheet */}
@@ -777,7 +837,6 @@ const styles = StyleSheet.create({
   },
   realDataBanner: {
     position: "absolute",
-    top: 50,
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
@@ -802,7 +861,6 @@ const styles = StyleSheet.create({
   },
   searchWrapper: {
     position: "absolute",
-    top: 90,
     left: 0,
     right: 0,
     zIndex: 10,
@@ -926,12 +984,97 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
   },
+  floatingCard: {
+    position: "absolute",
+    bottom: 200,
+    left: 16,
+    right: 16,
+    backgroundColor: "#1a1a1a",
+    borderRadius: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  floatingCardContent: {
+    padding: 16,
+  },
+  floatingCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 8,
+  },
+  floatingCardTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 8,
+    marginRight: 8,
+  },
+  floatingCardTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#ffffff",
+    flex: 1,
+  },
+  floatingCardBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: "#2a2a2a",
+    borderRadius: 12,
+  },
+  floatingCardPartnerBadge: {
+    backgroundColor: "rgba(212, 175, 55, 0.1)",
+  },
+  floatingCardBadgeText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#8a8a8a",
+  },
+  floatingCardPartnerBadgeText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#D4AF37",
+  },
+  floatingCardClose: {
+    padding: 4,
+  },
+  floatingCardAddress: {
+    fontSize: 13,
+    color: "#8a8a8a",
+    marginBottom: 12,
+  },
+  floatingCardFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  floatingCardPrice: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#D4AF37",
+  },
+  floatingCardDistance: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    flex: 1,
+    marginLeft: 12,
+  },
+  floatingCardDistanceText: {
+    fontSize: 13,
+    color: "#8a8a8a",
+  },
   listViewContainer: {
     flex: 1,
     backgroundColor: "#0a0a0a",
   },
   listContent: {
-    paddingTop: 140,
     paddingBottom: 150,
   },
   listItem: {

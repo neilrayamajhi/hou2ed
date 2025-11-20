@@ -1,13 +1,25 @@
-import React, { useEffect, useState, createContext, useContext } from "react";
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  createContext,
+  useContext,
+} from "react";
 import { ActivityIndicator, View, StyleSheet, Alert } from "react-native";
 import { Session, User } from "@supabase/supabase-js";
+import * as Notifications from "expo-notifications";
 import { supabase, authHelpers } from "../lib/supabase";
 import { useAuthStore } from "../state/useAuthStore";
 import { theme } from "../theme";
 import { transformUserData, retryWithBackoff } from "../utils/auth";
 import { ERROR_MESSAGES } from "../constants/messages";
 import { queryClient } from "./QueryProvider";
-import { initializePushNotifications } from "../services/notification.service";
+import {
+  initializePushNotifications,
+  checkApplicationUpdates,
+  markApplicationsAsNotified,
+  sendLocalNotification,
+} from "../services/notification.service";
 
 interface AuthContextType {
   session: Session | null;
@@ -35,6 +47,162 @@ export default function AuthProvider({
   const [loading, setLoading] = useState(true);
   const setStoreUser = useAuthStore((state) => state.setUser);
   const logout = useAuthStore((state) => state.logout);
+
+  // Use ref to persist across re-renders
+  const hasHandledInitialNotification = useRef(false);
+
+  // Set up notification listener for daily checks
+  useEffect(() => {
+    console.log("[AuthProvider] Setting up notification listener");
+
+    // Listen for notification responses (when user taps on notification)
+    const responseSubscription =
+      Notifications.addNotificationResponseReceivedListener(
+        async (response) => {
+          console.log("[AuthProvider] 📬 Notification response received");
+          console.log(
+            "  Has handled initial?",
+            hasHandledInitialNotification.current,
+          );
+
+          // Ignore the very first notification response (stale data from before app launch)
+          if (!hasHandledInitialNotification.current) {
+            console.log(
+              "📬 [AuthProvider] ✋ IGNORING initial notification on app launch",
+            );
+            hasHandledInitialNotification.current = true;
+            return;
+          }
+
+          const data = response.notification.request.content.data;
+          console.log("📬 [AuthProvider] Processing notification:", data);
+
+          // Only process our specific notification types
+          if (!data || !data.type) {
+            console.log("⚠️ Ignoring notification with no type");
+            return;
+          }
+
+          // Handle provider availability reminder
+          if (
+            data.type === "daily_availability_reminder" &&
+            data.userRole === "provider"
+          ) {
+            console.log("🏠 Provider availability reminder - navigating...");
+            // Navigation will happen in RootNavigator
+            return; // Let navigation system handle it
+          }
+
+          // Handle seeker application check
+          if (
+            data.type === "daily_application_check" &&
+            data.userRole === "seeker" &&
+            data.userId
+          ) {
+            console.log("🔔 Seeker application check triggered");
+            const updates = await checkApplicationUpdates(
+              data.userId as string,
+            );
+
+            if (updates.length > 0) {
+              console.log(`✅ Found ${updates.length} application updates`);
+
+              // Count approved and rejected
+              const approved = updates.filter(
+                (u) => u.new_status === "approved",
+              ).length;
+              const rejected = updates.filter(
+                (u) => u.new_status === "rejected",
+              ).length;
+
+              // Send a notification with summary
+              let message = `You have ${updates.length} update${updates.length > 1 ? "s" : ""}`;
+              if (approved > 0 && rejected > 0) {
+                message += `: ${approved} approved, ${rejected} rejected`;
+              } else if (approved > 0) {
+                message += `: ${approved} approved! 🎉`;
+              } else if (rejected > 0) {
+                message += `: ${rejected} rejected`;
+              }
+
+              await sendLocalNotification("Application Updates", message);
+
+              // Mark as notified
+              await markApplicationsAsNotified(updates.map((u) => u.id));
+            } else {
+              console.log("ℹ️ No new application updates");
+            }
+          }
+        },
+      );
+
+    // Listen for notifications received while app is in foreground
+    const notificationSubscription =
+      Notifications.addNotificationReceivedListener(async (notification) => {
+        const data = notification.request.content.data;
+        console.log("📨 Notification received while in foreground:", data);
+        console.log("   Title:", notification.request.content.title);
+        console.log("   Body:", notification.request.content.body);
+        console.log("   Time:", new Date().toLocaleTimeString());
+
+        // For provider reminders in foreground, just log (notification already shown)
+        if (
+          data.type === "daily_availability_reminder" &&
+          data.userRole === "provider"
+        ) {
+          console.log(
+            "🏠 Provider availability reminder shown (app in foreground)",
+          );
+          console.log("   ✅ Notification should be visible now!");
+          return;
+        }
+
+        // Handle seeker application check in foreground
+        if (
+          data.type === "daily_application_check" &&
+          data.userRole === "seeker" &&
+          data.userId
+        ) {
+          console.log("🔔 Seeker application check triggered (foreground)");
+          const updates = await checkApplicationUpdates(data.userId as string);
+
+          if (updates.length > 0) {
+            console.log(`✅ Found ${updates.length} application updates`);
+
+            // Count approved and rejected
+            const approved = updates.filter(
+              (u) => u.new_status === "approved",
+            ).length;
+            const rejected = updates.filter(
+              (u) => u.new_status === "rejected",
+            ).length;
+
+            // Send a notification with summary
+            let message = `You have ${updates.length} update${updates.length > 1 ? "s" : ""}`;
+            if (approved > 0 && rejected > 0) {
+              message += `: ${approved} approved, ${rejected} rejected`;
+            } else if (approved > 0) {
+              message += `: ${approved} approved! 🎉`;
+            } else if (rejected > 0) {
+              message += `: ${rejected} rejected`;
+            }
+
+            await sendLocalNotification("Application Updates", message);
+
+            // Mark as notified
+            await markApplicationsAsNotified(updates.map((u) => u.id));
+          } else {
+            console.log("ℹ️ No new application updates");
+          }
+        }
+      });
+
+    return () => {
+      console.log("[AuthProvider] Cleaning up notification listeners");
+      responseSubscription.remove();
+      notificationSubscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     // Check for existing session
@@ -65,11 +233,23 @@ export default function AuthProvider({
           setUser(session?.user || null);
 
           if (session?.user) {
+            console.log(
+              "[AuthProvider] 🔐 SIGNED_IN event - transforming user data",
+            );
             const userData = await transformUserData(session.user);
-            setStoreUser(userData);
+            console.log("[AuthProvider] ✅ User data transformed:", {
+              id: userData.id,
+              email: userData.email,
+              role: userData.role,
+            });
 
-            // Initialize push notifications
-            console.log("[AuthProvider] Initializing push notifications");
+            setStoreUser(userData);
+            console.log("[AuthProvider] ✅ User set in auth store");
+
+            // Initialize push notifications (register token only, don't schedule)
+            console.log(
+              "[AuthProvider] Initializing push notifications (token only)",
+            );
             initializePushNotifications(session.user.id).catch((error) => {
               console.error(
                 "[AuthProvider] Failed to initialize push notifications:",
@@ -83,6 +263,9 @@ export default function AuthProvider({
             );
             await queryClient.invalidateQueries();
             console.log("[AuthProvider] Query invalidation complete");
+            console.log(
+              "[AuthProvider] 🎯 User should now be authenticated and navigation should show Tabs screen",
+            );
           }
         } else if (event === "INITIAL_SESSION") {
           // Handle initial session carefully

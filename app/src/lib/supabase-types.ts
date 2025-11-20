@@ -41,7 +41,6 @@ export type Database = {
           is_verified: boolean;
           push_notifications_enabled: boolean;
           email_notifications_enabled: boolean;
-          
         };
         Insert: {
           id?: string;

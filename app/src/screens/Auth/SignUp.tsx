@@ -93,8 +93,8 @@ export default function SignUp() {
   const setUser = useAuthStore((state) => state.setUser);
   const [selectedRole, setSelectedRole] = useState<"seeker" | "provider">(
     (route.params as any)?.role ||
-    useAuthStore((state) => state.selectedRole) ||
-    "seeker"
+      useAuthStore((state) => state.selectedRole) ||
+      "seeker",
   );
 
   // Rate limiting
@@ -227,11 +227,14 @@ export default function SignUp() {
                 // User will be redirected automatically by AuthProvider
                 return;
               } else {
-                console.log("Auto-login failed, user can login manually:", error);
+                console.log(
+                  "Auto-login failed, user can login manually:",
+                  error,
+                );
                 Alert.alert(
                   "Account Created!",
                   "Your account has been created successfully. You can now login.",
-                  [{ text: "OK", onPress: () => navigation.navigate("Login") }]
+                  [{ text: "OK", onPress: () => navigation.navigate("Login") }],
                 );
               }
             } catch (loginError) {
@@ -239,7 +242,7 @@ export default function SignUp() {
               Alert.alert(
                 "Account Created!",
                 "Your account has been created successfully. You can now login.",
-                [{ text: "OK", onPress: () => navigation.navigate("Login") }]
+                [{ text: "OK", onPress: () => navigation.navigate("Login") }],
               );
             }
           } else {
@@ -368,18 +371,11 @@ export default function SignUp() {
             {
               text: "Continue",
               onPress: () => {
-                // Route based on user role
-                if (result.user.role === "provider") {
-                  navigation.reset({
-                    index: 0,
-                    routes: [{ name: "ProviderDashboard" }],
-                  });
-                } else {
-                  navigation.reset({
-                    index: 0,
-                    routes: [{ name: "Tabs" }],
-                  });
-                }
+                // Navigate to Tabs screen - TabNavigator will show correct tabs based on role
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: "Tabs" }],
+                });
               },
             },
           ]);
@@ -536,7 +532,8 @@ export default function SignUp() {
                 <Text
                   style={[
                     styles.roleButtonSubtext,
-                    selectedRole === "provider" && styles.roleButtonSubtextActive,
+                    selectedRole === "provider" &&
+                      styles.roleButtonSubtextActive,
                   ]}
                 >
                   (Provider)

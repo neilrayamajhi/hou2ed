@@ -5,7 +5,8 @@ import { supabase } from "../lib/supabase";
 // Configure how notifications are handled when app is in foreground
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowAlert: true, // Keep for backwards compatibility
+    shouldShowBanner: true, // New API
     shouldPlaySound: true,
     shouldSetBadge: true,
   }),
@@ -17,7 +18,7 @@ Notifications.setNotificationHandler({
 export async function registerForPushNotifications(): Promise<string | null> {
   try {
     // Request permissions
-    const { status: existingStatus} =
+    const { status: existingStatus } =
       await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
@@ -236,6 +237,176 @@ export async function sendLocalNotification(
 }
 
 /**
+ * Schedule a daily notification at a specific time
+ * This sets up a LOCAL notification that repeats daily
+ * @param hour - Hour in 24-hour format (0-23)
+ * @param minute - Minute (0-59)
+ * @param userId - User ID for checking updates
+ * @param userRole - User role (provider or seeker)
+ */
+export async function scheduleDailyNotification(
+  hour: number,
+  minute: number,
+  userId: string,
+  userRole: "provider" | "seeker" = "seeker",
+): Promise<boolean> {
+  try {
+    // Cancel all existing scheduled notifications first
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    console.log("✅ Cancelled all existing scheduled notifications");
+
+    // Create a Date object for the scheduled time TODAY
+    const now = new Date();
+    const scheduledTime = new Date();
+    scheduledTime.setHours(hour);
+    scheduledTime.setMinutes(minute);
+    scheduledTime.setSeconds(0);
+    scheduledTime.setMilliseconds(0);
+
+    // If the time has already passed today, schedule for tomorrow
+    if (scheduledTime <= now) {
+      scheduledTime.setDate(scheduledTime.getDate() + 1);
+      console.log(
+        `⏭️ Time ${hour}:${minute} already passed today, scheduling for tomorrow`,
+      );
+    }
+
+    console.log(`📅 Scheduling daily notification for ${hour}:${minute}`);
+    console.log(`   First trigger: ${scheduledTime.toLocaleString()}`);
+    console.log(`   User role: ${userRole}`);
+
+    // Different notification content based on user role
+    const isProvider = userRole === "provider";
+    const notificationContent = isProvider
+      ? {
+          title: "Update Your Listings 🏠",
+          body: "Time to update your bed availability! Keep your listings current.",
+          data: {
+            screen: "AvailabilityUpdater",
+            userId: userId,
+            type: "daily_availability_reminder",
+            userRole: userRole,
+          },
+        }
+      : {
+          title: "Application Updates 📋",
+          body: "Checking for updates on your applications...",
+          data: {
+            screen: "ApplicationsList",
+            userId: userId,
+            type: "daily_application_check",
+            userRole: userRole,
+          },
+        };
+
+    // Schedule the notification to repeat daily
+    const notificationId = await Notifications.scheduleNotificationAsync({
+      content: {
+        ...notificationContent,
+        sound: true,
+        priority: Notifications.AndroidNotificationPriority.HIGH,
+      },
+      trigger: {
+        hour: hour,
+        minute: minute,
+        repeats: true, // This makes it repeat daily
+      },
+    });
+
+    console.log(
+      `✅ Daily notification scheduled successfully! ID: ${notificationId}`,
+    );
+    console.log(
+      `   Will notify ${userRole} every day at ${hour}:${String(minute).padStart(2, "0")}`,
+    );
+
+    // Also schedule a TEST notification in 10 seconds to verify it works
+    if (process.env.NODE_ENV === "development") {
+      const testId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "🧪 Test Notification",
+          body: `Your daily ${isProvider ? "availability" : "application"} reminder will work like this!`,
+          data: notificationContent.data,
+          sound: true,
+        },
+        trigger: {
+          seconds: 10, // Fire in 10 seconds
+        },
+      });
+      console.log(
+        `🧪 Test notification scheduled for 10 seconds from now (ID: ${testId})`,
+      );
+    }
+
+    // Wait a bit for notifications to register in the system
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Verify notifications were actually scheduled
+    const allNotifications =
+      await Notifications.getAllScheduledNotificationsAsync();
+    console.log(
+      `📋 Verification: ${allNotifications.length} notification(s) are now scheduled`,
+    );
+    allNotifications.forEach((notif, index) => {
+      console.log(
+        `   ${index + 1}. ${notif.content.title} - Trigger: ${JSON.stringify(notif.trigger)}`,
+      );
+    });
+
+    if (allNotifications.length === 0) {
+      console.error("❌ ERROR: No notifications found after scheduling!");
+      console.error(
+        "   This usually means you're using Expo Go, which doesn't support repeating calendar notifications.",
+      );
+      console.error(
+        "   Solution: Create a development build with 'eas build --profile development'",
+      );
+      console.error("   See EXPO_GO_NOTIFICATION_LIMITATION.md for details.");
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("❌ Error scheduling daily notification:", error);
+    return false;
+  }
+}
+
+/**
+ * Cancel all scheduled notifications
+ */
+export async function cancelAllScheduledNotifications(): Promise<void> {
+  try {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    console.log("✅ All scheduled notifications cancelled");
+  } catch (error) {
+    console.error("Error cancelling notifications:", error);
+  }
+}
+
+/**
+ * Get all currently scheduled notifications (for debugging)
+ */
+export async function getScheduledNotifications(): Promise<
+  Notifications.NotificationRequest[]
+> {
+  try {
+    const notifications =
+      await Notifications.getAllScheduledNotificationsAsync();
+    console.log(`📋 Found ${notifications.length} scheduled notifications:`);
+    notifications.forEach((notif, index) => {
+      console.log(`   ${index + 1}. ID: ${notif.identifier}`);
+      console.log(`      Content: ${notif.content.title}`);
+      console.log(`      Trigger: ${JSON.stringify(notif.trigger)}`);
+    });
+    return notifications;
+  } catch (error) {
+    console.error("Error getting scheduled notifications:", error);
+    return [];
+  }
+}
+
+/**
  * Get user's notification time preference
  */
 export async function getNotificationTime(
@@ -289,4 +460,3 @@ export async function saveNotificationTime(
     return false;
   }
 }
-
