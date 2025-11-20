@@ -14,7 +14,14 @@
       "backgroundColor": "#000000"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.neilrayamajhi.hou2ed",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to upload documents and photos.",
+        "NSPhotoLibraryUsageDescription": "This app accesses your photo library to upload documents and photos.",
+        "NSLocationWhenInUseUsageDescription": "This app uses your location to find nearby housing listings."
+      }
     },
     "android": {
       "adaptiveIcon": {
