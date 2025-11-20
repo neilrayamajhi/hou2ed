@@ -7,6 +7,7 @@ import { theme } from "../theme";
 import { transformUserData, retryWithBackoff } from "../utils/auth";
 import { ERROR_MESSAGES } from "../constants/messages";
 import { queryClient } from "./QueryProvider";
+import { initializePushNotifications } from "../services/notification.service";
 
 interface AuthContextType {
   session: Session | null;
@@ -67,6 +68,15 @@ export default function AuthProvider({
             const userData = await transformUserData(session.user);
             setStoreUser(userData);
 
+            // Initialize push notifications
+            console.log("[AuthProvider] Initializing push notifications");
+            initializePushNotifications(session.user.id).catch((error) => {
+              console.error(
+                "[AuthProvider] Failed to initialize push notifications:",
+                error,
+              );
+            });
+
             // Invalidate all queries after login so they refetch with new user
             console.log(
               "[AuthProvider] Login successful - invalidating all queries to refetch fresh data",
@@ -81,6 +91,17 @@ export default function AuthProvider({
             setUser(session.user);
             const userData = await transformUserData(session.user);
             setStoreUser(userData);
+
+            // Initialize push notifications for existing session
+            console.log(
+              "[AuthProvider] Initializing push notifications for existing session",
+            );
+            initializePushNotifications(session.user.id).catch((error) => {
+              console.error(
+                "[AuthProvider] Failed to initialize push notifications:",
+                error,
+              );
+            });
 
             // Invalidate queries on app load with existing session
             console.log(
