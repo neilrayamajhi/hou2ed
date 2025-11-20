@@ -29,7 +29,20 @@
       "WebFetch(domain:hopethemission.org)",
       "Bash(lsof:*)",
       "Bash(kill:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(rm:*)",
+      "Bash(npm install:*)",
+      "Bash(npx expo install:*)",
+      "Bash(npx expo start)",
+      "Bash(npx expo start:*)",
+      "Bash(watchman watch-del:*)",
+      "Bash(watchman watch-project:*)",
+      "Bash(supabase status:*)",
+      "Bash(supabase link:*)",
+      "Bash(export SUPABASE_ACCESS_TOKEN:*)",
+      "Bash(supabase db push:*)",
+      "Bash(cat:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

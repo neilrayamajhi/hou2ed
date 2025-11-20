@@ -112,6 +112,11 @@ export async function createApplication(
     }
 
     // Check if provider has blocked this seeker
+    console.log('🔍 Checking if provider has blocked seeker...', {
+      providerId: listing.provider_id,
+      seekerId: user.id,
+    });
+
     const { data: blockCheck } = await supabase
       .from('blocks')
       .select('id')
@@ -119,7 +124,10 @@ export async function createApplication(
       .eq('blocked_id', user.id)
       .maybeSingle();
 
+    console.log('🔍 Block check result:', blockCheck ? 'BLOCKED ❌' : 'NOT BLOCKED ✅');
+
     if (blockCheck) {
+      console.log('🚫 Application blocked - provider has blocked this seeker');
       return {
         success: false,
         error: 'You cannot apply to this listing',
