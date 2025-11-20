@@ -41,6 +41,7 @@ import {
   blockUser,
   unblockUser,
   hasBlockedUser,
+  isBlockedRelationship,
 } from "../../services/blockingService";
 
 interface Attachment {
@@ -228,9 +229,14 @@ export default function ThreadScreen() {
       }
 
       setLoadingBlockStatus(true);
-      const blocked = await hasBlockedUser(participantId);
+      // Check both directions - if either party has blocked the other
+      const blocked = await isBlockedRelationship(participantId);
       setIsBlocked(blocked);
       setLoadingBlockStatus(false);
+
+      if (blocked) {
+        console.log('🚫 Blocking relationship detected - messaging disabled');
+      }
     }
 
     loadBlockStatus();
@@ -238,6 +244,16 @@ export default function ThreadScreen() {
 
   const handleSend = useCallback(async () => {
     if (!inputText.trim() && selectedAttachments.length === 0) return;
+
+    // Prevent sending if there's a blocking relationship
+    if (isBlocked) {
+      Alert.alert(
+        'Cannot Send Message',
+        'You cannot send messages to this user due to a blocking relationship.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
 
     // Validate thread exists
     if (!thread?.id) {
@@ -724,18 +740,23 @@ export default function ThreadScreen() {
           <TouchableOpacity
             style={styles.attachButton}
             onPress={handleAttachmentPress}
+            disabled={isBlocked}
           >
-            <Ionicons name="attach" size={24} color={colors.gray[400]} />
+            <Ionicons
+              name="attach"
+              size={24}
+              color={isBlocked ? colors.gray[600] : colors.gray[400]}
+            />
           </TouchableOpacity>
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, isBlocked && styles.inputDisabled]}
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Type a message..."
+            placeholder={isBlocked ? "Messaging unavailable (blocked)" : "Type a message..."}
             placeholderTextColor={colors.gray[500]}
             multiline
-            editable={!sending}
+            editable={!sending && !isBlocked}
           />
 
           <TouchableOpacity
@@ -751,7 +772,8 @@ export default function ThreadScreen() {
               sending ||
               !thread?.id ||
               !currentUserId ||
-              loading
+              loading ||
+              isBlocked
             }
           >
             {sending ? (
@@ -980,6 +1002,10 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     color: colors.gray[50],
     maxHeight: 100,
+  },
+  inputDisabled: {
+    backgroundColor: colors.gray[850],
+    opacity: 0.6,
   },
   sendButton: {
     padding: spacing.sm,
