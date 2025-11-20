@@ -34,16 +34,29 @@ export async function blockUser(blockedUserId: string): Promise<{
       return { success: false, error: "Cannot block yourself" };
     }
 
-    // Insert block record
-    const { error } = await supabase.from("blocks").insert({
+    console.log('🔒 Attempting to insert block record:', {
       blocker_id: user.id,
       blocked_id: blockedUserId,
     });
 
+    // Insert block record
+    const { data: blockData, error } = await supabase.from("blocks").insert({
+      blocker_id: user.id,
+      blocked_id: blockedUserId,
+    }).select();
+
     if (error) {
-      console.error("Error blocking user:", error);
+      console.error("❌ Error inserting block record:", error);
+      console.error("❌ Error details:", {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
       return { success: false, error: error.message };
     }
+
+    console.log('✅ Block record inserted successfully:', blockData);
 
     // If current user is a provider, auto-reject all pending applications from blocked seeker
     await autoRejectApplicationsFromBlockedUser(user.id, blockedUserId);
