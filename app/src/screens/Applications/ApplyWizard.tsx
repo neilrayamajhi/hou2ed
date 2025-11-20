@@ -356,6 +356,46 @@ export default function ApplyWizard() {
         );
       }
 
+      // Get listing to find provider and check for blocks
+      const { data: listing, error: listingError } = await supabase
+        .from('listings')
+        .select('provider_id')
+        .eq('id', draft.listingId)
+        .single();
+
+      if (listingError || !listing) {
+        console.error('Error fetching listing:', listingError);
+        Alert.alert('Error', 'Unable to find this listing');
+        setSubmitting(false);
+        return;
+      }
+
+      // Check if provider has blocked this seeker
+      console.log('🔍 Checking if provider has blocked seeker...', {
+        providerId: listing.provider_id,
+        seekerId: user.id,
+      });
+
+      const { data: blockCheck } = await supabase
+        .from('blocks')
+        .select('id')
+        .eq('blocker_id', listing.provider_id)
+        .eq('blocked_id', user.id)
+        .maybeSingle();
+
+      console.log('🔍 Block check result:', blockCheck ? 'BLOCKED ❌' : 'NOT BLOCKED ✅');
+
+      if (blockCheck) {
+        console.log('🚫 Application blocked - provider has blocked this seeker');
+        Alert.alert(
+          'Cannot Apply',
+          'You cannot apply to this listing',
+          [{ text: 'OK' }]
+        );
+        setSubmitting(false);
+        return;
+      }
+
       // Insert with all the form data
       const applicationData = {
         listing_id: draft.listingId,
