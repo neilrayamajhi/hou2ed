@@ -22,7 +22,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
 import { useAuthStore } from "../../state/useAuthStore";
 import { RootStackNavigationProp } from "../../navigation/types";
-import { useI18n, LANGUAGES } from "../../i18n";
+import { useI18n } from "../../i18n";
 import { supabase } from "../../lib/supabase";
 import { transformUserData } from "../../utils/auth";
 import {
@@ -685,47 +685,6 @@ export default function ProfileScreen() {
                   accessibilityRole="switch"
                 />
               </View>
-
-              <TouchableOpacity
-                style={styles.settingRow}
-                onPress={() => {
-                  Alert.alert(
-                    i18n.t("profile.settings.selectLanguage"),
-                    i18n.t("profile.settings.chooseLanguage"),
-                    [
-                      ...LANGUAGES.map((lang) => ({
-                        text: `${lang.nativeName} (${lang.name})`,
-                        onPress: () => i18n.setLanguage(lang.code),
-                      })),
-                      { text: i18n.t("common.cancel"), style: "cancel" },
-                    ],
-                  );
-                }}
-                accessibilityLabel="Change language"
-                accessibilityRole="button"
-              >
-                <View style={styles.settingLeft}>
-                  <Ionicons
-                    name="language-outline"
-                    size={18}
-                    color={colors.gray[400]}
-                  />
-                  <Text style={styles.settingText}>
-                    {i18n.t("profile.settings.language")}
-                  </Text>
-                </View>
-                <View style={styles.settingRight}>
-                  <Text style={styles.settingValue}>
-                    {LANGUAGES.find((l) => l.code === i18n.language)?.name ||
-                      "English"}
-                  </Text>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={18}
-                    color={colors.gray[500]}
-                  />
-                </View>
-              </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.settingRow, styles.dangerRow]}
