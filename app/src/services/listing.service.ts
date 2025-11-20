@@ -41,6 +41,7 @@ export interface CreateListingInput {
   maxAge?: number;
   eligibility?: string[];
   customEligibility?: string[];
+  requiredDocuments?: string[];
 }
 
 // Type for updating a listing
@@ -66,6 +67,7 @@ export interface UpdateListingInput {
   maxAge?: number;
   eligibility?: string[];
   customEligibility?: string[];
+  requiredDocuments?: string[];
 }
 
 /**
@@ -287,6 +289,17 @@ export async function createListing(
   listingData: CreateListingInput,
 ): Promise<{ success: boolean; listingId?: string; error?: string }> {
   try {
+    // Validate bed counts - available beds cannot exceed total beds
+    if (
+      listingData.availableBeds !== undefined &&
+      listingData.availableBeds > listingData.totalBeds
+    ) {
+      return {
+        success: false,
+        error: `Available beds (${listingData.availableBeds}) cannot exceed total beds (${listingData.totalBeds})`,
+      };
+    }
+
     // Build amenities object from array
     const amenitiesObj: any = {};
     if (listingData.amenities && listingData.amenities.length > 0) {
@@ -420,7 +433,11 @@ export async function createListing(
       cost: listingData.price
         ? { monthly: listingData.price }
         : { is_free: true },
-      intake: {},
+      intake:
+        listingData.requiredDocuments &&
+        listingData.requiredDocuments.length > 0
+          ? { required_documents: listingData.requiredDocuments }
+          : {},
       availability: {
         beds_today: listingData.availableBeds || listingData.totalBeds,
         beds_week: listingData.totalBeds,
@@ -485,6 +502,18 @@ export async function updateListing(
   updates: UpdateListingInput,
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Validate bed counts - available beds cannot exceed total beds
+    if (
+      updates.totalBeds !== undefined &&
+      updates.availableBeds !== undefined &&
+      updates.availableBeds > updates.totalBeds
+    ) {
+      return {
+        success: false,
+        error: `Available beds (${updates.availableBeds}) cannot exceed total beds (${updates.totalBeds})`,
+      };
+    }
+
     // Build the update object
     const updateData: any = {
       updated_at: new Date().toISOString(),
