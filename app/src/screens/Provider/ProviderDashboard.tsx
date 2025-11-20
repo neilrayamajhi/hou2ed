@@ -336,7 +336,7 @@ export default function ProviderDashboard() {
                     color={colors.primary[500]}
                   />
                   <Text style={styles.listingStatsText}>
-                    {listing.availableBeds}/{listing.totalBeds} available
+                    {listing.availableBeds} of {listing.totalBeds} beds available
                   </Text>
                 </View>
                 <Text style={styles.lastUpdatedText}>
