@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   View,
   Text,
   StyleSheet,
   SafeAreaView,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
@@ -16,7 +16,6 @@ import {
   spacing,
   typography,
   radius,
-  shadows,
 } from "../../theme/tokens";
 import { RootStackNavigationProp } from "../../navigation/types";
 import { useProviderApplications } from "../../hooks/useProviderApplications";
@@ -34,179 +33,201 @@ export default function ApplicationsInbox() {
     refetch,
     isRefetching,
   } = useProviderApplications();
-  const [filter, setFilter] = useState<"all" | ApplicationStatus>("all");
-
-  // Filter applications based on selected filter
-  const filteredApplications =
-    applications?.filter((app) => {
-      if (filter === "all") return true;
-      return app.status === filter;
-    }) || [];
-
-  // Count applications by status
-  const statusCounts = {
-    new: applications?.filter((a) => a.status === "new").length || 0,
-    under_review:
-      applications?.filter((a) => a.status === "under_review").length || 0,
-    approved: applications?.filter((a) => a.status === "approved").length || 0,
-    rejected: applications?.filter((a) => a.status === "rejected").length || 0,
-  };
 
   const getStatusColor = (status: ApplicationStatus) => {
     switch (status) {
       case "new":
-        return colors.blue;
+        return colors.primary[500];
       case "under_review":
-        return colors.yellow;
+        return colors.primary[400];
       case "approved":
-        return colors.green;
+        return "#10b981"; // green
       case "rejected":
         return colors.red;
       case "waitlisted":
-        return colors.orange;
+        return colors.yellow;
+      case "withdrawn":
+        return colors.gray[500];
       default:
-        return colors.gray[400];
+        return colors.gray[600];
     }
   };
 
-  const getStatusIcon = (status: ApplicationStatus) => {
+  const getStatusLabel = (status: ApplicationStatus) => {
     switch (status) {
       case "new":
-        return "mail-unread-outline";
+        return "New";
       case "under_review":
-        return "time-outline";
+        return "Under Review";
       case "approved":
-        return "checkmark-circle-outline";
+        return "Approved";
       case "rejected":
-        return "close-circle-outline";
+        return "Rejected";
       case "waitlisted":
-        return "list-outline";
+        return "Waitlisted";
+      case "withdrawn":
+        return "Withdrawn";
       default:
-        return "document-outline";
+        return status;
     }
   };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
   };
+
+  const renderApplicationItem = ({
+    item,
+    index,
+  }: {
+    item: Application;
+    index: number;
+  }) => {
+    const statusColor = getStatusColor(item.status);
+    const statusLabel = getStatusLabel(item.status);
+    const seekerName =
+      item.seeker?.full_name || item.seeker?.email || "Applicant";
+    const listingTitle = item.listing?.title || "Unknown Listing";
+
+    return (
+      <TouchableOpacity
+        style={styles.applicationCard}
+        onPress={() =>
+          navigation.navigate("ApplicationDetail", { applicationId: item.id })
+        }
+        accessibilityLabel={`Application ${index + 1} from ${seekerName}`}
+        accessibilityRole="button"
+      >
+        <View style={styles.cardHeader}>
+          <View style={styles.titleContainer}>
+            <Text style={styles.applicationNumber}>{index + 1}.</Text>
+            <Text style={styles.seekerName} numberOfLines={1}>
+              {seekerName}
+            </Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
+            <Text style={styles.statusText}>{statusLabel}</Text>
+          </View>
+        </View>
+
+        <View style={styles.cardDetails}>
+          <View style={styles.detailRow}>
+            <Ionicons
+              name="home-outline"
+              size={16}
+              color={colors.gray[400]}
+            />
+            <Text style={styles.detailText} numberOfLines={1}>
+              {listingTitle}
+            </Text>
+          </View>
+
+          <View style={styles.detailRow}>
+            <Ionicons
+              name="calendar-outline"
+              size={16}
+              color={colors.gray[400]}
+            />
+            <Text style={styles.detailText}>
+              Applied: {formatDate(item.created_at)}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.cardFooter}>
+          <Ionicons
+            name="chevron-forward"
+            size={20}
+            color={colors.gray[500]}
+          />
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderEmptyState = () => (
+    <View style={styles.emptyState}>
+      <Ionicons name="document-text-outline" size={64} color={colors.gray[600]} />
+      <Text style={styles.emptyStateTitle}>No Applications Yet</Text>
+      <Text style={styles.emptyStateSubtitle}>
+        Applications from seekers will appear here
+      </Text>
+    </View>
+  );
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            accessibilityLabel="Go back"
+          >
+            <Ionicons name="arrow-back" size={24} color={colors.gray[50]} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Applications</Text>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary[500]} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (isError) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            accessibilityLabel="Go back"
+          >
+            <Ionicons name="arrow-back" size={24} color={colors.gray[50]} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Applications</Text>
+        </View>
+        <View style={styles.centerContainer}>
+          <Ionicons name="alert-circle" size={64} color={colors.red} />
+          <Text style={styles.errorText}>Failed to load applications</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
           accessibilityLabel="Go back"
+          accessibilityRole="button"
         >
           <Ionicons name="arrow-back" size={24} color={colors.gray[50]} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Applications</Text>
-        <View style={styles.headerSpacer} />
       </View>
 
-      {/* Filter Tabs */}
-      <ScrollView
-        horizontal
-        style={styles.filterScroll}
-        contentContainerStyle={styles.filterContainer}
-        showsHorizontalScrollIndicator={false}
-      >
-        <TouchableOpacity
-          style={[styles.filterTab, filter === "all" && styles.filterTabActive]}
-          onPress={() => setFilter("all")}
-        >
-          <Text
-            style={[
-              styles.filterTabText,
-              filter === "all" && styles.filterTabTextActive,
-            ]}
-          >
-            All ({applications?.length || 0})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.filterTab, filter === "new" && styles.filterTabActive]}
-          onPress={() => setFilter("new")}
-        >
-          <Text
-            style={[
-              styles.filterTabText,
-              filter === "new" && styles.filterTabTextActive,
-            ]}
-          >
-            New ({statusCounts.new})
-          </Text>
-          {statusCounts.new > 0 && <View style={styles.badge} />}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.filterTab,
-            filter === "under_review" && styles.filterTabActive,
-          ]}
-          onPress={() => setFilter("under_review")}
-        >
-          <Text
-            style={[
-              styles.filterTabText,
-              filter === "under_review" && styles.filterTabTextActive,
-            ]}
-          >
-            In Review ({statusCounts.under_review})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.filterTab,
-            filter === "approved" && styles.filterTabActive,
-          ]}
-          onPress={() => setFilter("approved")}
-        >
-          <Text
-            style={[
-              styles.filterTabText,
-              filter === "approved" && styles.filterTabTextActive,
-            ]}
-          >
-            Approved ({statusCounts.approved})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.filterTab,
-            filter === "rejected" && styles.filterTabActive,
-          ]}
-          onPress={() => setFilter("rejected")}
-        >
-          <Text
-            style={[
-              styles.filterTabText,
-              filter === "rejected" && styles.filterTabTextActive,
-            ]}
-          >
-            Rejected ({statusCounts.rejected})
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
-
-      {/* Applications List */}
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+      <FlatList
+        data={applications || []}
+        renderItem={renderApplicationItem}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={[
+          styles.listContainer,
+          (!applications || applications.length === 0) &&
+            styles.emptyListContainer,
+        ]}
+        ListEmptyComponent={renderEmptyState}
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}
@@ -214,158 +235,8 @@ export default function ApplicationsInbox() {
             tintColor={colors.primary[500]}
           />
         }
-      >
-        {isLoading && (
-          <View style={styles.centerContainer}>
-            <ActivityIndicator size="large" color={colors.primary[500]} />
-          </View>
-        )}
-
-        {isError && (
-          <View style={styles.centerContainer}>
-            <Ionicons
-              name="alert-circle-outline"
-              size={48}
-              color={colors.red}
-            />
-            <Text style={styles.errorText}>Failed to load applications</Text>
-            <TouchableOpacity
-              style={styles.retryButton}
-              onPress={() => refetch()}
-            >
-              <Text style={styles.retryButtonText}>Retry</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {!isLoading && !isError && filteredApplications.length === 0 && (
-          <View style={styles.emptyState}>
-            <Ionicons
-              name="document-text-outline"
-              size={64}
-              color={colors.gray[600]}
-            />
-            <Text style={styles.emptyStateTitle}>
-              {filter === "all"
-                ? "No applications yet"
-                : `No ${filter} applications`}
-            </Text>
-            <Text style={styles.emptyStateSubtitle}>
-              {filter === "all"
-                ? "Applications from seekers will appear here"
-                : "Try selecting a different filter"}
-            </Text>
-          </View>
-        )}
-
-        {filteredApplications.map((application) => (
-          <TouchableOpacity
-            key={application.id}
-            style={styles.applicationCard}
-            onPress={() => {
-              navigation.navigate("ApplicationDetail", {
-                applicationId: application.id,
-              });
-            }}
-            accessibilityLabel={`Application from ${(application as any).seeker?.full_name || "Unknown"}`}
-            accessibilityRole="button"
-          >
-            {/* Status indicator */}
-            <View
-              style={[
-                styles.statusIndicator,
-                { backgroundColor: getStatusColor(application.status) },
-              ]}
-            />
-
-            <View style={styles.applicationContent}>
-              {/* Header */}
-              <View style={styles.applicationHeader}>
-                <View style={styles.seekerInfo}>
-                  <View style={styles.avatarPlaceholder}>
-                    <Ionicons
-                      name="person"
-                      size={20}
-                      color={colors.gray[500]}
-                    />
-                  </View>
-                  <View style={styles.seekerDetails}>
-                    <Text style={styles.seekerName}>
-                      {(application as any).seeker?.full_name ||
-                        "Unknown Applicant"}
-                    </Text>
-                    <Text style={styles.timeAgo}>
-                      {formatDate(application.created_at)}
-                    </Text>
-                  </View>
-                </View>
-
-                <View
-                  style={[
-                    styles.statusBadge,
-                    {
-                      backgroundColor: `${getStatusColor(application.status)}20`,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name={getStatusIcon(application.status) as any}
-                    size={14}
-                    color={getStatusColor(application.status)}
-                  />
-                  <Text
-                    style={[
-                      styles.statusBadgeText,
-                      { color: getStatusColor(application.status) },
-                    ]}
-                  >
-                    {application.status.replace("_", " ")}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Listing info */}
-              <View style={styles.listingInfo}>
-                <Ionicons
-                  name="home-outline"
-                  size={14}
-                  color={colors.gray[400]}
-                />
-                <Text style={styles.listingTitle} numberOfLines={1}>
-                  {(application as any).listing?.title || "Unknown Listing"}
-                </Text>
-              </View>
-
-              {/* Message preview */}
-              {application.application_data?.additionalInfo && (
-                <Text style={styles.messagePreview} numberOfLines={2}>
-                  {application.application_data.additionalInfo}
-                </Text>
-              )}
-
-              {/* Footer */}
-              <View style={styles.applicationFooter}>
-                <View style={styles.contactInfo}>
-                  <Ionicons
-                    name="mail-outline"
-                    size={12}
-                    color={colors.gray[500]}
-                  />
-                  <Text style={styles.contactText}>
-                    {(application as any).seeker?.email || "No email"}
-                  </Text>
-                </View>
-
-                <Ionicons
-                  name="chevron-forward"
-                  size={16}
-                  color={colors.gray[600]}
-                />
-              </View>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+        showsVerticalScrollIndicator={false}
+      />
     </SafeAreaView>
   );
 }
@@ -385,66 +256,23 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: spacing.xs,
+    marginRight: spacing.md,
   },
   headerTitle: {
-    flex: 1,
-    fontSize: typography.sizes.lg,
-    fontWeight: "600",
+    fontSize: typography.sizes.xl,
+    fontWeight: "700",
     color: colors.gray[50],
-    textAlign: "center",
   },
-  headerSpacer: {
-    width: 40,
-  },
-  filterScroll: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[800],
-  },
-  filterContainer: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    gap: spacing.sm,
-  },
-  filterTab: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.full,
-    backgroundColor: colors.gray[850],
-    borderWidth: 1,
-    borderColor: colors.gray[800],
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-  },
-  filterTabActive: {
-    backgroundColor: colors.primary[500],
-    borderColor: colors.primary[500],
-  },
-  filterTabText: {
-    fontSize: typography.sizes.sm,
-    color: colors.gray[300],
-    fontWeight: "500",
-  },
-  filterTabTextActive: {
-    color: colors.gray[900],
-    fontWeight: "600",
-  },
-  badge: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.red,
-  },
-  scrollView: {
+  loadingContainer: {
     flex: 1,
-  },
-  scrollContent: {
-    padding: spacing.lg,
+    justifyContent: "center",
+    alignItems: "center",
   },
   centerContainer: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: spacing["3xl"],
+    paddingHorizontal: spacing.xl,
   },
   errorText: {
     fontSize: typography.sizes.md,
@@ -463,7 +291,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: colors.gray[900],
   },
+  listContainer: {
+    padding: spacing.lg,
+  },
+  emptyListContainer: {
+    flexGrow: 1,
+  },
   emptyState: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: spacing["3xl"],
@@ -483,97 +318,65 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   applicationCard: {
-    flexDirection: "row",
     backgroundColor: colors.gray[850],
     borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
     borderWidth: 1,
     borderColor: colors.gray[800],
-    marginBottom: spacing.md,
-    overflow: "hidden",
-    ...shadows.subtle,
   },
-  statusIndicator: {
-    width: 4,
-  },
-  applicationContent: {
-    flex: 1,
-    padding: spacing.md,
-  },
-  applicationHeader: {
+  cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
     marginBottom: spacing.sm,
   },
-  seekerInfo: {
+  titleContainer: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
-  },
-  avatarPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.gray[800],
-    alignItems: "center",
-    justifyContent: "center",
     marginRight: spacing.sm,
   },
-  seekerDetails: {
-    flex: 1,
+  applicationNumber: {
+    fontSize: typography.sizes.md,
+    fontWeight: "700",
+    color: colors.primary[500],
+    marginRight: spacing.sm,
   },
   seekerName: {
     fontSize: typography.sizes.md,
     fontWeight: "600",
     color: colors.gray[50],
-    marginBottom: 2,
-  },
-  timeAgo: {
-    fontSize: typography.sizes.xs,
-    color: colors.gray[500],
+    flex: 1,
   },
   statusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
     borderRadius: radius.sm,
   },
-  statusBadgeText: {
+  statusText: {
     fontSize: typography.sizes.xs,
     fontWeight: "600",
-    textTransform: "capitalize",
+    color: colors.white,
   },
-  listingInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
+  cardDetails: {
+    gap: spacing.sm,
     marginBottom: spacing.sm,
   },
-  listingTitle: {
-    fontSize: typography.sizes.sm,
-    color: colors.gray[400],
-    flex: 1,
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
   },
-  messagePreview: {
+  detailText: {
     fontSize: typography.sizes.sm,
     color: colors.gray[300],
-    lineHeight: 18,
-    marginBottom: spacing.sm,
+    flex: 1,
   },
-  applicationFooter: {
+  cardFooter: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     alignItems: "center",
-  },
-  contactInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  contactText: {
-    fontSize: typography.sizes.xs,
-    color: colors.gray[500],
+    marginTop: spacing.sm,
   },
 });
