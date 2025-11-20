@@ -50,11 +50,6 @@ export default function ProfileScreen() {
     user?.avatar_url || null,
   );
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [changePasswordModalVisible, setChangePasswordModalVisible] =
-    useState(false);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [applicationsCount, setApplicationsCount] = useState<number>(0);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
@@ -258,49 +253,6 @@ export default function ProfileScreen() {
   const handleApplications = useCallback(() => {
     navigation.navigate("ApplicationsList");
   }, [navigation]);
-
-  const handleChangePassword = useCallback(() => {
-    setChangePasswordModalVisible(true);
-  }, []);
-
-  const submitPasswordChange = useCallback(async () => {
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      Alert.alert("Error", "Please fill in all fields");
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      Alert.alert("Error", "New passwords don't match");
-      return;
-    }
-
-    if (newPassword.length < 8) {
-      Alert.alert("Error", "Password must be at least 8 characters");
-      return;
-    }
-
-    try {
-      const { supabase } = await import("../../lib/supabase");
-
-      // Update the password in Supabase
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-
-      if (error) {
-        Alert.alert("Error", "Failed to change password. Please try again.");
-        return;
-      }
-
-      Alert.alert("Success", "Password changed successfully");
-      setChangePasswordModalVisible(false);
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    } catch (err) {
-      Alert.alert("Error", "Failed to change password. Please try again.");
-    }
-  }, [currentPassword, newPassword, confirmPassword]);
 
   const handleDeleteAccount = useCallback(() => {
     Alert.alert(
@@ -585,30 +537,9 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.settingsContent}>
-              <TouchableOpacity
-                style={styles.settingRow}
-                onPress={handleChangePassword}
-                accessibilityLabel="Change password"
-                accessibilityRole="button"
-              >
-                <View style={styles.settingLeft}>
-                  <Ionicons
-                    name="key-outline"
-                    size={18}
-                    color={colors.gray[400]}
-                  />
-                  <Text style={styles.settingText}>
-                    {i18n.t("profile.settings.changePassword")}
-                  </Text>
-                </View>
-                <Ionicons
-                  name="chevron-forward"
-                  size={18}
-                  color={colors.gray[500]}
-                />
-              </TouchableOpacity>
-
-              <View style={styles.settingRow}>
+              {/* Notification settings - Provider only */}
+              {user?.role === "provider" && (
+                <View style={styles.settingRow}>
                 <View style={styles.settingLeft}>
                   <Ionicons
                     name="notifications-outline"
@@ -633,7 +564,10 @@ export default function ProfileScreen() {
                   accessibilityRole="switch"
                 />
               </View>
+              )}
 
+              {/* Notification Time - Provider only */}
+              {user?.role === "provider" && (
               <TouchableOpacity
                 style={styles.settingRow}
                 onPress={() => setShowTimePicker(true)}
@@ -659,7 +593,10 @@ export default function ProfileScreen() {
                   />
                 </View>
               </TouchableOpacity>
+              )}
 
+              {/* Email Notifications - Provider only */}
+              {user?.role === "provider" && (
               <View style={styles.settingRow}>
                 <View style={styles.settingLeft}>
                   <Ionicons
@@ -685,7 +622,9 @@ export default function ProfileScreen() {
                   accessibilityRole="switch"
                 />
               </View>
+              )}
 
+              {/* Delete Account Button */}
               <TouchableOpacity
                 style={[styles.settingRow, styles.dangerRow]}
                 onPress={handleDeleteAccount}
@@ -743,11 +682,11 @@ export default function ProfileScreen() {
     [
       pushNotifications,
       emailNotifications,
-      handleChangePassword,
       handleDeleteAccount,
       i18n.language,
       i18n.t,
       formatNotificationTime,
+      user?.role,
     ],
   );
 
@@ -871,79 +810,7 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Change Password Modal */}
-      <Modal
-        visible={changePasswordModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setChangePasswordModalVisible(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setChangePasswordModalVisible(false)}
-        >
-          <Pressable
-            style={styles.modalContent}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <Text style={styles.modalTitle}>
-              {i18n.t("profile.changePassword.title")}
-            </Text>
-
-            <TextInput
-              style={styles.modalInput}
-              value={currentPassword}
-              onChangeText={setCurrentPassword}
-              placeholder={i18n.t("profile.changePassword.current")}
-              placeholderTextColor={colors.gray[500]}
-              secureTextEntry
-              accessibilityLabel="Current password input"
-            />
-
-            <TextInput
-              style={styles.modalInput}
-              value={newPassword}
-              onChangeText={setNewPassword}
-              placeholder={i18n.t("profile.changePassword.new")}
-              placeholderTextColor={colors.gray[500]}
-              secureTextEntry
-              accessibilityLabel="New password input"
-            />
-
-            <TextInput
-              style={styles.modalInput}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              placeholder={i18n.t("profile.changePassword.confirm")}
-              placeholderTextColor={colors.gray[500]}
-              secureTextEntry
-              accessibilityLabel="Confirm password input"
-            />
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setChangePasswordModalVisible(false)}
-              >
-                <Text style={styles.cancelButtonText}>
-                  {i18n.t("common.cancel")}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalButton, styles.submitButton]}
-                onPress={submitPasswordChange}
-              >
-                <Text style={styles.submitButtonText}>
-                  {i18n.t("profile.changePassword.submit")}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      {/* Time Picker */}
+      {/* Time Picker - Provider only */}
       {showTimePicker && (
         <>
           {Platform.OS === "ios" ? (
