@@ -751,6 +751,73 @@ export default function ListingWizard() {
           Add documents that applicants must upload when applying
         </Text>
 
+        {/* Standard Documents - Always Required */}
+        <View style={styles.standardDocumentsContainer}>
+          <View style={styles.standardDocumentsHeader}>
+            <Ionicons
+              name="checkmark-circle"
+              size={20}
+              color={colors.primary[500]}
+            />
+            <Text style={styles.standardDocumentsTitle}>
+              Standard Documents (Always Required)
+            </Text>
+          </View>
+          <Text style={styles.standardDocumentsDescription}>
+            All applicants will be asked to upload these documents:
+          </Text>
+          <View style={styles.standardDocumentsList}>
+            <View style={styles.standardDocumentItem}>
+              <Ionicons
+                name="document-text-outline"
+                size={16}
+                color={colors.gray[400]}
+              />
+              <Text style={styles.standardDocumentText}>
+                Government ID (Required)
+              </Text>
+            </View>
+            <View style={styles.standardDocumentItem}>
+              <Ionicons
+                name="document-text-outline"
+                size={16}
+                color={colors.gray[400]}
+              />
+              <Text style={styles.standardDocumentText}>
+                Insurance Card (Optional)
+              </Text>
+            </View>
+            <View style={styles.standardDocumentItem}>
+              <Ionicons
+                name="document-text-outline"
+                size={16}
+                color={colors.gray[400]}
+              />
+              <Text style={styles.standardDocumentText}>
+                Income Proof (Required)
+              </Text>
+            </View>
+            <View style={styles.standardDocumentItem}>
+              <Ionicons
+                name="document-text-outline"
+                size={16}
+                color={colors.gray[400]}
+              />
+              <Text style={styles.standardDocumentText}>
+                Referral Letter (Optional)
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Custom Documents Section */}
+        <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>
+          Additional Custom Documents
+        </Text>
+        <Text style={styles.sectionDescription}>
+          Add any extra documents specific to your listing
+        </Text>
+
         {/* List of required documents */}
         {requiredDocuments.length > 0 && (
           <View style={{ marginBottom: spacing.md }}>
@@ -1405,5 +1472,42 @@ const styles = StyleSheet.create({
   },
   addButtonTextDisabled: {
     color: colors.gray[600],
+  },
+  standardDocumentsContainer: {
+    backgroundColor: colors.gray[850],
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.primary[500] + "30",
+  },
+  standardDocumentsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  standardDocumentsTitle: {
+    fontSize: typography.sizes.md,
+    fontWeight: "600",
+    color: colors.primary[500],
+  },
+  standardDocumentsDescription: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray[400],
+    marginBottom: spacing.sm,
+  },
+  standardDocumentsList: {
+    gap: spacing.xs,
+  },
+  standardDocumentItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  standardDocumentText: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray[300],
   },
 });
