@@ -58,17 +58,99 @@ export default function Step3Documents({
   // Fetch listing's document requirements
   useEffect(() => {
     const fetchDocumentRequirements = async () => {
-      // Use static default document requirements for all applications
-      // Provider-specified custom documents are stored but not enforced on seeker side
-      setDocumentRequirements(
-        DOCUMENT_TYPES.map((dt) => ({
-          id: dt.id,
-          label: dt.label,
-          required: dt.required,
-          category: "other" as const,
-        })),
-      );
-      setLoadingRequirements(false);
+      if (!draft.listingId) {
+        console.warn("No listing ID provided");
+        setLoadingRequirements(false);
+        return;
+      }
+
+      try {
+        setLoadingRequirements(true);
+        const { data, error } = await supabase
+          .from("listings")
+          .select("intake")
+          .eq("id", draft.listingId)
+          .single();
+
+        if (error) {
+          console.error("Error fetching listing:", error);
+          // Fall back to default requirements
+          setDocumentRequirements(
+            DOCUMENT_TYPES.map((dt) => ({
+              id: dt.id,
+              label: dt.label,
+              required: dt.required,
+              category: "other" as const,
+            })),
+          );
+        } else if (data?.intake?.documents_required) {
+          const docs = data.intake.documents_required;
+
+          // Check if it's new format or legacy string array
+          if (isNewDocumentFormat(docs)) {
+            setDocumentRequirements(docs);
+          } else if (Array.isArray(docs)) {
+            // Convert legacy format to new format
+            setDocumentRequirements(convertLegacyDocuments(docs as string[]));
+          } else {
+            // No requirements specified, use defaults
+            setDocumentRequirements(
+              DOCUMENT_TYPES.map((dt) => ({
+                id: dt.id,
+                label: dt.label,
+                required: dt.required,
+                category: "other" as const,
+              })),
+            );
+          }
+        } else {
+          // Start with default requirements
+          const defaultRequirements = DOCUMENT_TYPES.map((dt) => ({
+            id: dt.id,
+            label: dt.label,
+            required: dt.required,
+            category: "other" as const,
+          }));
+
+          // Add custom required documents from provider if they exist
+          const customDocs = data?.intake?.required_documents;
+          if (
+            customDocs &&
+            Array.isArray(customDocs) &&
+            customDocs.length > 0
+          ) {
+            // Convert custom document names to document requirements
+            const customRequirements = customDocs.map(
+              (docName: string, index: number) => ({
+                id: `custom_${index}_${docName.toLowerCase().replace(/\s+/g, "_")}`,
+                label: docName,
+                required: true, // Custom documents are required
+                category: "custom" as const,
+              }),
+            );
+            setDocumentRequirements([
+              ...defaultRequirements,
+              ...customRequirements,
+            ]);
+          } else {
+            // No custom documents, just use defaults
+            setDocumentRequirements(defaultRequirements);
+          }
+        }
+      } catch (error) {
+        console.error("Error in fetchDocumentRequirements:", error);
+        // Fall back to default requirements
+        setDocumentRequirements(
+          DOCUMENT_TYPES.map((dt) => ({
+            id: dt.id,
+            label: dt.label,
+            required: dt.required,
+            category: "other" as const,
+          })),
+        );
+      } finally {
+        setLoadingRequirements(false);
+      }
     };
 
     fetchDocumentRequirements();
