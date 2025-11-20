@@ -357,11 +357,16 @@ export default function HomeScreen() {
 
   // Validate and reset activeIndex when filtered listings change
   useEffect(() => {
-    if (activeIndex >= filteredListings.length && filteredListings.length > 0) {
-      console.log("⚠️ activeIndex out of bounds, resetting to 0");
-      setActiveIndex(0);
-    } else if (filteredListings.length === 0 && activeIndex !== 0) {
-      setActiveIndex(0);
+    // Only reset if activeIndex is out of bounds (don't auto-select on load)
+    if (
+      activeIndex !== null &&
+      activeIndex >= filteredListings.length &&
+      filteredListings.length > 0
+    ) {
+      console.log("⚠️ activeIndex out of bounds, resetting to null");
+      setActiveIndex(null);
+    } else if (filteredListings.length === 0 && activeIndex !== null) {
+      setActiveIndex(null);
     }
   }, [filteredListings.length, activeIndex]);
 

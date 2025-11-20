@@ -77,7 +77,35 @@ export function useSavedListings(options?: UseSavedListingsOptions) {
   // Unsave listing mutation
   const unsaveMutation = useMutation({
     mutationFn: unsaveListing,
-    onSuccess: () => {
+    onMutate: async (listingId) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["savedListings"] });
+
+      // Snapshot the previous value
+      const previousSavedListings = queryClient.getQueryData(["savedListings"]);
+
+      // Optimistically update to remove the listing
+      queryClient.setQueryData(["savedListings"], (old: SavedListing[] = []) =>
+        old.filter((listing) => listing.listing_id !== listingId),
+      );
+
+      console.log("[useSavedListings] Optimistically removed:", listingId);
+
+      // Return context with previous value
+      return { previousSavedListings };
+    },
+    onError: (err, listingId, context) => {
+      // Rollback on error
+      if (context?.previousSavedListings) {
+        queryClient.setQueryData(
+          ["savedListings"],
+          context.previousSavedListings,
+        );
+      }
+      console.error("[useSavedListings] Error unsaving:", err);
+    },
+    onSettled: () => {
+      // Always refetch after mutation completes
       queryClient.invalidateQueries({ queryKey: ["savedListings"] });
       queryClient.invalidateQueries({ queryKey: ["isListingSaved"] });
     },
