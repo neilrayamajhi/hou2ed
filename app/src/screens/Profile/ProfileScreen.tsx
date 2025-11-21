@@ -12,25 +12,16 @@ import {
   Pressable,
   Image,
   ActivityIndicator,
-  Platform,
-  Switch,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
 import { useAuthStore } from "../../state/useAuthStore";
 import { RootStackNavigationProp } from "../../navigation/types";
 import { useI18n } from "../../i18n";
 import { supabase } from "../../lib/supabase";
 import { transformUserData } from "../../utils/auth";
-import {
-  getNotificationTime,
-  saveNotificationTime,
-  scheduleDailyNotification,
-  getScheduledNotifications,
-} from "../../services/notification.service";
 
 interface ProfileSection {
   id: string;
@@ -50,11 +41,12 @@ export default function ProfileScreen() {
     user?.avatar_url || null,
   );
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [changePasswordModalVisible, setChangePasswordModalVisible] =
+    useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [applicationsCount, setApplicationsCount] = useState<number>(0);
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [notificationTime, setNotificationTime] = useState<Date>(new Date());
-  const [showTimePicker, setShowTimePicker] = useState(false);
 
   const handleEditAvatar = useCallback(async () => {
     console.log("[ProfileScreen] Starting avatar upload...");
@@ -153,12 +145,13 @@ export default function ProfileScreen() {
         throw new Error("Failed to get public URL");
       }
 
-      // Update profile with new avatar URL
+      // Update profile with new avatar URL (user.id is guaranteed by guard above)
       console.log("[ProfileScreen] Updating profile table...");
+      const userId = user.id!; // Non-null assertion - checked at function start
       const { error: updateError } = await supabase
         .from("profiles")
         .update({ avatar_url: urlData.publicUrl })
-        .eq("id", user.id);
+        .eq("id", userId);
 
       console.log("[ProfileScreen] Profile update result:", {
         error: updateError,
@@ -204,11 +197,12 @@ export default function ProfileScreen() {
     try {
       const { supabase } = await import("../../lib/supabase");
 
-      // Check user's role first
+      // Check user's role first (user.id is guaranteed by guard above)
+      const userId = user.id!; // Non-null assertion - checked at function start
       const { data: profile } = await supabase
         .from("profiles")
         .select("role")
-        .eq("id", user.id)
+        .eq("id", userId)
         .single();
 
       const userRole = profile?.role || "seeker";
@@ -218,7 +212,7 @@ export default function ProfileScreen() {
         const { count, error } = await supabase
           .from("applications")
           .select("*", { count: "exact", head: true })
-          .eq("seeker_id", user.id)
+          .eq("seeker_id", userId)
           .is("deleted_at", null) // Exclude soft-deleted
           .neq("status", "withdrawn"); // Exclude withdrawn
 
@@ -253,6 +247,49 @@ export default function ProfileScreen() {
   const handleApplications = useCallback(() => {
     navigation.navigate("ApplicationsList");
   }, [navigation]);
+
+  const handleChangePassword = useCallback(() => {
+    setChangePasswordModalVisible(true);
+  }, []);
+
+  const submitPasswordChange = useCallback(async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      Alert.alert("Error", "Please fill in all fields");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      Alert.alert("Error", "New passwords don't match");
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      Alert.alert("Error", "Password must be at least 8 characters");
+      return;
+    }
+
+    try {
+      const { supabase } = await import("../../lib/supabase");
+
+      // Update the password in Supabase
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        Alert.alert("Error", "Failed to change password. Please try again.");
+        return;
+      }
+
+      Alert.alert("Success", "Password changed successfully");
+      setChangePasswordModalVisible(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      Alert.alert("Error", "Failed to change password. Please try again.");
+    }
+  }, [currentPassword, newPassword, confirmPassword]);
 
   const handleDeleteAccount = useCallback(() => {
     Alert.alert(
@@ -314,175 +351,6 @@ export default function ProfileScreen() {
     ]);
   }, [logout, navigation]);
 
-  // Load notification time on mount
-  const loadNotificationTime = useCallback(async () => {
-    if (!user?.id) return;
-
-    try {
-      const timeString = await getNotificationTime(user.id);
-      if (timeString) {
-        // timeString is in UTC (HH:MM:SS), convert to local time
-        const [hours, minutes] = timeString.split(":");
-        const date = new Date();
-        // Set as UTC time first
-        date.setUTCHours(parseInt(hours, 10));
-        date.setUTCMinutes(parseInt(minutes, 10));
-        date.setUTCSeconds(0);
-        // Now the Date object represents that UTC time
-        // When we display it, JavaScript automatically converts to local time
-        setNotificationTime(date);
-
-        // DON'T schedule here - only schedule when user explicitly sets time
-        // This prevents notifications from firing on every login
-        console.log(
-          `📱 Loaded notification time: ${date.getHours()}:${date.getMinutes()} (not scheduling on load)`,
-        );
-      }
-    } catch (error) {
-      console.error("Error loading notification time:", error);
-    }
-  }, [user?.id]);
-
-  // Load notification time on mount
-  React.useEffect(() => {
-    loadNotificationTime();
-  }, [loadNotificationTime]);
-
-  // Handle time change
-  const handleTimeChange = useCallback(
-    async (event: any, selectedDate?: Date) => {
-      if (!selectedDate || !user?.id) return;
-
-      setNotificationTime(selectedDate);
-
-      // On Android, save immediately and dismiss picker
-      if (Platform.OS === "android") {
-        setShowTimePicker(false);
-
-        // Convert LOCAL time to UTC before saving
-        const utcHours = selectedDate.getUTCHours().toString().padStart(2, "0");
-        const utcMinutes = selectedDate
-          .getUTCMinutes()
-          .toString()
-          .padStart(2, "0");
-        const timeString = `${utcHours}:${utcMinutes}:00`;
-
-        const success = await saveNotificationTime(user.id, timeString);
-        if (success) {
-          // Schedule LOCAL notification at the selected time
-          const localHour = selectedDate.getHours();
-          const localMinute = selectedDate.getMinutes();
-
-          console.log(
-            `📱 Scheduling local notification for ${localHour}:${localMinute}`,
-          );
-          const scheduled = await scheduleDailyNotification(
-            localHour,
-            localMinute,
-            user.id,
-            user.role || "seeker",
-          );
-
-          if (scheduled) {
-            // Show LOCAL time to user with role-specific message
-            const displayHours = localHour % 12 || 12;
-            const ampm = localHour >= 12 ? "PM" : "AM";
-            const isProvider = user.role === "provider";
-
-            Alert.alert(
-              "Success",
-              isProvider
-                ? `✅ Daily reminder set for ${displayHours}:${localMinute.toString().padStart(2, "0")} ${ampm}\n\n📋 You'll get a reminder every day to update your listing availability and bed counts.\n\nTap the notification to go directly to the updater!`
-                : `✅ Daily notification set for ${displayHours}:${localMinute.toString().padStart(2, "0")} ${ampm}\n\nYou'll be notified every day if there are updates to your applications.`,
-            );
-          } else {
-            Alert.alert(
-              "⚠️ Expo Go Limitation",
-              "Daily repeating notifications don't work in Expo Go.\n\n" +
-                "✅ Your time preference is saved\n" +
-                "✅ Will work in production build\n\n" +
-                "To test now: Create a development build with 'eas build --profile development'\n\n" +
-                "See EXPO_GO_NOTIFICATION_LIMITATION.md for details.",
-            );
-          }
-        } else {
-          Alert.alert(
-            "⚠️ Expo Go Limitation",
-            "Daily repeating notifications don't work in Expo Go.\n\n" +
-              "✅ Your time preference is saved\n" +
-              "✅ Will work in production build\n\n" +
-              "To test now: Create a development build with 'eas build --profile development'\n\n" +
-              "See EXPO_GO_NOTIFICATION_LIMITATION.md for details.",
-          );
-        }
-      }
-      // On iOS, just update the state - user will tap "Done" to save
-    },
-    [user?.id],
-  );
-
-  // Handle saving the time (called when user taps "Done" on iOS)
-  const handleSaveTime = useCallback(async () => {
-    if (!user?.id) return;
-
-    setShowTimePicker(false);
-
-    // Convert LOCAL time to UTC before saving
-    const utcHours = notificationTime.getUTCHours().toString().padStart(2, "0");
-    const utcMinutes = notificationTime
-      .getUTCMinutes()
-      .toString()
-      .padStart(2, "0");
-    const timeString = `${utcHours}:${utcMinutes}:00`;
-
-    const success = await saveNotificationTime(user.id, timeString);
-    if (success) {
-      // Schedule LOCAL notification at the selected time
-      const localHour = notificationTime.getHours();
-      const localMinute = notificationTime.getMinutes();
-
-      console.log(
-        `📱 Scheduling local notification for ${localHour}:${localMinute}`,
-      );
-      const scheduled = await scheduleDailyNotification(
-        localHour,
-        localMinute,
-        user.id,
-        user.role || "seeker",
-      );
-
-      if (scheduled) {
-        // Show LOCAL time to user with role-specific message
-        const displayHours = localHour % 12 || 12;
-        const ampm = localHour >= 12 ? "PM" : "AM";
-        const isProvider = user.role === "provider";
-
-        Alert.alert(
-          "Success",
-          isProvider
-            ? `✅ Daily reminder set for ${displayHours}:${localMinute.toString().padStart(2, "0")} ${ampm}\n\n📋 You'll get a reminder every day to update your listing availability and bed counts.\n\nTap the notification to go directly to the updater!`
-            : `✅ Daily notification set for ${displayHours}:${localMinute.toString().padStart(2, "0")} ${ampm}\n\nYou'll be notified every day if there are updates to your applications.`,
-        );
-      } else {
-        Alert.alert(
-          "Warning",
-          "Time saved but local notifications may not work. The system will still send push notifications at your set time.",
-        );
-      }
-    } else {
-      Alert.alert("Error", "Failed to save notification time");
-    }
-  }, [user?.id, notificationTime]);
-
-  // Format time for display
-  const formatNotificationTime = useCallback(() => {
-    const hours = notificationTime.getHours();
-    const minutes = notificationTime.getMinutes();
-    const ampm = hours >= 12 ? "PM" : "AM";
-    const displayHours = hours % 12 || 12;
-    return `${displayHours}:${minutes.toString().padStart(2, "0")} ${ampm}`;
-  }, [notificationTime]);
-
   const profileSections: ProfileSection[] = useMemo(
     () => [
       // Provider Dashboard - only show if user is a provider
@@ -537,94 +405,50 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.settingsContent}>
-              {/* Notification settings - Provider only */}
-              {user?.role === "provider" && (
-                <View style={styles.settingRow}>
-                <View style={styles.settingLeft}>
-                  <Ionicons
-                    name="notifications-outline"
-                    size={18}
-                    color={colors.gray[400]}
-                  />
-                  <Text style={styles.settingText}>
-                    {i18n.t("profile.settings.pushNotifications")}
-                  </Text>
-                </View>
-                <Switch
-                  value={pushNotifications}
-                  onValueChange={setPushNotifications}
-                  trackColor={{
-                    false: colors.gray[700],
-                    true: colors.primary[600],
-                  }}
-                  thumbColor={
-                    pushNotifications ? colors.primary[400] : colors.gray[400]
-                  }
-                  accessibilityLabel="Push notifications toggle"
-                  accessibilityRole="switch"
-                />
-              </View>
-              )}
-
-              {/* Notification Time - Provider only */}
-              {user?.role === "provider" && (
               <TouchableOpacity
                 style={styles.settingRow}
-                onPress={() => setShowTimePicker(true)}
-                accessibilityLabel="Set notification time"
+                onPress={handleChangePassword}
+                accessibilityLabel="Change password"
                 accessibilityRole="button"
               >
                 <View style={styles.settingLeft}>
                   <Ionicons
-                    name="time-outline"
-                    size={18}
-                    color={colors.gray[400]}
-                  />
-                  <Text style={styles.settingText}>Notification Time</Text>
-                </View>
-                <View style={styles.settingRight}>
-                  <Text style={styles.settingValue}>
-                    {formatNotificationTime()}
-                  </Text>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={18}
-                    color={colors.gray[500]}
-                  />
-                </View>
-              </TouchableOpacity>
-              )}
-
-              {/* Email Notifications - Provider only */}
-              {user?.role === "provider" && (
-              <View style={styles.settingRow}>
-                <View style={styles.settingLeft}>
-                  <Ionicons
-                    name="mail-outline"
+                    name="key-outline"
                     size={18}
                     color={colors.gray[400]}
                   />
                   <Text style={styles.settingText}>
-                    {i18n.t("profile.settings.emailNotifications")}
+                    {i18n.t("profile.settings.changePassword")}
                   </Text>
                 </View>
-                <Switch
-                  value={emailNotifications}
-                  onValueChange={setEmailNotifications}
-                  trackColor={{
-                    false: colors.gray[700],
-                    true: colors.primary[600],
-                  }}
-                  thumbColor={
-                    emailNotifications ? colors.primary[400] : colors.gray[400]
-                  }
-                  accessibilityLabel="Email notifications toggle"
-                  accessibilityRole="switch"
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.gray[500]}
                 />
-              </View>
-              )}
+              </TouchableOpacity>
 
-              {/* Delete Account Button */}
+              <TouchableOpacity
+                style={styles.settingRow}
+                onPress={() => navigation.navigate("BlockedUsers")}
+                accessibilityLabel="Blocked users"
+                accessibilityRole="button"
+              >
+                <View style={styles.settingLeft}>
+                  <Ionicons
+                    name="ban-outline"
+                    size={18}
+                    color={colors.gray[400]}
+                  />
+                  <Text style={styles.settingText}>Blocked Users</Text>
+                </View>
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.gray[500]}
+                />
+              </TouchableOpacity>
+
               <TouchableOpacity
                 style={[styles.settingRow, styles.dangerRow]}
                 onPress={handleDeleteAccount}
@@ -679,15 +503,7 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       );
     },
-    [
-      pushNotifications,
-      emailNotifications,
-      handleDeleteAccount,
-      i18n.language,
-      i18n.t,
-      formatNotificationTime,
-      user?.role,
-    ],
+    [handleChangePassword, handleDeleteAccount, i18n.language, i18n.t],
   );
 
   return (
@@ -747,52 +563,6 @@ export default function ProfileScreen() {
           </Text>
         </View>
 
-        {/* Provider Daily Reminder Banner - SUPER OBVIOUS */}
-        {user?.role === "provider" && (
-          <View style={styles.providerReminderBanner}>
-            <View style={styles.reminderBannerHeader}>
-              <View style={styles.reminderIconContainer}>
-                <Ionicons name="notifications" size={24} color="#D4AF37" />
-              </View>
-              <View style={styles.reminderHeaderText}>
-                <Text style={styles.reminderTitle}>
-                  📋 Daily Availability Reminder
-                </Text>
-                <Text style={styles.reminderSubtitle}>
-                  Get reminded to update your listing availability
-                </Text>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={styles.reminderTimeButton}
-              onPress={() => setShowTimePicker(true)}
-              accessibilityLabel="Set daily reminder time"
-              accessibilityRole="button"
-            >
-              <View style={styles.reminderTimeContent}>
-                <View>
-                  <Text style={styles.reminderTimeLabel}>
-                    Remind me daily at:
-                  </Text>
-                  <Text style={styles.reminderTimeDisplay}>
-                    {formatNotificationTime()}
-                  </Text>
-                </View>
-                <View style={styles.reminderTimeAction}>
-                  <Text style={styles.reminderChangeText}>CHANGE</Text>
-                  <Ionicons name="time" size={24} color="#D4AF37" />
-                </View>
-              </View>
-            </TouchableOpacity>
-
-            <Text style={styles.reminderHelpText}>
-              💡 Tap the notification to jump straight to your availability
-              updater and keep your listings current!
-            </Text>
-          </View>
-        )}
-
         {/* Profile Sections */}
         <View style={styles.sectionsContainer}>
           {profileSections.map(renderSection)}
@@ -810,55 +580,77 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Time Picker - Provider only */}
-      {showTimePicker && (
-        <>
-          {Platform.OS === "ios" ? (
-            <Modal
-              visible={showTimePicker}
-              transparent
-              animationType="slide"
-              onRequestClose={() => setShowTimePicker(false)}
-            >
-              <Pressable
-                style={styles.modalOverlay}
-                onPress={() => setShowTimePicker(false)}
-              >
-                <Pressable
-                  style={styles.timePickerModal}
-                  onPress={(e) => e.stopPropagation()}
-                >
-                  <View style={styles.timePickerHeader}>
-                    <Text style={styles.timePickerTitle}>
-                      Select Notification Time
-                    </Text>
-                    <TouchableOpacity
-                      onPress={handleSaveTime}
-                      style={styles.timePickerDone}
-                    >
-                      <Text style={styles.timePickerDoneText}>Done</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <DateTimePicker
-                    value={notificationTime}
-                    mode="time"
-                    display="spinner"
-                    onChange={handleTimeChange}
-                    textColor={colors.gray[50]}
-                  />
-                </Pressable>
-              </Pressable>
-            </Modal>
-          ) : (
-            <DateTimePicker
-              value={notificationTime}
-              mode="time"
-              display="default"
-              onChange={handleTimeChange}
+      {/* Change Password Modal */}
+      <Modal
+        visible={changePasswordModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setChangePasswordModalVisible(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setChangePasswordModalVisible(false)}
+        >
+          <Pressable
+            style={styles.modalContent}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={styles.modalTitle}>
+              {i18n.t("profile.changePassword.title")}
+            </Text>
+
+            <TextInput
+              style={styles.modalInput}
+              value={currentPassword}
+              onChangeText={setCurrentPassword}
+              placeholder={i18n.t("profile.changePassword.current")}
+              placeholderTextColor={colors.gray[500]}
+              secureTextEntry
+              accessibilityLabel="Current password input"
             />
-          )}
-        </>
-      )}
+
+            <TextInput
+              style={styles.modalInput}
+              value={newPassword}
+              onChangeText={setNewPassword}
+              placeholder={i18n.t("profile.changePassword.new")}
+              placeholderTextColor={colors.gray[500]}
+              secureTextEntry
+              accessibilityLabel="New password input"
+            />
+
+            <TextInput
+              style={styles.modalInput}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              placeholder={i18n.t("profile.changePassword.confirm")}
+              placeholderTextColor={colors.gray[500]}
+              secureTextEntry
+              accessibilityLabel="Confirm password input"
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setChangePasswordModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>
+                  {i18n.t("common.cancel")}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, styles.submitButton]}
+                onPress={submitPasswordChange}
+              >
+                <Text style={styles.submitButtonText}>
+                  {i18n.t("profile.changePassword.submit")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -942,84 +734,6 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     color: colors.primary[400],
     marginTop: spacing.xs,
-  },
-  // Provider Reminder Banner Styles
-  providerReminderBanner: {
-    backgroundColor: "#1a1a0f", // Slightly gold-tinted black
-    borderWidth: 2,
-    borderColor: "#D4AF37",
-    borderRadius: radius.xl,
-    marginHorizontal: spacing.lg,
-    marginVertical: spacing.xl,
-    padding: spacing.lg,
-    shadowColor: "#D4AF37",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  reminderBannerHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: spacing.md,
-  },
-  reminderIconContainer: {
-    backgroundColor: "rgba(212, 175, 55, 0.15)",
-    borderRadius: radius.full,
-    padding: spacing.md,
-    marginRight: spacing.md,
-  },
-  reminderHeaderText: {
-    flex: 1,
-  },
-  reminderTitle: {
-    fontSize: typography.sizes.lg,
-    fontWeight: "700",
-    color: "#D4AF37",
-    marginBottom: spacing.xs,
-  },
-  reminderSubtitle: {
-    fontSize: typography.sizes.sm,
-    color: colors.gray[300],
-  },
-  reminderTimeButton: {
-    backgroundColor: colors.gray[900],
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: "#D4AF37",
-    marginVertical: spacing.md,
-  },
-  reminderTimeContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  reminderTimeLabel: {
-    fontSize: typography.sizes.sm,
-    color: colors.gray[400],
-    marginBottom: spacing.xs,
-  },
-  reminderTimeDisplay: {
-    fontSize: typography.sizes["2xl"],
-    fontWeight: "700",
-    color: "#D4AF37",
-  },
-  reminderTimeAction: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  reminderChangeText: {
-    fontSize: typography.sizes.sm,
-    fontWeight: "600",
-    color: "#D4AF37",
-  },
-  reminderHelpText: {
-    fontSize: typography.sizes.xs,
-    color: colors.gray[500],
-    textAlign: "center",
-    lineHeight: 18,
   },
   sectionsContainer: {
     paddingHorizontal: spacing.lg,
@@ -1179,37 +893,5 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     fontWeight: "600",
     color: colors.gray[900],
-  },
-  timePickerModal: {
-    backgroundColor: colors.gray[800],
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    paddingBottom: spacing.xl,
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
-  timePickerHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[700],
-  },
-  timePickerTitle: {
-    fontSize: typography.sizes.lg,
-    fontWeight: "600",
-    color: colors.gray[50],
-  },
-  timePickerDone: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  timePickerDoneText: {
-    fontSize: typography.sizes.md,
-    fontWeight: "600",
-    color: colors.primary[400],
   },
 });

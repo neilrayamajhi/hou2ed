@@ -34,16 +34,32 @@ export async function blockUser(blockedUserId: string): Promise<{
       return { success: false, error: "Cannot block yourself" };
     }
 
-    // Insert block record
-    const { error } = await supabase.from("blocks").insert({
+    console.log('🔒 Attempting to insert block record:', {
       blocker_id: user.id,
       blocked_id: blockedUserId,
     });
 
+    // Insert block record
+    const { data: blockData, error } = await supabase.from("blocks").insert({
+      blocker_id: user.id,
+      blocked_id: blockedUserId,
+    }).select();
+
     if (error) {
-      console.error("Error blocking user:", error);
+      console.error("❌ Error inserting block record:", error);
+      console.error("❌ Error details:", {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
       return { success: false, error: error.message };
     }
+
+    console.log('✅ Block record inserted successfully:', blockData);
+
+    // If current user is a provider, auto-reject all pending applications from blocked seeker
+    await autoRejectApplicationsFromBlockedUser(user.id, blockedUserId);
 
     return { success: true };
   } catch (error) {
@@ -237,5 +253,77 @@ export async function getAllBlockedRelationships(): Promise<string[]> {
   } catch (error) {
     console.error("Error in getAllBlockedRelationships:", error);
     return [];
+  }
+}
+
+/**
+ * Auto-reject all pending applications from a blocked user to any of the blocker's listings
+ * This is called when a provider blocks a seeker
+ * @param blockerId - The ID of the user doing the blocking (provider)
+ * @param blockedUserId - The ID of the user being blocked (seeker)
+ */
+async function autoRejectApplicationsFromBlockedUser(
+  blockerId: string,
+  blockedUserId: string
+): Promise<void> {
+  try {
+    // Get all listings owned by the blocker
+    const { data: listings, error: listingsError } = await supabase
+      .from("listings")
+      .select("id")
+      .eq("provider_id", blockerId);
+
+    if (listingsError || !listings || listings.length === 0) {
+      // No listings or error - nothing to reject
+      return;
+    }
+
+    const listingIds = listings.map((listing) => listing.id);
+
+    // Find all pending applications from blocked user to any of these listings
+    const { data: pendingApps, error: appsError } = await supabase
+      .from("applications")
+      .select("id, stage_timestamps")
+      .eq("seeker_id", blockedUserId)
+      .in("listing_id", listingIds)
+      .in("status", ["new", "under_review", "docs_needed", "interview_scheduled", "waitlisted"]);
+
+    if (appsError || !pendingApps || pendingApps.length === 0) {
+      // No pending applications - nothing to reject
+      return;
+    }
+
+    // Auto-reject all pending applications
+    const rejectionTime = new Date().toISOString();
+    let rejectedCount = 0;
+
+    // Update each application individually to properly merge stage_timestamps
+    for (const app of pendingApps) {
+      const updatedTimestamps = {
+        ...(app.stage_timestamps || {}),
+        rejected: rejectionTime,
+      };
+
+      const { error: updateError } = await supabase
+        .from("applications")
+        .update({
+          status: "rejected",
+          stage_timestamps: updatedTimestamps,
+          notes: "Application auto-rejected: Provider has blocked this user",
+          updated_at: rejectionTime,
+        })
+        .eq("id", app.id);
+
+      if (updateError) {
+        console.error(`Error rejecting application ${app.id}:`, updateError);
+      } else {
+        rejectedCount++;
+      }
+    }
+
+    console.log(`Auto-rejected ${rejectedCount} of ${pendingApps.length} application(s) from blocked user`);
+  } catch (error) {
+    console.error("Error in autoRejectApplicationsFromBlockedUser:", error);
+    // Don't throw - blocking should still succeed even if auto-reject fails
   }
 }
