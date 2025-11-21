@@ -7,9 +7,6 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Alert,
-  Modal,
-  TextInput,
-  Pressable,
   Image,
   ActivityIndicator,
 } from "react-native";
@@ -41,11 +38,6 @@ export default function ProfileScreen() {
     user?.avatar_url || null,
   );
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [changePasswordModalVisible, setChangePasswordModalVisible] =
-    useState(false);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [applicationsCount, setApplicationsCount] = useState<number>(0);
 
   const handleEditAvatar = useCallback(async () => {
@@ -248,49 +240,6 @@ export default function ProfileScreen() {
     navigation.navigate("ApplicationsList");
   }, [navigation]);
 
-  const handleChangePassword = useCallback(() => {
-    setChangePasswordModalVisible(true);
-  }, []);
-
-  const submitPasswordChange = useCallback(async () => {
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      Alert.alert("Error", "Please fill in all fields");
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      Alert.alert("Error", "New passwords don't match");
-      return;
-    }
-
-    if (newPassword.length < 8) {
-      Alert.alert("Error", "Password must be at least 8 characters");
-      return;
-    }
-
-    try {
-      const { supabase } = await import("../../lib/supabase");
-
-      // Update the password in Supabase
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-
-      if (error) {
-        Alert.alert("Error", "Failed to change password. Please try again.");
-        return;
-      }
-
-      Alert.alert("Success", "Password changed successfully");
-      setChangePasswordModalVisible(false);
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    } catch (err) {
-      Alert.alert("Error", "Failed to change password. Please try again.");
-    }
-  }, [currentPassword, newPassword, confirmPassword]);
-
   const handleDeleteAccount = useCallback(() => {
     Alert.alert(
       "Delete Account",
@@ -353,26 +302,19 @@ export default function ProfileScreen() {
 
   const profileSections: ProfileSection[] = useMemo(
     () => [
-      // Provider Dashboard - only show if user is a provider
-      ...(user?.role === "provider"
+      // My Applications - only show for seekers (providers don't apply to housing)
+      ...(user?.role === "seeker"
         ? [
             {
-              id: "provider-dashboard",
-              title: "Provider Dashboard",
-              icon: "home-outline" as keyof typeof Ionicons.glyphMap,
-              onPress: () => navigation.navigate("ProviderDashboard"),
+              id: "applications",
+              title: i18n.t("profile.sections.applications"),
+              icon: "document-text-outline" as keyof typeof Ionicons.glyphMap,
+              onPress: handleApplications,
+              badge: applicationsCount > 0 ? applicationsCount : undefined,
               showArrow: true,
             },
           ]
         : []),
-      {
-        id: "applications",
-        title: i18n.t("profile.sections.applications"),
-        icon: "document-text-outline",
-        onPress: handleApplications,
-        badge: applicationsCount > 0 ? applicationsCount : undefined,
-        showArrow: true,
-      },
       {
         id: "account-settings",
         title: i18n.t("profile.sections.accountSettings"),
@@ -405,29 +347,6 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.settingsContent}>
-              <TouchableOpacity
-                style={styles.settingRow}
-                onPress={handleChangePassword}
-                accessibilityLabel="Change password"
-                accessibilityRole="button"
-              >
-                <View style={styles.settingLeft}>
-                  <Ionicons
-                    name="key-outline"
-                    size={18}
-                    color={colors.gray[400]}
-                  />
-                  <Text style={styles.settingText}>
-                    {i18n.t("profile.settings.changePassword")}
-                  </Text>
-                </View>
-                <Ionicons
-                  name="chevron-forward"
-                  size={18}
-                  color={colors.gray[500]}
-                />
-              </TouchableOpacity>
-
               <TouchableOpacity
                 style={styles.settingRow}
                 onPress={() => navigation.navigate("BlockedUsers")}
@@ -503,7 +422,7 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       );
     },
-    [handleChangePassword, handleDeleteAccount, i18n.language, i18n.t],
+    [handleDeleteAccount, i18n.language, i18n.t, navigation],
   );
 
   return (
@@ -579,78 +498,6 @@ export default function ProfileScreen() {
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>
-
-      {/* Change Password Modal */}
-      <Modal
-        visible={changePasswordModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setChangePasswordModalVisible(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setChangePasswordModalVisible(false)}
-        >
-          <Pressable
-            style={styles.modalContent}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <Text style={styles.modalTitle}>
-              {i18n.t("profile.changePassword.title")}
-            </Text>
-
-            <TextInput
-              style={styles.modalInput}
-              value={currentPassword}
-              onChangeText={setCurrentPassword}
-              placeholder={i18n.t("profile.changePassword.current")}
-              placeholderTextColor={colors.gray[500]}
-              secureTextEntry
-              accessibilityLabel="Current password input"
-            />
-
-            <TextInput
-              style={styles.modalInput}
-              value={newPassword}
-              onChangeText={setNewPassword}
-              placeholder={i18n.t("profile.changePassword.new")}
-              placeholderTextColor={colors.gray[500]}
-              secureTextEntry
-              accessibilityLabel="New password input"
-            />
-
-            <TextInput
-              style={styles.modalInput}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              placeholder={i18n.t("profile.changePassword.confirm")}
-              placeholderTextColor={colors.gray[500]}
-              secureTextEntry
-              accessibilityLabel="Confirm password input"
-            />
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setChangePasswordModalVisible(false)}
-              >
-                <Text style={styles.cancelButtonText}>
-                  {i18n.t("common.cancel")}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalButton, styles.submitButton]}
-                onPress={submitPasswordChange}
-              >
-                <Text style={styles.submitButtonText}>
-                  {i18n.t("profile.changePassword.submit")}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -839,59 +686,5 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: colors.red,
     marginLeft: spacing.sm,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContent: {
-    width: "90%",
-    backgroundColor: colors.gray[800],
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-  },
-  modalTitle: {
-    fontSize: typography.sizes.lg,
-    fontWeight: "600",
-    color: colors.gray[50],
-    marginBottom: spacing.lg,
-  },
-  modalInput: {
-    backgroundColor: colors.gray[900],
-    borderRadius: radius.md,
-    padding: spacing.md,
-    fontSize: typography.sizes.sm,
-    color: colors.gray[50],
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.gray[700],
-  },
-  modalButtons: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: spacing.md,
-  },
-  modalButton: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
-    marginLeft: spacing.sm,
-  },
-  cancelButton: {
-    backgroundColor: colors.gray[700],
-  },
-  cancelButtonText: {
-    fontSize: typography.sizes.sm,
-    color: colors.gray[200],
-  },
-  submitButton: {
-    backgroundColor: colors.primary[500],
-  },
-  submitButtonText: {
-    fontSize: typography.sizes.sm,
-    fontWeight: "600",
-    color: colors.gray[900],
   },
 });

@@ -21,7 +21,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to upload documents and photos.",
         "NSPhotoLibraryUsageDescription": "This app accesses your photo library to upload documents and photos.",
-        "NSLocationWhenInUseUsageDescription": "This app uses your location to find nearby housing listings."
+        "NSLocationWhenInUseUsageDescription": "This app uses your location to find nearby housing listings.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -44,6 +45,11 @@
           "sounds": []
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "58887545-3b66-46c1-bff1-63e83037f5a9"
+      }
+    }
   }
 }
