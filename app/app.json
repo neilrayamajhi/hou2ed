@@ -2,6 +2,7 @@
   "expo": {
     "name": "HOU2ED",
     "slug": "hou2ed",
+    "owner": "neilrayamajhi",
     "scheme": "hou2ed",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -43,6 +44,11 @@
           "sounds": []
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "959638ed-4f32-4a93-9e04-6f3f2dffa2d8"
+      }
+    }
   }
 }
