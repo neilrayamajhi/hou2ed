@@ -28,7 +28,7 @@ END $$;
 
 -- Create listings table if not exists
 CREATE TABLE IF NOT EXISTS listings (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   provider_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   description TEXT NOT NULL,
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS listings (
 
 -- Create applications table if not exists
 CREATE TABLE IF NOT EXISTS applications (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   listing_id UUID NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
   seeker_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   status TEXT DEFAULT 'new',
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS applications (
 
 -- Create documents table if not exists
 CREATE TABLE IF NOT EXISTS documents (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   application_id UUID NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
   type TEXT NOT NULL,
   file_url TEXT NOT NULL,
@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS documents (
 
 -- Create threads table if not exists
 CREATE TABLE IF NOT EXISTS threads (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   listing_id UUID REFERENCES listings(id) ON DELETE CASCADE,
   application_id UUID REFERENCES applications(id) ON DELETE CASCADE,
   participants UUID[] NOT NULL,
@@ -132,7 +132,7 @@ CREATE TABLE IF NOT EXISTS threads (
 
 -- Create messages table if not exists
 CREATE TABLE IF NOT EXISTS messages (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   thread_id UUID NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
   sender_id UUID NOT NULL REFERENCES profiles(id),
   body TEXT NOT NULL,
@@ -147,7 +147,7 @@ CREATE TABLE IF NOT EXISTS messages (
 
 -- Create saved searches table if not exists
 CREATE TABLE IF NOT EXISTS saved_searches (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   filters JSONB NOT NULL,
@@ -158,7 +158,7 @@ CREATE TABLE IF NOT EXISTS saved_searches (
 
 -- Create saved listings table if not exists
 CREATE TABLE IF NOT EXISTS saved_listings (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   listing_id UUID NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
   notes TEXT,
