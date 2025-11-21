@@ -44,11 +44,6 @@
           "sounds": []
         }
       ]
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "959638ed-4f32-4a93-9e04-6f3f2dffa2d8"
-      }
-    }
+    ]
   }
 }
