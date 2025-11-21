@@ -6,7 +6,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Step 1: Create message_threads table
 CREATE TABLE IF NOT EXISTS message_threads (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   subject TEXT,
   participant_ids UUID[] NOT NULL,
   listing_id UUID REFERENCES listings(id) ON DELETE CASCADE,
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS message_threads (
 
 -- Step 2: Create or update messages table with all required columns
 CREATE TABLE IF NOT EXISTS messages (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   thread_id UUID NOT NULL REFERENCES message_threads(id) ON DELETE CASCADE,
   sender_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   body TEXT NOT NULL,

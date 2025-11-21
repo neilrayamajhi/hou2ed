@@ -2,7 +2,7 @@
 -- Similar to Instagram blocking: bidirectional blocking prevents all interactions
 
 CREATE TABLE IF NOT EXISTS blocks (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   blocker_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   blocked_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

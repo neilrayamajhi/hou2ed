@@ -203,7 +203,7 @@ $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
 -- Create audit table for DV listing access
 CREATE TABLE IF NOT EXISTS dv_access_log (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES profiles(id),
   listing_id UUID REFERENCES listings(id),
   access_type TEXT, -- 'search', 'view', 'contact'

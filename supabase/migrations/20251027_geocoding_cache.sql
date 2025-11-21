@@ -2,7 +2,7 @@
 -- Stores normalized address text and resulting coordinates
 
 create table if not exists public.geocoding_cache (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   normalized_address text not null,
   -- optional: simple hash if you later want to avoid storing the full text
   address_hash text,
