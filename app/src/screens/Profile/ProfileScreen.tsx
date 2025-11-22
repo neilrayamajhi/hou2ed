@@ -316,7 +316,7 @@ export default function ProfileScreen() {
 
   // Load notification time preference on mount (providers only)
   const loadNotificationTime = useCallback(async () => {
-    if (!user?.id || user.role !== "provider") return;
+    if (!user?.id || user?.role !== "provider") return;
 
     try {
       setLoadingNotificationTime(true);
@@ -328,16 +328,18 @@ export default function ProfileScreen() {
         const date = new Date();
         date.setHours(hours, minutes, 0, 0);
         setNotificationTime(date);
-        console.log(`📱 Loaded notification time: ${timeString}`);
+        console.log(
+          `📱 Loaded notification time: ${timeString} (hours: ${hours}, minutes: ${minutes})`,
+        );
       } else {
-        // Default to 7:00 PM
-        const defaultTime = new Date();
-        defaultTime.setHours(19, 0, 0, 0);
-        setNotificationTime(defaultTime);
-        console.log("📱 Using default notification time: 7:00 PM");
+        // No saved time - keep as null to show "Not set"
+        setNotificationTime(null);
+        console.log("📱 No saved notification time found - showing 'Not set'");
       }
     } catch (error) {
       console.error("Error loading notification time:", error);
+      // On error, keep as null
+      setNotificationTime(null);
     } finally {
       setLoadingNotificationTime(false);
     }
@@ -390,8 +392,8 @@ export default function ProfileScreen() {
               hour12: true,
             });
 
-            // Reload the time from database to ensure display is correct
-            await loadNotificationTime();
+            // Keep the state as-is (already set from setNotificationTime above)
+            // Don't reload from database to avoid race condition
 
             Alert.alert(
               "✅ Reminder Set",
@@ -424,8 +426,19 @@ export default function ProfileScreen() {
         setNotificationTime(selectedDate);
       }
     },
-    [user?.id, user?.role, loadNotificationTime],
+    [user?.id, user?.role],
   );
+
+  // Handle opening the time picker
+  const handleOpenTimePicker = useCallback(() => {
+    // If no time is set, initialize with current time or 7 PM default
+    if (!notificationTime) {
+      const defaultTime = new Date();
+      defaultTime.setHours(19, 0, 0, 0); // Default to 7:00 PM
+      setNotificationTime(defaultTime);
+    }
+    setShowTimePicker(true);
+  }, [notificationTime]);
 
   // Handle saving time when user taps "Done" on iOS
   const handleSaveTime = useCallback(async () => {
@@ -467,8 +480,8 @@ export default function ProfileScreen() {
           hour12: true,
         });
 
-        // Reload the time from database to ensure display is correct
-        await loadNotificationTime();
+        // Keep the state as-is (notificationTime is already set correctly)
+        // Don't reload from database to avoid race condition
 
         Alert.alert(
           "✅ Reminder Set",
@@ -494,7 +507,7 @@ export default function ProfileScreen() {
     } finally {
       setLoadingNotificationTime(false);
     }
-  }, [user?.id, user?.role, notificationTime, loadNotificationTime]);
+  }, [user?.id, user?.role, notificationTime]);
 
   // Load notification time on mount
   useEffect(() => {
@@ -502,6 +515,16 @@ export default function ProfileScreen() {
       loadNotificationTime();
     }
   }, [loadNotificationTime, user?.role]);
+
+  // Reload notification time when screen is focused
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => {
+      if (user?.role === "provider") {
+        loadNotificationTime();
+      }
+    });
+    return unsubscribe;
+  }, [navigation, user?.role, loadNotificationTime]);
 
   const profileSections: ProfileSection[] = useMemo(
     () => [
@@ -561,7 +584,7 @@ export default function ProfileScreen() {
               {user?.role === "provider" && (
                 <TouchableOpacity
                   style={styles.settingRow}
-                  onPress={() => setShowTimePicker(true)}
+                  onPress={handleOpenTimePicker}
                   accessibilityLabel="Set notification time"
                   accessibilityRole="button"
                 >

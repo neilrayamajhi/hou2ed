@@ -77,6 +77,7 @@ export interface TagOption {
 // Main eligibility tags
 export const ELIGIBILITY_TAGS: TagOption[] = [
   { id: "age18plus", label: "18+ years old" },
+  { id: "ageUnder18", label: "Under 18" },
   { id: "families", label: "Families" },
   { id: "veterans", label: "Veterans" },
   { id: "lgbtq", label: "LGBTQ+" },
