@@ -409,6 +409,8 @@ export async function getNotificationTime(
   userId: string,
 ): Promise<string | null> {
   try {
+    console.log(`📖 Loading notification time for user: ${userId}`);
+
     const { data, error } = await supabase
       .from("profiles")
       .select("notification_time")
@@ -416,15 +418,23 @@ export async function getNotificationTime(
       .single();
 
     if (error) {
-      console.error("Error fetching notification time:", error);
+      console.error("❌ Error fetching notification time:", error);
       return null;
     }
 
     if (!data) {
-      return "08:00:00"; // Default time
+      console.log("⚠️  No profile data found");
+      return null;
     }
 
-    return data.notification_time || "08:00:00";
+    console.log(`✅ Fetched notification time:`, data.notification_time);
+
+    if (!data.notification_time) {
+      console.log("📭 notification_time is null/empty in database");
+      return null;
+    }
+
+    return data.notification_time;
   } catch (error) {
     console.error("Error fetching notification time:", error);
     return null;
@@ -439,20 +449,23 @@ export async function saveNotificationTime(
   time: string,
 ): Promise<boolean> {
   try {
-    const { error } = await supabase
+    console.log(`💾 Saving notification time for user ${userId}: ${time}`);
+
+    const { data, error } = await supabase
       .from("profiles")
       .update({ notification_time: time })
-      .eq("id", userId);
+      .eq("id", userId)
+      .select();
 
     if (error) {
-      console.error("Error saving notification time:", error);
+      console.error("❌ Error saving notification time:", error);
       return false;
     }
 
-    console.log("✅ Notification time preference saved:", time);
+    console.log("✅ Notification time saved successfully:", data);
     return true;
   } catch (error) {
-    console.error("Error saving notification time:", error);
+    console.error("❌ Exception saving notification time:", error);
     return false;
   }
 }
