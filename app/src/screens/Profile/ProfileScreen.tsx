@@ -609,22 +609,28 @@ export default function ProfileScreen() {
                     </Text>
                   </View>
                   <View style={styles.settingRight}>
-                    {!notificationTimeInitialized || loadingNotificationTime ? (
-                      <ActivityIndicator
-                        size="small"
-                        color={colors.primary[500]}
-                      />
-                    ) : (
-                      <Text style={styles.settingValue}>
-                        {notificationTime
-                          ? notificationTime.toLocaleTimeString("en-US", {
-                              hour: "numeric",
-                              minute: "2-digit",
-                              hour12: true,
-                            })
-                          : "Not set"}
-                      </Text>
-                    )}
+                    {(() => {
+                      console.log(
+                        `🎨 RENDER: initialized=${notificationTimeInitialized}, loading=${loadingNotificationTime}, time=${notificationTime?.toLocaleTimeString()}`,
+                      );
+                      return !notificationTimeInitialized ||
+                        loadingNotificationTime ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={colors.primary[500]}
+                        />
+                      ) : (
+                        <Text style={styles.settingValue}>
+                          {notificationTime
+                            ? notificationTime.toLocaleTimeString("en-US", {
+                                hour: "numeric",
+                                minute: "2-digit",
+                                hour12: true,
+                              })
+                            : "Not set"}
+                        </Text>
+                      );
+                    })()}
                     <Ionicons
                       name="chevron-forward"
                       size={18}
