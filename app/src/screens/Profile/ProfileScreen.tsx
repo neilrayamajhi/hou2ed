@@ -52,7 +52,7 @@ export default function ProfileScreen() {
   // Notification time picker state (for providers)
   const [notificationTime, setNotificationTime] = useState<Date | null>(null);
   const [showTimePicker, setShowTimePicker] = useState(false);
-  const [loadingNotificationTime, setLoadingNotificationTime] = useState(false);
+  const [loadingNotificationTime, setLoadingNotificationTime] = useState(true); // Start as loading
 
   const handleEditAvatar = useCallback(async () => {
     console.log("[ProfileScreen] Starting avatar upload...");
@@ -316,7 +316,10 @@ export default function ProfileScreen() {
 
   // Load notification time preference on mount (providers only)
   const loadNotificationTime = useCallback(async () => {
-    if (!user?.id || user?.role !== "provider") return;
+    if (!user?.id || user?.role !== "provider") {
+      setLoadingNotificationTime(false);
+      return;
+    }
 
     try {
       setLoadingNotificationTime(true);
