@@ -53,6 +53,8 @@ export default function ProfileScreen() {
   const [notificationTime, setNotificationTime] = useState<Date | null>(null);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [loadingNotificationTime, setLoadingNotificationTime] = useState(false);
+  const [notificationTimeInitialized, setNotificationTimeInitialized] =
+    useState(false);
 
   const handleEditAvatar = useCallback(async () => {
     console.log("[ProfileScreen] Starting avatar upload...");
@@ -318,6 +320,7 @@ export default function ProfileScreen() {
   const loadNotificationTime = useCallback(async () => {
     if (!user?.id || user?.role !== "provider") {
       setLoadingNotificationTime(false);
+      setNotificationTimeInitialized(true);
       return;
     }
 
@@ -345,6 +348,7 @@ export default function ProfileScreen() {
       setNotificationTime(null);
     } finally {
       setLoadingNotificationTime(false);
+      setNotificationTimeInitialized(true);
     }
   }, [user?.id, user?.role]);
 
@@ -607,7 +611,7 @@ export default function ProfileScreen() {
                     </Text>
                   </View>
                   <View style={styles.settingRight}>
-                    {loadingNotificationTime ? (
+                    {!notificationTimeInitialized || loadingNotificationTime ? (
                       <ActivityIndicator
                         size="small"
                         color={colors.primary[500]}
