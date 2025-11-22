@@ -362,7 +362,11 @@ export default function ProfileScreen() {
         setLoadingNotificationTime(true);
 
         try {
+          // Set state and keep reference
           setNotificationTime(selectedDate);
+          console.log(
+            `🔄 Set notificationTime state to ${selectedDate.toLocaleTimeString()}`,
+          );
 
           // Format time as HH:MM:SS for database
           const hours = selectedDate.getHours();
@@ -378,6 +382,12 @@ export default function ProfileScreen() {
 
           if (saved) {
             console.log(`✅ Time saved to database successfully`);
+
+            // Ensure state persists by setting it again
+            setNotificationTime(selectedDate);
+            console.log(
+              `🔄 Explicitly set notificationTime again to ensure persistence`,
+            );
 
             // Schedule the daily notification
             const scheduled = await scheduleDailyNotification(
@@ -395,9 +405,6 @@ export default function ProfileScreen() {
               minute: "2-digit",
               hour12: true,
             });
-
-            // Keep the state as-is (already set from setNotificationTime above)
-            // Don't reload from database to avoid race condition
 
             Alert.alert(
               "✅ Reminder Set",
@@ -448,13 +455,16 @@ export default function ProfileScreen() {
   const handleSaveTime = useCallback(async () => {
     if (!user?.id || !notificationTime) return;
 
+    // Save the time to a local variable so we don't lose it
+    const timeToSave = notificationTime;
+
     setShowTimePicker(false);
     setLoadingNotificationTime(true);
 
     try {
       // Format time as HH:MM:SS for database
-      const hours = notificationTime.getHours();
-      const minutes = notificationTime.getMinutes();
+      const hours = timeToSave.getHours();
+      const minutes = timeToSave.getMinutes();
       const timeString = `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:00`;
 
       console.log(
@@ -467,6 +477,12 @@ export default function ProfileScreen() {
       if (saved) {
         console.log(`✅ Time saved to database successfully`);
 
+        // Ensure the state is set (in case it got cleared)
+        setNotificationTime(timeToSave);
+        console.log(
+          `🔄 Explicitly set notificationTime state to ensure it persists`,
+        );
+
         // Schedule the daily notification
         const scheduled = await scheduleDailyNotification(
           hours,
@@ -478,14 +494,11 @@ export default function ProfileScreen() {
         console.log(`📅 Scheduling result: ${scheduled}`);
 
         // Format time for display (12-hour format)
-        const displayTime = notificationTime.toLocaleTimeString("en-US", {
+        const displayTime = timeToSave.toLocaleTimeString("en-US", {
           hour: "numeric",
           minute: "2-digit",
           hour12: true,
         });
-
-        // Keep the state as-is (notificationTime is already set correctly)
-        // Don't reload from database to avoid race condition
 
         Alert.alert(
           "✅ Reminder Set",
