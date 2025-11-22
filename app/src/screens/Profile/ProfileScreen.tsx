@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,16 +9,25 @@ import {
   Alert,
   Image,
   ActivityIndicator,
+  Platform,
+  Modal,
+  Pressable,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
 import { useAuthStore } from "../../state/useAuthStore";
 import { RootStackNavigationProp } from "../../navigation/types";
 import { useI18n } from "../../i18n";
 import { supabase } from "../../lib/supabase";
 import { transformUserData } from "../../utils/auth";
+import {
+  getNotificationTime,
+  saveNotificationTime,
+  scheduleDailyNotification,
+} from "../../services/notification.service";
 
 interface ProfileSection {
   id: string;
@@ -39,6 +48,11 @@ export default function ProfileScreen() {
   );
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [applicationsCount, setApplicationsCount] = useState<number>(0);
+
+  // Notification time picker state (for providers)
+  const [notificationTime, setNotificationTime] = useState<Date | null>(null);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [loadingNotificationTime, setLoadingNotificationTime] = useState(false);
 
   const handleEditAvatar = useCallback(async () => {
     console.log("[ProfileScreen] Starting avatar upload...");
@@ -300,6 +314,195 @@ export default function ProfileScreen() {
     ]);
   }, [logout, navigation]);
 
+  // Load notification time preference on mount (providers only)
+  const loadNotificationTime = useCallback(async () => {
+    if (!user?.id || user.role !== "provider") return;
+
+    try {
+      setLoadingNotificationTime(true);
+      const timeString = await getNotificationTime(user.id);
+
+      if (timeString) {
+        // Parse time string (format: "HH:MM:SS" or "HH:MM")
+        const [hours, minutes] = timeString.split(":").map(Number);
+        const date = new Date();
+        date.setHours(hours, minutes, 0, 0);
+        setNotificationTime(date);
+        console.log(`📱 Loaded notification time: ${timeString}`);
+      } else {
+        // Default to 7:00 PM
+        const defaultTime = new Date();
+        defaultTime.setHours(19, 0, 0, 0);
+        setNotificationTime(defaultTime);
+        console.log("📱 Using default notification time: 7:00 PM");
+      }
+    } catch (error) {
+      console.error("Error loading notification time:", error);
+    } finally {
+      setLoadingNotificationTime(false);
+    }
+  }, [user?.id, user?.role]);
+
+  // Handle time change from picker (iOS just updates state, Android saves immediately)
+  const handleTimeChange = useCallback(
+    async (event: any, selectedDate?: Date) => {
+      if (!selectedDate) return;
+
+      // On Android, close picker and save immediately
+      if (Platform.OS === "android") {
+        setShowTimePicker(false);
+        if (!user?.id) return;
+
+        setLoadingNotificationTime(true);
+
+        try {
+          setNotificationTime(selectedDate);
+
+          // Format time as HH:MM:SS for database
+          const hours = selectedDate.getHours();
+          const minutes = selectedDate.getMinutes();
+          const timeString = `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:00`;
+
+          console.log(
+            `💾 Saving notification time: ${timeString} (${hours}:${minutes})`,
+          );
+
+          // Save to database
+          const saved = await saveNotificationTime(user.id, timeString);
+
+          if (saved) {
+            console.log(`✅ Time saved to database successfully`);
+
+            // Schedule the daily notification
+            const scheduled = await scheduleDailyNotification(
+              hours,
+              minutes,
+              user.id,
+              user.role as "provider" | "seeker",
+            );
+
+            console.log(`📅 Scheduling result: ${scheduled}`);
+
+            // Format time for display (12-hour format)
+            const displayTime = selectedDate.toLocaleTimeString("en-US", {
+              hour: "numeric",
+              minute: "2-digit",
+              hour12: true,
+            });
+
+            // Reload the time from database to ensure display is correct
+            await loadNotificationTime();
+
+            Alert.alert(
+              "✅ Reminder Set",
+              user.role === "provider"
+                ? `You'll get a daily reminder at ${displayTime} to recheck your bed availability.\n\n💡 Tap the notification to go directly to your availability updater!\n\n⚠️ Note: Repeating notifications only work in production builds, not in Expo Go.`
+                : `You'll receive application updates daily at ${displayTime}.`,
+              [{ text: "Got it!" }],
+            );
+
+            console.log(
+              `✅ Notification time saved and scheduled: ${displayTime}`,
+            );
+          } else {
+            Alert.alert(
+              "Error",
+              "Failed to save notification time. Please try again.",
+            );
+          }
+        } catch (error) {
+          console.error("Error setting notification time:", error);
+          Alert.alert(
+            "Error",
+            "Failed to set notification time. Please try again.",
+          );
+        } finally {
+          setLoadingNotificationTime(false);
+        }
+      } else {
+        // On iOS, just update the state (user will tap "Done" to save)
+        setNotificationTime(selectedDate);
+      }
+    },
+    [user?.id, user?.role, loadNotificationTime],
+  );
+
+  // Handle saving time when user taps "Done" on iOS
+  const handleSaveTime = useCallback(async () => {
+    if (!user?.id || !notificationTime) return;
+
+    setShowTimePicker(false);
+    setLoadingNotificationTime(true);
+
+    try {
+      // Format time as HH:MM:SS for database
+      const hours = notificationTime.getHours();
+      const minutes = notificationTime.getMinutes();
+      const timeString = `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:00`;
+
+      console.log(
+        `💾 Saving notification time: ${timeString} (${hours}:${minutes})`,
+      );
+
+      // Save to database
+      const saved = await saveNotificationTime(user.id, timeString);
+
+      if (saved) {
+        console.log(`✅ Time saved to database successfully`);
+
+        // Schedule the daily notification
+        const scheduled = await scheduleDailyNotification(
+          hours,
+          minutes,
+          user.id,
+          user.role as "provider" | "seeker",
+        );
+
+        console.log(`📅 Scheduling result: ${scheduled}`);
+
+        // Format time for display (12-hour format)
+        const displayTime = notificationTime.toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        });
+
+        // Reload the time from database to ensure display is correct
+        await loadNotificationTime();
+
+        Alert.alert(
+          "✅ Reminder Set",
+          user.role === "provider"
+            ? `You'll get a daily reminder at ${displayTime} to recheck your bed availability.\n\n💡 Tap the notification to go directly to your availability updater!\n\n⚠️ Note: Repeating notifications only work in production builds, not in Expo Go.`
+            : `You'll receive application updates daily at ${displayTime}.`,
+          [{ text: "Got it!" }],
+        );
+
+        console.log(`✅ Notification time saved and scheduled: ${displayTime}`);
+      } else {
+        Alert.alert(
+          "Error",
+          "Failed to save notification time. Please try again.",
+        );
+      }
+    } catch (error) {
+      console.error("Error setting notification time:", error);
+      Alert.alert(
+        "Error",
+        "Failed to set notification time. Please try again.",
+      );
+    } finally {
+      setLoadingNotificationTime(false);
+    }
+  }, [user?.id, user?.role, notificationTime, loadNotificationTime]);
+
+  // Load notification time on mount
+  useEffect(() => {
+    if (user?.role === "provider") {
+      loadNotificationTime();
+    }
+  }, [loadNotificationTime, user?.role]);
+
   const profileSections: ProfileSection[] = useMemo(
     () => [
       // My Applications - only show for seekers (providers don't apply to housing)
@@ -319,6 +522,13 @@ export default function ProfileScreen() {
         id: "account-settings",
         title: i18n.t("profile.sections.accountSettings"),
         icon: "settings-outline",
+        onPress: () => {},
+        showArrow: false,
+      },
+      {
+        id: "legal",
+        title: "Legal",
+        icon: "shield-checkmark-outline",
         onPress: () => {},
         showArrow: false,
       },
@@ -347,6 +557,50 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.settingsContent}>
+              {/* Notification Time - Show for providers */}
+              {user?.role === "provider" && (
+                <TouchableOpacity
+                  style={styles.settingRow}
+                  onPress={() => setShowTimePicker(true)}
+                  accessibilityLabel="Set notification time"
+                  accessibilityRole="button"
+                >
+                  <View style={styles.settingLeft}>
+                    <Ionicons
+                      name="time-outline"
+                      size={18}
+                      color={colors.gray[400]}
+                    />
+                    <Text style={styles.settingText}>
+                      Daily Availability Reminder
+                    </Text>
+                  </View>
+                  <View style={styles.settingRight}>
+                    {loadingNotificationTime ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={colors.primary[500]}
+                      />
+                    ) : (
+                      <Text style={styles.settingValue}>
+                        {notificationTime
+                          ? notificationTime.toLocaleTimeString("en-US", {
+                              hour: "numeric",
+                              minute: "2-digit",
+                              hour12: true,
+                            })
+                          : "Not set"}
+                      </Text>
+                    )}
+                    <Ionicons
+                      name="chevron-forward"
+                      size={18}
+                      color={colors.gray[500]}
+                    />
+                  </View>
+                </TouchableOpacity>
+              )}
+
               <TouchableOpacity
                 style={styles.settingRow}
                 onPress={() => navigation.navigate("BlockedUsers")}
@@ -381,6 +635,44 @@ export default function ProfileScreen() {
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={colors.red} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+      }
+
+      if (section.id === "legal") {
+        return (
+          <View key={section.id} style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons
+                name={section.icon}
+                size={20}
+                color={colors.primary[400]}
+              />
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+            </View>
+
+            <View style={styles.settingsContent}>
+              <TouchableOpacity
+                style={styles.settingRow}
+                onPress={() => navigation.navigate("TermsOfService")}
+                accessibilityLabel="Terms of Service and Privacy Policy"
+                accessibilityRole="button"
+              >
+                <View style={styles.settingLeft}>
+                  <Ionicons
+                    name="document-text-outline"
+                    size={18}
+                    color={colors.gray[400]}
+                  />
+                  <Text style={styles.settingText}>Terms & Privacy Policy</Text>
+                </View>
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.gray[500]}
+                />
               </TouchableOpacity>
             </View>
           </View>
@@ -498,6 +790,61 @@ export default function ProfileScreen() {
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Time Picker Modal (for notification time) */}
+      {showTimePicker && Platform.OS === "ios" ? (
+        <Modal
+          visible={showTimePicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowTimePicker(false)}
+        >
+          <Pressable
+            style={styles.modalOverlay}
+            onPress={() => setShowTimePicker(false)}
+          >
+            <Pressable
+              style={styles.timePickerModalContainer}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <View style={styles.timePickerHeader}>
+                <TouchableOpacity
+                  onPress={() => setShowTimePicker(false)}
+                  style={styles.timePickerCancel}
+                >
+                  <Text style={styles.timePickerCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <Text style={styles.timePickerTitle}>
+                  Set Daily Reminder Time
+                </Text>
+                <TouchableOpacity
+                  onPress={handleSaveTime}
+                  style={styles.timePickerDone}
+                >
+                  <Text style={styles.timePickerDoneText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={notificationTime || new Date()}
+                mode="time"
+                display="spinner"
+                onChange={handleTimeChange}
+                textColor={colors.gray[50]}
+                style={styles.timePicker}
+              />
+            </Pressable>
+          </Pressable>
+        </Modal>
+      ) : (
+        showTimePicker && (
+          <DateTimePicker
+            value={notificationTime || new Date()}
+            mode="time"
+            display="default"
+            onChange={handleTimeChange}
+          />
+        )
+      )}
     </SafeAreaView>
   );
 }
@@ -686,5 +1033,52 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: colors.red,
     marginLeft: spacing.sm,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "flex-end",
+  },
+  timePickerModalContainer: {
+    backgroundColor: colors.gray[850],
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    paddingBottom: spacing.xl,
+  },
+  timePickerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray[800],
+  },
+  timePickerTitle: {
+    fontSize: typography.sizes.lg,
+    fontWeight: "600",
+    color: colors.gray[50],
+  },
+  timePickerCancel: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  timePickerCancelText: {
+    fontSize: typography.sizes.md,
+    color: colors.gray[400],
+  },
+  timePickerDone: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.primary[500],
+    borderRadius: radius.md,
+  },
+  timePickerDoneText: {
+    fontSize: typography.sizes.md,
+    fontWeight: "600",
+    color: colors.gray[900],
+  },
+  timePicker: {
+    height: 200,
   },
 });

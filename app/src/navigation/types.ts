@@ -46,6 +46,7 @@ export type RootStackParamList = {
   ProviderListingDetails: { listingId: string };
   SearchScreen: { savedFilters?: any };
   BlockedUsers: undefined;
+  TermsOfService: undefined;
 };
 
 export type RootStackNavigationProp =

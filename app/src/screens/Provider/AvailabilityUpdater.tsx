@@ -93,9 +93,12 @@ export default function AvailabilityUpdater() {
       }
     };
 
-    const subscription = Linking.addEventListener("url", (event: { url: string }) => {
-      handleDeepLink(event.url);
-    });
+    const subscription = Linking.addEventListener(
+      "url",
+      (event: { url: string }) => {
+        handleDeepLink(event.url);
+      },
+    );
 
     // Check if app was opened with a deep link
     Linking.getInitialURL().then((url: string | null) => {
@@ -119,7 +122,7 @@ export default function AvailabilityUpdater() {
           return { ...p, availableBeds: newVal };
         }
         return p;
-      })
+      }),
     );
   }, []);
 
@@ -133,7 +136,7 @@ export default function AvailabilityUpdater() {
           return { ...p, availableBeds: newVal };
         }
         return p;
-      })
+      }),
     );
   }, []);
 
@@ -145,7 +148,7 @@ export default function AvailabilityUpdater() {
           return { ...p, lastUpdated: now };
         }
         return p;
-      })
+      }),
     );
     Alert.alert("Updated", "All properties marked as current");
   }, []);
@@ -162,7 +165,9 @@ export default function AvailabilityUpdater() {
       const entries = Object.entries(changedMap);
       if (entries.length > 0) {
         await Promise.all(
-          entries.map(([id, beds]) => updateListing(id, { availableBeds: beds }))
+          entries.map(([id, beds]) =>
+            updateListing(id, { availableBeds: beds }),
+          ),
         );
       }
 
@@ -180,46 +185,49 @@ export default function AvailabilityUpdater() {
     }
   }, [hasChanges, hasStaleData]);
 
-  const renderPropertyRow = useCallback((property: Property) => {
-    const isPropertyStale = isStale(property.lastUpdated);
+  const renderPropertyRow = useCallback(
+    (property: Property) => {
+      const isPropertyStale = isStale(property.lastUpdated);
 
-    return (
-      <View
-        key={property.id}
-        style={[
-          styles.propertyRow,
-          isPropertyStale && styles.stalePropertyRow,
-        ]}
-      >
-        <View style={styles.propertyInfo}>
-          <Text style={styles.propertyTitle}>{property.title}</Text>
-          <Text style={styles.propertyAddress} numberOfLines={1}>
-            {property.address}
-          </Text>
-          <Text
-            style={[
-              styles.lastUpdated,
-              isPropertyStale && styles.staleLastUpdated,
-            ]}
-          >
-            Updated {formatLastUpdated(property.lastUpdated)}
-          </Text>
-        </View>
+      return (
+        <View
+          key={property.id}
+          style={[
+            styles.propertyRow,
+            isPropertyStale && styles.stalePropertyRow,
+          ]}
+        >
+          <View style={styles.propertyInfo}>
+            <Text style={styles.propertyTitle}>{property.title}</Text>
+            <Text style={styles.propertyAddress} numberOfLines={1}>
+              {property.address}
+            </Text>
+            <Text
+              style={[
+                styles.lastUpdated,
+                isPropertyStale && styles.staleLastUpdated,
+              ]}
+            >
+              Updated {formatLastUpdated(property.lastUpdated)}
+            </Text>
+          </View>
 
-        <View style={styles.counterSection}>
-          <Text style={styles.bedsLabel}>Available beds</Text>
-          <InlineCounter
-            value={property.availableBeds}
-            onIncrement={() => handleIncrement(property.id)}
-            onDecrement={() => handleDecrement(property.id)}
-            min={0}
-            max={property.totalBeds}
-          />
-          <Text style={styles.totalBeds}>of {property.totalBeds} total</Text>
+          <View style={styles.counterSection}>
+            <Text style={styles.bedsLabel}>Available beds</Text>
+            <InlineCounter
+              value={property.availableBeds}
+              onIncrement={() => handleIncrement(property.id)}
+              onDecrement={() => handleDecrement(property.id)}
+              min={0}
+              max={property.totalBeds}
+            />
+            <Text style={styles.totalBeds}>of {property.totalBeds} total</Text>
+          </View>
         </View>
-      </View>
-    );
-  }, [handleIncrement, handleDecrement]);
+      );
+    },
+    [handleIncrement, handleDecrement],
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -274,28 +282,44 @@ export default function AvailabilityUpdater() {
 
       {/* Sticky Save Button */}
       <View style={styles.saveButtonContainer}>
+        {hasChanges && (
+          <Text style={styles.saveInstructions}>
+            ⚠️ Don't forget to submit your changes below!
+          </Text>
+        )}
         <TouchableOpacity
           style={[
             styles.saveButton,
-            (!hasChanges && !hasStaleData) && styles.saveButtonDisabled,
+            !hasChanges && !hasStaleData && styles.saveButtonDisabled,
           ]}
           onPress={handleSaveAll}
           disabled={isSaving || (!hasChanges && !hasStaleData)}
-          accessibilityLabel="Save all changes"
+          accessibilityLabel="Submit availability changes"
           accessibilityRole="button"
         >
           {isSaving ? (
             <>
-              <Ionicons name="sync" size={20} color={colors.gray[900]} />
-              <Text style={styles.saveButtonText}>Saving...</Text>
+              <Ionicons name="sync" size={24} color={colors.gray[900]} />
+              <Text style={styles.saveButtonText}>Submitting Changes...</Text>
             </>
           ) : (
             <>
-              <Ionicons name="checkmark-circle" size={20} color={colors.gray[900]} />
-              <Text style={styles.saveButtonText}>Save All</Text>
+              <Ionicons
+                name="cloud-upload-outline"
+                size={24}
+                color={colors.gray[900]}
+              />
+              <Text style={styles.saveButtonText}>
+                {hasChanges ? "Submit Changes" : "No Changes to Submit"}
+              </Text>
             </>
           )}
         </TouchableOpacity>
+        <Text style={styles.saveHint}>
+          {hasChanges
+            ? "This will update your availability for all seekers to see"
+            : "Adjust the bed counts above, then submit your changes"}
+        </Text>
       </View>
     </SafeAreaView>
   );
@@ -439,11 +463,23 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: colors.gray[900],
-    borderTopWidth: 1,
-    borderTopColor: colors.gray[800],
+    borderTopWidth: 2,
+    borderTopColor: colors.primary[500],
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingTop: spacing.md,
     paddingBottom: spacing.xl,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  saveInstructions: {
+    fontSize: typography.sizes.sm,
+    fontWeight: "600",
+    color: colors.amber,
+    textAlign: "center",
+    marginBottom: spacing.sm,
   },
   saveButton: {
     backgroundColor: colors.primary[500],
@@ -451,16 +487,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: spacing.sm,
-    paddingVertical: spacing.md,
-    borderRadius: radius.md,
+    paddingVertical: spacing.lg,
+    borderRadius: radius.lg,
+    shadowColor: colors.primary[500],
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   saveButtonDisabled: {
     backgroundColor: colors.gray[700],
     opacity: 0.5,
+    shadowOpacity: 0,
   },
   saveButtonText: {
-    fontSize: typography.sizes.md,
-    fontWeight: "600",
+    fontSize: typography.sizes.lg,
+    fontWeight: "700",
     color: colors.gray[900],
+  },
+  saveHint: {
+    fontSize: typography.sizes.xs,
+    color: colors.gray[500],
+    textAlign: "center",
+    marginTop: spacing.sm,
+    fontStyle: "italic",
   },
 });

@@ -8,6 +8,7 @@ import {
   TextInput,
   Alert,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, radius } from "../../theme/tokens";
 import {
@@ -16,6 +17,7 @@ import {
 } from "../../constants/application";
 import Checkbox from "../../components/ui/Checkbox";
 import type { ApplicationDraft } from "./ApplyWizard";
+import type { RootStackNavigationProp } from "../../navigation/types";
 
 interface Step4ReviewProps {
   draft: ApplicationDraft;
@@ -43,8 +45,11 @@ export default function Step4Review({
   onEditStep,
   isSubmitting: isParentSubmitting = false,
 }: Step4ReviewProps) {
+  const navigation = useNavigation<RootStackNavigationProp>();
   const [signature, setSignature] = useState(draft.signature || "");
-  const [agreedToTerms, setAgreedToTerms] = useState(draft.agreedToTerms || false);
+  const [agreedToTerms, setAgreedToTerms] = useState(
+    draft.agreedToTerms || false,
+  );
   const isSubmitting = isParentSubmitting; // Use parent's submitting state
 
   // Get formatted timestamp
@@ -112,34 +117,36 @@ export default function Step4Review({
         step: 1,
         items: [
           { label: "Full Name", value: draft.fullName },
-          { label: "Phone", value: draft.phone ? formatPhone(draft.phone) : undefined },
+          {
+            label: "Phone",
+            value: draft.phone ? formatPhone(draft.phone) : undefined,
+          },
           { label: "Email", value: draft.email },
         ],
       },
       {
         title: "Eligibility",
         step: 2,
-        items: [
-          { label: "Selected Tags", value: getSelectedTagsLabels() },
-        ],
+        items: [{ label: "Selected Tags", value: getSelectedTagsLabels() }],
       },
       {
         title: "Documents",
         step: 3,
-        items: [
-          { label: "Uploaded", value: getDocumentsSummary() },
-        ],
+        items: [{ label: "Uploaded", value: getDocumentsSummary() }],
       },
     ],
-    [draft, getSelectedTagsLabels, getDocumentsSummary]
+    [draft, getSelectedTagsLabels, getDocumentsSummary],
   );
 
-  const handleSignatureChange = useCallback((text: string) => {
-    // Only allow letters, spaces, and hyphens for names
-    const cleaned = text.replace(/[^a-zA-Z\s-]/g, "");
-    setSignature(cleaned);
-    onUpdate({ signature: cleaned });
-  }, [onUpdate]);
+  const handleSignatureChange = useCallback(
+    (text: string) => {
+      // Only allow letters, spaces, and hyphens for names
+      const cleaned = text.replace(/[^a-zA-Z\s-]/g, "");
+      setSignature(cleaned);
+      onUpdate({ signature: cleaned });
+    },
+    [onUpdate],
+  );
 
   const handleTermsToggle = useCallback(() => {
     const newValue = !agreedToTerms;
@@ -154,7 +161,10 @@ export default function Step4Review({
     }
 
     if (!signature.trim()) {
-      Alert.alert("Signature Required", "Please type your full name to sign the application.");
+      Alert.alert(
+        "Signature Required",
+        "Please type your full name to sign the application.",
+      );
       return;
     }
 
@@ -164,7 +174,10 @@ export default function Step4Review({
     }
 
     if (!agreedToTerms) {
-      Alert.alert("Terms Required", "Please agree to the terms and conditions to continue.");
+      Alert.alert(
+        "Terms Required",
+        "Please agree to the terms and conditions to continue.",
+      );
       return;
     }
 
@@ -172,7 +185,8 @@ export default function Step4Review({
     onSubmit();
   }, [signature, agreedToTerms, onSubmit, isSubmitting]);
 
-  const canSubmit = signature.trim().length >= 3 && agreedToTerms && !isSubmitting;
+  const canSubmit =
+    signature.trim().length >= 3 && agreedToTerms && !isSubmitting;
 
   return (
     <View style={styles.container}>
@@ -185,7 +199,8 @@ export default function Step4Review({
         <View style={styles.header}>
           <Text style={styles.title}>Review Your Application</Text>
           <Text style={styles.subtitle}>
-            Please review all information before submitting. You can edit any section if needed.
+            Please review all information before submitting. You can edit any
+            section if needed.
           </Text>
         </View>
 
@@ -225,8 +240,9 @@ export default function Step4Review({
           <View style={styles.signatureInfo}>
             <Ionicons name="information-circle" size={20} color={colors.gold} />
             <Text style={styles.signatureInfoText}>
-              By typing your full legal name below, you are electronically signing this application
-              and certifying that all information provided is true and accurate.
+              By typing your full legal name below, you are electronically
+              signing this application and certifying that all information
+              provided is true and accurate.
             </Text>
           </View>
 
@@ -257,34 +273,33 @@ export default function Step4Review({
 
         {/* Terms and Conditions */}
         <View style={styles.termsSection}>
-          <TouchableOpacity
-            style={styles.termsRow}
-            onPress={handleTermsToggle}
-            activeOpacity={0.7}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: agreedToTerms }}
-            accessibilityLabel="Terms and conditions checkbox"
-          >
-            <Checkbox
-              value={agreedToTerms}
-              onValueChange={handleTermsToggle}
-            />
+          <View style={styles.termsRow}>
+            <Checkbox value={agreedToTerms} onValueChange={handleTermsToggle} />
             <Text style={styles.termsText}>
               I have read and agree to the{" "}
-              <Text style={styles.termsLink}>Terms and Conditions</Text> and{" "}
-              <Text style={styles.termsLink}>Privacy Policy</Text>. I understand
-              that submitting false information may result in the rejection of my
-              application.
+              <Text
+                style={styles.termsLink}
+                onPress={() => navigation.navigate("TermsOfService")}
+              >
+                Terms and Conditions & Privacy Policy
+              </Text>
+              . I understand that submitting false information may result in the
+              rejection of my application.
             </Text>
-          </TouchableOpacity>
+          </View>
         </View>
 
         {/* Legal Notice */}
         <View style={styles.legalNotice}>
-          <Ionicons name="shield-checkmark-outline" size={16} color={colors.gray} />
+          <Ionicons
+            name="shield-checkmark-outline"
+            size={16}
+            color={colors.gray}
+          />
           <Text style={styles.legalText}>
-            This application is submitted under penalty of perjury. All information
-            will be verified. Your data is encrypted and securely stored.
+            This application is submitted under penalty of perjury. All
+            information will be verified. Your data is encrypted and securely
+            stored.
           </Text>
         </View>
       </ScrollView>
@@ -316,12 +331,20 @@ export default function Step4Review({
           >
             {isSubmitting ? (
               <>
-                <Ionicons name="hourglass-outline" size={20} color={colors.black} />
+                <Ionicons
+                  name="hourglass-outline"
+                  size={20}
+                  color={colors.black}
+                />
                 <Text style={styles.submitButtonText}>Submitting...</Text>
               </>
             ) : (
               <>
-                <Ionicons name="checkmark-circle" size={20} color={colors.black} />
+                <Ionicons
+                  name="checkmark-circle"
+                  size={20}
+                  color={colors.black}
+                />
                 <Text style={styles.submitButtonText}>Submit Application</Text>
               </>
             )}

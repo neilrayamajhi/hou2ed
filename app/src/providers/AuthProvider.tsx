@@ -83,7 +83,7 @@ export default function AuthProvider({
             return;
           }
 
-          // Handle provider availability reminder
+          // Handle provider availability reminder ONLY
           if (
             data.type === "daily_availability_reminder" &&
             data.userRole === "provider"
@@ -93,45 +93,12 @@ export default function AuthProvider({
             return; // Let navigation system handle it
           }
 
-          // Handle seeker application check
-          if (
-            data.type === "daily_application_check" &&
-            data.userRole === "seeker" &&
-            data.userId
-          ) {
-            console.log("🔔 Seeker application check triggered");
-            const updates = await checkApplicationUpdates(
-              data.userId as string,
-            );
-
-            if (updates.length > 0) {
-              console.log(`✅ Found ${updates.length} application updates`);
-
-              // Count approved and rejected
-              const approved = updates.filter(
-                (u) => u.new_status === "approved",
-              ).length;
-              const rejected = updates.filter(
-                (u) => u.new_status === "rejected",
-              ).length;
-
-              // Send a notification with summary
-              let message = `You have ${updates.length} update${updates.length > 1 ? "s" : ""}`;
-              if (approved > 0 && rejected > 0) {
-                message += `: ${approved} approved, ${rejected} rejected`;
-              } else if (approved > 0) {
-                message += `: ${approved} approved! 🎉`;
-              } else if (rejected > 0) {
-                message += `: ${rejected} rejected`;
-              }
-
-              await sendLocalNotification("Application Updates", message);
-
-              // Mark as notified
-              await markApplicationsAsNotified(updates.map((u) => u.id));
-            } else {
-              console.log("ℹ️ No new application updates");
-            }
+          // SEEKER NOTIFICATIONS DISABLED
+          // Notifications are only for providers (bed availability reminders)
+          // Seekers can check their applications manually in the app
+          if (data.type === "daily_application_check") {
+            console.log("⚠️ Seeker notifications are disabled. Ignoring.");
+            return;
           }
         },
       );
@@ -157,43 +124,11 @@ export default function AuthProvider({
           return;
         }
 
-        // Handle seeker application check in foreground
-        if (
-          data.type === "daily_application_check" &&
-          data.userRole === "seeker" &&
-          data.userId
-        ) {
-          console.log("🔔 Seeker application check triggered (foreground)");
-          const updates = await checkApplicationUpdates(data.userId as string);
-
-          if (updates.length > 0) {
-            console.log(`✅ Found ${updates.length} application updates`);
-
-            // Count approved and rejected
-            const approved = updates.filter(
-              (u) => u.new_status === "approved",
-            ).length;
-            const rejected = updates.filter(
-              (u) => u.new_status === "rejected",
-            ).length;
-
-            // Send a notification with summary
-            let message = `You have ${updates.length} update${updates.length > 1 ? "s" : ""}`;
-            if (approved > 0 && rejected > 0) {
-              message += `: ${approved} approved, ${rejected} rejected`;
-            } else if (approved > 0) {
-              message += `: ${approved} approved! 🎉`;
-            } else if (rejected > 0) {
-              message += `: ${rejected} rejected`;
-            }
-
-            await sendLocalNotification("Application Updates", message);
-
-            // Mark as notified
-            await markApplicationsAsNotified(updates.map((u) => u.id));
-          } else {
-            console.log("ℹ️ No new application updates");
-          }
+        // SEEKER NOTIFICATIONS DISABLED
+        // Notifications are only for providers (bed availability reminders)
+        if (data.type === "daily_application_check") {
+          console.log("⚠️ Seeker notifications are disabled. Ignoring.");
+          return;
         }
       });
 

@@ -251,6 +251,14 @@ export async function scheduleDailyNotification(
   userRole: "provider" | "seeker" = "seeker",
 ): Promise<boolean> {
   try {
+    // ONLY schedule notifications for providers, not seekers
+    if (userRole !== "provider") {
+      console.log(
+        "⚠️ Notification scheduling is only for providers. Skipping for seeker.",
+      );
+      return false;
+    }
+
     // Cancel all existing scheduled notifications first
     await Notifications.cancelAllScheduledNotificationsAsync();
     console.log("✅ Cancelled all existing scheduled notifications");
@@ -273,31 +281,19 @@ export async function scheduleDailyNotification(
 
     console.log(`📅 Scheduling daily notification for ${hour}:${minute}`);
     console.log(`   First trigger: ${scheduledTime.toLocaleString()}`);
-    console.log(`   User role: ${userRole}`);
+    console.log(`   User role: PROVIDER (bed availability reminder)`);
 
-    // Different notification content based on user role
-    const isProvider = userRole === "provider";
-    const notificationContent = isProvider
-      ? {
-          title: "Update Your Listings 🏠",
-          body: "Time to update your bed availability! Keep your listings current.",
-          data: {
-            screen: "AvailabilityUpdater",
-            userId: userId,
-            type: "daily_availability_reminder",
-            userRole: userRole,
-          },
-        }
-      : {
-          title: "Application Updates 📋",
-          body: "Checking for updates on your applications...",
-          data: {
-            screen: "ApplicationsList",
-            userId: userId,
-            type: "daily_application_check",
-            userRole: userRole,
-          },
-        };
+    // Provider notification content ONLY
+    const notificationContent = {
+      title: "🏠 Recheck Your Bed Availability",
+      body: "Update your available bed counts to keep seekers informed. Tap to go to the updater.",
+      data: {
+        screen: "AvailabilityUpdater",
+        userId: userId,
+        type: "daily_availability_reminder",
+        userRole: "provider",
+      },
+    };
 
     // Schedule the notification to repeat daily
     const notificationId = await Notifications.scheduleNotificationAsync({
@@ -320,12 +316,12 @@ export async function scheduleDailyNotification(
       `   Will notify ${userRole} every day at ${hour}:${String(minute).padStart(2, "0")}`,
     );
 
-    // Also schedule a TEST notification in 10 seconds to verify it works
+    // Also schedule a TEST notification in 10 seconds to verify it works (PROVIDERS ONLY)
     if (process.env.NODE_ENV === "development") {
       const testId = await Notifications.scheduleNotificationAsync({
         content: {
           title: "🧪 Test Notification",
-          body: `Your daily ${isProvider ? "availability" : "application"} reminder will work like this!`,
+          body: "Your daily availability reminder will work like this!",
           data: notificationContent.data,
           sound: true,
         },
