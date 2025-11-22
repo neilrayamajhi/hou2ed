@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useMemo, useEffect } from "react";
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useRef,
+} from "react";
 import {
   View,
   Text,
@@ -53,6 +59,7 @@ export default function ProfileScreen() {
   const [notificationTime, setNotificationTime] = useState<Date | null>(null);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [loadingNotificationTime, setLoadingNotificationTime] = useState(false);
+  const lastLoadedUserId = useRef<string | null>(null);
 
   const handleEditAvatar = useCallback(async () => {
     console.log("[ProfileScreen] Starting avatar upload...");
@@ -322,30 +329,33 @@ export default function ProfileScreen() {
 
     try {
       setLoadingNotificationTime(true);
+
       const timeString = await getNotificationTime(user.id);
 
       if (timeString) {
         // Parse time string (format: "HH:MM:SS" or "HH:MM")
         const [hours, minutes] = timeString.split(":").map(Number);
+
         const date = new Date();
         date.setHours(hours, minutes, 0, 0);
+
         setNotificationTime(date);
         console.log(
-          `📱 Loaded notification time: ${timeString} (hours: ${hours}, minutes: ${minutes})`,
+          `✅ Loaded notification time: ${date.toLocaleTimeString()}`,
         );
       } else {
         // No saved time - keep as null to show "Not set"
         setNotificationTime(null);
-        console.log("📱 No saved notification time found - showing 'Not set'");
       }
     } catch (error) {
-      console.error("Error loading notification time:", error);
+      console.error("❌ Error loading notification time:", error);
       // On error, keep as null
       setNotificationTime(null);
     } finally {
-      console.log("🏁 Finally block: Setting loading=false");
       setLoadingNotificationTime(false);
-      console.log("✅ State updates queued");
+      if (user?.id) {
+        lastLoadedUserId.current = user.id;
+      }
     }
   }, [user?.id, user?.role]);
 
@@ -362,12 +372,6 @@ export default function ProfileScreen() {
         setLoadingNotificationTime(true);
 
         try {
-          // Set state and keep reference
-          setNotificationTime(selectedDate);
-          console.log(
-            `🔄 Set notificationTime state to ${selectedDate.toLocaleTimeString()}`,
-          );
-
           // Format time as HH:MM:SS for database
           const hours = selectedDate.getHours();
           const minutes = selectedDate.getMinutes();
@@ -381,23 +385,13 @@ export default function ProfileScreen() {
           const saved = await saveNotificationTime(user.id, timeString);
 
           if (saved) {
-            console.log(`✅ Time saved to database successfully`);
-
-            // Ensure state persists by setting it again
-            setNotificationTime(selectedDate);
-            console.log(
-              `🔄 Explicitly set notificationTime again to ensure persistence`,
-            );
-
             // Schedule the daily notification
-            const scheduled = await scheduleDailyNotification(
+            await scheduleDailyNotification(
               hours,
               minutes,
               user.id,
               user.role as "provider" | "seeker",
             );
-
-            console.log(`📅 Scheduling result: ${scheduled}`);
 
             // Format time for display (12-hour format)
             const displayTime = selectedDate.toLocaleTimeString("en-US", {
@@ -406,16 +400,21 @@ export default function ProfileScreen() {
               hour12: true,
             });
 
+            // Set state and mark as loaded
+            setNotificationTime(selectedDate);
+            if (user?.id) {
+              lastLoadedUserId.current = user.id;
+            }
+
+            console.log(`✅ Notification time set to ${displayTime}`);
+
+            // Show alert AFTER setting state
             Alert.alert(
               "✅ Reminder Set",
               user.role === "provider"
-                ? `You'll get a daily reminder at ${displayTime} to recheck your bed availability.\n\n💡 Tap the notification to go directly to your availability updater!\n\n⚠️ Note: Repeating notifications only work in production builds, not in Expo Go.`
+                ? `You'll get a daily reminder at ${displayTime} to recheck your bed availability.\n\n💡 Tap the notification to go directly to your availability updater!`
                 : `You'll receive application updates daily at ${displayTime}.`,
               [{ text: "Got it!" }],
-            );
-
-            console.log(
-              `✅ Notification time saved and scheduled: ${displayTime}`,
             );
           } else {
             Alert.alert(
@@ -424,13 +423,15 @@ export default function ProfileScreen() {
             );
           }
         } catch (error) {
-          console.error("Error setting notification time:", error);
+          console.error("❌ [ANDROID] Error setting notification time:", error);
           Alert.alert(
             "Error",
             "Failed to set notification time. Please try again.",
           );
         } finally {
+          console.log(`🏁 [ANDROID] Finally block - setting loading=false`);
           setLoadingNotificationTime(false);
+          console.log(`🏁 [ANDROID] Finally block complete`);
         }
       } else {
         // On iOS, just update the state (user will tap "Done" to save)
@@ -475,23 +476,13 @@ export default function ProfileScreen() {
       const saved = await saveNotificationTime(user.id, timeString);
 
       if (saved) {
-        console.log(`✅ Time saved to database successfully`);
-
-        // Ensure the state is set (in case it got cleared)
-        setNotificationTime(timeToSave);
-        console.log(
-          `🔄 Explicitly set notificationTime state to ensure it persists`,
-        );
-
         // Schedule the daily notification
-        const scheduled = await scheduleDailyNotification(
+        await scheduleDailyNotification(
           hours,
           minutes,
           user.id,
           user.role as "provider" | "seeker",
         );
-
-        console.log(`📅 Scheduling result: ${scheduled}`);
 
         // Format time for display (12-hour format)
         const displayTime = timeToSave.toLocaleTimeString("en-US", {
@@ -500,15 +491,22 @@ export default function ProfileScreen() {
           hour12: true,
         });
 
+        // Set state and mark as loaded
+        setNotificationTime(timeToSave);
+        if (user?.id) {
+          lastLoadedUserId.current = user.id;
+        }
+
+        console.log(`✅ Notification time set to ${displayTime}`);
+
+        // Show alert AFTER setting state
         Alert.alert(
           "✅ Reminder Set",
           user.role === "provider"
-            ? `You'll get a daily reminder at ${displayTime} to recheck your bed availability.\n\n💡 Tap the notification to go directly to your availability updater!\n\n⚠️ Note: Repeating notifications only work in production builds, not in Expo Go.`
+            ? `You'll get a daily reminder at ${displayTime} to recheck your bed availability.\n\n💡 Tap the notification to go directly to your availability updater!`
             : `You'll receive application updates daily at ${displayTime}.`,
           [{ text: "Got it!" }],
         );
-
-        console.log(`✅ Notification time saved and scheduled: ${displayTime}`);
       } else {
         Alert.alert(
           "Error",
@@ -526,15 +524,21 @@ export default function ProfileScreen() {
     }
   }, [user?.id, user?.role, notificationTime]);
 
-  // Load notification time on mount
+  // Load notification time when user becomes available (only once per user)
   useEffect(() => {
-    console.log(`🔍 ProfileScreen mount - user role: ${user?.role}`);
-
-    if (user?.role === "provider") {
-      console.log("📞 Calling loadNotificationTime on mount");
+    // Only load if:
+    // 1. User is a provider
+    // 2. User ID is available
+    // 3. We haven't already loaded for this specific user
+    if (
+      user?.role === "provider" &&
+      user?.id &&
+      lastLoadedUserId.current !== user.id
+    ) {
       loadNotificationTime();
     }
-  }, [loadNotificationTime, user?.role]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.role]);
 
   // Note: Focus listener removed to prevent double-loading on mount
   // The mount useEffect above handles initial load
@@ -579,206 +583,198 @@ export default function ProfileScreen() {
     ],
   );
 
-  const renderSection = useCallback(
-    (section: ProfileSection) => {
-      if (section.id === "account-settings") {
-        return (
-          <View key={section.id} style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons
-                name={section.icon}
-                size={20}
-                color={colors.primary[400]}
-              />
-              <Text style={styles.sectionTitle}>{section.title}</Text>
-            </View>
+  const renderSection = (section: ProfileSection) => {
+    if (section.id === "account-settings") {
+      return (
+        <View key={section.id} style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons
+              name={section.icon}
+              size={20}
+              color={colors.primary[400]}
+            />
+            <Text style={styles.sectionTitle}>{section.title}</Text>
+          </View>
 
-            <View style={styles.settingsContent}>
-              {/* Notification Time - Show for providers */}
-              {user?.role === "provider" && (
-                <TouchableOpacity
-                  style={styles.settingRow}
-                  onPress={handleOpenTimePicker}
-                  accessibilityLabel="Set notification time"
-                  accessibilityRole="button"
-                >
-                  <View style={styles.settingLeft}>
-                    <Ionicons
-                      name="time-outline"
-                      size={18}
-                      color={colors.gray[400]}
-                    />
-                    <Text style={styles.settingText}>
-                      Daily Availability Reminder
-                    </Text>
-                  </View>
-                  <View style={styles.settingRight}>
-                    {(() => {
-                      console.log(
-                        `🎨 RENDER: loading=${loadingNotificationTime}, time=${notificationTime?.toLocaleTimeString()}`,
-                      );
-                      return loadingNotificationTime ? (
-                        <ActivityIndicator
-                          size="small"
-                          color={colors.primary[500]}
-                        />
-                      ) : (
-                        <Text style={styles.settingValue}>
-                          {notificationTime
-                            ? notificationTime.toLocaleTimeString("en-US", {
-                                hour: "numeric",
-                                minute: "2-digit",
-                                hour12: true,
-                              })
-                            : "Not set"}
-                        </Text>
-                      );
-                    })()}
-                    <Ionicons
-                      name="chevron-forward"
-                      size={18}
-                      color={colors.gray[500]}
-                    />
-                  </View>
-                </TouchableOpacity>
-              )}
-
+          <View style={styles.settingsContent}>
+            {/* Notification Time - Show for providers */}
+            {user?.role === "provider" && (
               <TouchableOpacity
                 style={styles.settingRow}
-                onPress={() => navigation.navigate("BlockedUsers")}
-                accessibilityLabel="Blocked users"
+                onPress={handleOpenTimePicker}
+                accessibilityLabel="Set notification time"
                 accessibilityRole="button"
               >
                 <View style={styles.settingLeft}>
                   <Ionicons
-                    name="ban-outline"
+                    name="time-outline"
                     size={18}
                     color={colors.gray[400]}
                   />
-                  <Text style={styles.settingText}>Blocked Users</Text>
-                </View>
-                <Ionicons
-                  name="chevron-forward"
-                  size={18}
-                  color={colors.gray[500]}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.settingRow, styles.dangerRow]}
-                onPress={handleDeleteAccount}
-                accessibilityLabel="Delete account"
-                accessibilityRole="button"
-              >
-                <View style={styles.settingLeft}>
-                  <Ionicons name="trash-outline" size={18} color={colors.red} />
-                  <Text style={[styles.settingText, styles.dangerText]}>
-                    Delete Account
+                  <Text style={styles.settingText}>
+                    Daily Availability Reminder
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.red} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        );
-      }
-
-      if (section.id === "legal") {
-        return (
-          <View key={section.id} style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons
-                name={section.icon}
-                size={20}
-                color={colors.primary[400]}
-              />
-              <Text style={styles.sectionTitle}>{section.title}</Text>
-            </View>
-
-            <View style={styles.settingsContent}>
-              <TouchableOpacity
-                style={styles.settingRow}
-                onPress={() => navigation.navigate("TermsOfService")}
-                accessibilityLabel="Privacy Policy"
-                accessibilityRole="button"
-              >
-                <View style={styles.settingLeft}>
+                <View style={styles.settingRight}>
+                  {loadingNotificationTime ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={colors.primary[500]}
+                    />
+                  ) : (
+                    <Text style={styles.settingValue}>
+                      {notificationTime
+                        ? notificationTime.toLocaleTimeString("en-US", {
+                            hour: "numeric",
+                            minute: "2-digit",
+                            hour12: true,
+                          })
+                        : "Not set"}
+                    </Text>
+                  )}
                   <Ionicons
-                    name="shield-outline"
+                    name="chevron-forward"
                     size={18}
-                    color={colors.gray[400]}
+                    color={colors.gray[500]}
                   />
-                  <Text style={styles.settingText}>Privacy Policy</Text>
                 </View>
-                <Ionicons
-                  name="chevron-forward"
-                  size={18}
-                  color={colors.gray[500]}
-                />
               </TouchableOpacity>
+            )}
 
-              <TouchableOpacity
-                style={styles.settingRow}
-                onPress={() => navigation.navigate("TermsOfService")}
-                accessibilityLabel="Terms of Service"
-                accessibilityRole="button"
-              >
-                <View style={styles.settingLeft}>
-                  <Ionicons
-                    name="document-text-outline"
-                    size={18}
-                    color={colors.gray[400]}
-                  />
-                  <Text style={styles.settingText}>Terms of Service</Text>
-                </View>
+            <TouchableOpacity
+              style={styles.settingRow}
+              onPress={() => navigation.navigate("BlockedUsers")}
+              accessibilityLabel="Blocked users"
+              accessibilityRole="button"
+            >
+              <View style={styles.settingLeft}>
                 <Ionicons
-                  name="chevron-forward"
+                  name="ban-outline"
                   size={18}
-                  color={colors.gray[500]}
+                  color={colors.gray[400]}
                 />
-              </TouchableOpacity>
-            </View>
-          </View>
-        );
-      }
-
-      return (
-        <TouchableOpacity
-          key={section.id}
-          style={styles.section}
-          onPress={section.onPress}
-          accessibilityLabel={section.title}
-          accessibilityRole="button"
-        >
-          <View style={styles.sectionContent}>
-            <View style={styles.sectionLeft}>
+                <Text style={styles.settingText}>Blocked Users</Text>
+              </View>
               <Ionicons
-                name={section.icon}
-                size={20}
-                color={colors.primary[400]}
+                name="chevron-forward"
+                size={18}
+                color={colors.gray[500]}
               />
-              <Text style={styles.sectionTitle}>{section.title}</Text>
-            </View>
-            <View style={styles.sectionRight}>
-              {section.badge !== undefined && section.badge > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{section.badge}</Text>
-                </View>
-              )}
-              {section.showArrow && (
-                <Ionicons
-                  name="chevron-forward"
-                  size={18}
-                  color={colors.gray[500]}
-                />
-              )}
-            </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.settingRow, styles.dangerRow]}
+              onPress={handleDeleteAccount}
+              accessibilityLabel="Delete account"
+              accessibilityRole="button"
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons name="trash-outline" size={18} color={colors.red} />
+                <Text style={[styles.settingText, styles.dangerText]}>
+                  Delete Account
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.red} />
+            </TouchableOpacity>
           </View>
-        </TouchableOpacity>
+        </View>
       );
-    },
-    [handleDeleteAccount, i18n.language, i18n.t, navigation],
-  );
+    }
+
+    if (section.id === "legal") {
+      return (
+        <View key={section.id} style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons
+              name={section.icon}
+              size={20}
+              color={colors.primary[400]}
+            />
+            <Text style={styles.sectionTitle}>{section.title}</Text>
+          </View>
+
+          <View style={styles.settingsContent}>
+            <TouchableOpacity
+              style={styles.settingRow}
+              onPress={() => navigation.navigate("TermsOfService")}
+              accessibilityLabel="Privacy Policy"
+              accessibilityRole="button"
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons
+                  name="shield-outline"
+                  size={18}
+                  color={colors.gray[400]}
+                />
+                <Text style={styles.settingText}>Privacy Policy</Text>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color={colors.gray[500]}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.settingRow}
+              onPress={() => navigation.navigate("TermsOfService")}
+              accessibilityLabel="Terms of Service"
+              accessibilityRole="button"
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons
+                  name="document-text-outline"
+                  size={18}
+                  color={colors.gray[400]}
+                />
+                <Text style={styles.settingText}>Terms of Service</Text>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color={colors.gray[500]}
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <TouchableOpacity
+        key={section.id}
+        style={styles.section}
+        onPress={section.onPress}
+        accessibilityLabel={section.title}
+        accessibilityRole="button"
+      >
+        <View style={styles.sectionContent}>
+          <View style={styles.sectionLeft}>
+            <Ionicons
+              name={section.icon}
+              size={20}
+              color={colors.primary[400]}
+            />
+            <Text style={styles.sectionTitle}>{section.title}</Text>
+          </View>
+          <View style={styles.sectionRight}>
+            {section.badge !== undefined && section.badge > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{section.badge}</Text>
+              </View>
+            )}
+            {section.showArrow && (
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color={colors.gray[500]}
+              />
+            )}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>

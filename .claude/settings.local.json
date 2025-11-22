@@ -29,7 +29,9 @@
       "WebFetch(domain:hopethemission.org)",
       "Bash(lsof:*)",
       "Bash(kill:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(npx prettier:*)",
+      "Bash(npx turbo typecheck:*)"
     ],
     "deny": [],
     "ask": []

@@ -253,15 +253,11 @@ export async function scheduleDailyNotification(
   try {
     // ONLY schedule notifications for providers, not seekers
     if (userRole !== "provider") {
-      console.log(
-        "⚠️ Notification scheduling is only for providers. Skipping for seeker.",
-      );
       return false;
     }
 
     // Cancel all existing scheduled notifications first
     await Notifications.cancelAllScheduledNotificationsAsync();
-    console.log("✅ Cancelled all existing scheduled notifications");
 
     // Create a Date object for the scheduled time TODAY
     const now = new Date();
@@ -274,14 +270,7 @@ export async function scheduleDailyNotification(
     // If the time has already passed today, schedule for tomorrow
     if (scheduledTime <= now) {
       scheduledTime.setDate(scheduledTime.getDate() + 1);
-      console.log(
-        `⏭️ Time ${hour}:${minute} already passed today, scheduling for tomorrow`,
-      );
     }
-
-    console.log(`📅 Scheduling daily notification for ${hour}:${minute}`);
-    console.log(`   First trigger: ${scheduledTime.toLocaleString()}`);
-    console.log(`   User role: PROVIDER (bed availability reminder)`);
 
     // Provider notification content ONLY
     const notificationContent = {
@@ -308,58 +297,6 @@ export async function scheduleDailyNotification(
         repeats: true, // This makes it repeat daily
       },
     });
-
-    console.log(
-      `✅ Daily notification scheduled successfully! ID: ${notificationId}`,
-    );
-    console.log(
-      `   Will notify ${userRole} every day at ${hour}:${String(minute).padStart(2, "0")}`,
-    );
-
-    // Also schedule a TEST notification in 10 seconds to verify it works (PROVIDERS ONLY)
-    if (process.env.NODE_ENV === "development") {
-      const testId = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "🧪 Test Notification",
-          body: "Your daily availability reminder will work like this!",
-          data: notificationContent.data,
-          sound: true,
-        },
-        trigger: {
-          seconds: 10, // Fire in 10 seconds
-        },
-      });
-      console.log(
-        `🧪 Test notification scheduled for 10 seconds from now (ID: ${testId})`,
-      );
-    }
-
-    // Wait a bit for notifications to register in the system
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // Verify notifications were actually scheduled
-    const allNotifications =
-      await Notifications.getAllScheduledNotificationsAsync();
-    console.log(
-      `📋 Verification: ${allNotifications.length} notification(s) are now scheduled`,
-    );
-    allNotifications.forEach((notif, index) => {
-      console.log(
-        `   ${index + 1}. ${notif.content.title} - Trigger: ${JSON.stringify(notif.trigger)}`,
-      );
-    });
-
-    if (allNotifications.length === 0) {
-      console.error("❌ ERROR: No notifications found after scheduling!");
-      console.error(
-        "   This usually means you're using Expo Go, which doesn't support repeating calendar notifications.",
-      );
-      console.error(
-        "   Solution: Create a development build with 'eas build --profile development'",
-      );
-      console.error("   See EXPO_GO_NOTIFICATION_LIMITATION.md for details.");
-      return false;
-    }
 
     return true;
   } catch (error) {
@@ -409,8 +346,6 @@ export async function getNotificationTime(
   userId: string,
 ): Promise<string | null> {
   try {
-    console.log(`📖 Loading notification time for user: ${userId}`);
-
     const { data, error } = await supabase
       .from("profiles")
       .select("notification_time")
@@ -418,23 +353,15 @@ export async function getNotificationTime(
       .single();
 
     if (error) {
-      console.error("❌ Error fetching notification time:", error);
+      console.error("Error fetching notification time:", error);
       return null;
     }
 
     if (!data) {
-      console.log("⚠️  No profile data found");
       return null;
     }
 
-    console.log(`✅ Fetched notification time:`, data.notification_time);
-
-    if (!data.notification_time) {
-      console.log("📭 notification_time is null/empty in database");
-      return null;
-    }
-
-    return data.notification_time;
+    return data.notification_time || null;
   } catch (error) {
     console.error("Error fetching notification time:", error);
     return null;
@@ -449,23 +376,19 @@ export async function saveNotificationTime(
   time: string,
 ): Promise<boolean> {
   try {
-    console.log(`💾 Saving notification time for user ${userId}: ${time}`);
-
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("profiles")
       .update({ notification_time: time })
-      .eq("id", userId)
-      .select();
+      .eq("id", userId);
 
     if (error) {
-      console.error("❌ Error saving notification time:", error);
+      console.error("Error saving notification time:", error);
       return false;
     }
 
-    console.log("✅ Notification time saved successfully:", data);
     return true;
   } catch (error) {
-    console.error("❌ Exception saving notification time:", error);
+    console.error("Error saving notification time:", error);
     return false;
   }
 }
