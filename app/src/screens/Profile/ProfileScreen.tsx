@@ -53,8 +53,6 @@ export default function ProfileScreen() {
   const [notificationTime, setNotificationTime] = useState<Date | null>(null);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [loadingNotificationTime, setLoadingNotificationTime] = useState(false);
-  const [notificationTimeInitialized, setNotificationTimeInitialized] =
-    useState(false);
 
   const handleEditAvatar = useCallback(async () => {
     console.log("[ProfileScreen] Starting avatar upload...");
@@ -319,8 +317,6 @@ export default function ProfileScreen() {
   // Load notification time preference on mount (providers only)
   const loadNotificationTime = useCallback(async () => {
     if (!user?.id || user?.role !== "provider") {
-      setLoadingNotificationTime(false);
-      setNotificationTimeInitialized(true);
       return;
     }
 
@@ -347,9 +343,8 @@ export default function ProfileScreen() {
       // On error, keep as null
       setNotificationTime(null);
     } finally {
-      console.log("🏁 Finally block: Setting loading=false, initialized=true");
+      console.log("🏁 Finally block: Setting loading=false");
       setLoadingNotificationTime(false);
-      setNotificationTimeInitialized(true);
       console.log("✅ State updates queued");
     }
   }, [user?.id, user?.role]);
@@ -525,10 +520,6 @@ export default function ProfileScreen() {
     if (user?.role === "provider") {
       console.log("📞 Calling loadNotificationTime on mount");
       loadNotificationTime();
-    } else {
-      console.log("⏭️  Not a provider, skipping notification time load");
-      setLoadingNotificationTime(false);
-      setNotificationTimeInitialized(true);
     }
   }, [loadNotificationTime, user?.role]);
 
@@ -611,10 +602,9 @@ export default function ProfileScreen() {
                   <View style={styles.settingRight}>
                     {(() => {
                       console.log(
-                        `🎨 RENDER: initialized=${notificationTimeInitialized}, loading=${loadingNotificationTime}, time=${notificationTime?.toLocaleTimeString()}`,
+                        `🎨 RENDER: loading=${loadingNotificationTime}, time=${notificationTime?.toLocaleTimeString()}`,
                       );
-                      return !notificationTimeInitialized ||
-                        loadingNotificationTime ? (
+                      return loadingNotificationTime ? (
                         <ActivityIndicator
                           size="small"
                           color={colors.primary[500]}
