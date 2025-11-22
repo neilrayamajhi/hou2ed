@@ -281,7 +281,14 @@ export default function Step4Review({
                 style={styles.termsLink}
                 onPress={() => navigation.navigate("TermsOfService")}
               >
-                Terms and Conditions & Privacy Policy
+                Terms of Service
+              </Text>{" "}
+              and{" "}
+              <Text
+                style={styles.termsLink}
+                onPress={() => navigation.navigate("TermsOfService")}
+              >
+                Privacy Policy
               </Text>
               . I understand that submitting false information may result in the
               rejection of my application.

@@ -657,7 +657,28 @@ export default function ProfileScreen() {
               <TouchableOpacity
                 style={styles.settingRow}
                 onPress={() => navigation.navigate("TermsOfService")}
-                accessibilityLabel="Terms of Service and Privacy Policy"
+                accessibilityLabel="Privacy Policy"
+                accessibilityRole="button"
+              >
+                <View style={styles.settingLeft}>
+                  <Ionicons
+                    name="shield-outline"
+                    size={18}
+                    color={colors.gray[400]}
+                  />
+                  <Text style={styles.settingText}>Privacy Policy</Text>
+                </View>
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.gray[500]}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.settingRow}
+                onPress={() => navigation.navigate("TermsOfService")}
+                accessibilityLabel="Terms of Service"
                 accessibilityRole="button"
               >
                 <View style={styles.settingLeft}>
@@ -666,7 +687,7 @@ export default function ProfileScreen() {
                     size={18}
                     color={colors.gray[400]}
                   />
-                  <Text style={styles.settingText}>Terms & Privacy Policy</Text>
+                  <Text style={styles.settingText}>Terms of Service</Text>
                 </View>
                 <Ionicons
                   name="chevron-forward"
