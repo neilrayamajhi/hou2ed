@@ -347,8 +347,10 @@ export default function ProfileScreen() {
       // On error, keep as null
       setNotificationTime(null);
     } finally {
+      console.log("🏁 Finally block: Setting loading=false, initialized=true");
       setLoadingNotificationTime(false);
       setNotificationTimeInitialized(true);
+      console.log("✅ State updates queued");
     }
   }, [user?.id, user?.role]);
 
@@ -520,13 +522,6 @@ export default function ProfileScreen() {
   useEffect(() => {
     console.log(`🔍 ProfileScreen mount - user role: ${user?.role}`);
 
-    // Safety timeout to prevent infinite loading
-    const timeout = setTimeout(() => {
-      console.log("⏰ Timeout reached, marking as initialized");
-      setNotificationTimeInitialized(true);
-      setLoadingNotificationTime(false);
-    }, 3000); // 3 second timeout
-
     if (user?.role === "provider") {
       console.log("📞 Calling loadNotificationTime on mount");
       loadNotificationTime();
@@ -535,19 +530,11 @@ export default function ProfileScreen() {
       setLoadingNotificationTime(false);
       setNotificationTimeInitialized(true);
     }
-
-    return () => clearTimeout(timeout);
   }, [loadNotificationTime, user?.role]);
 
-  // Reload notification time when screen is focused
-  useEffect(() => {
-    const unsubscribe = navigation.addListener("focus", () => {
-      if (user?.role === "provider") {
-        loadNotificationTime();
-      }
-    });
-    return unsubscribe;
-  }, [navigation, user?.role, loadNotificationTime]);
+  // Note: Focus listener removed to prevent double-loading on mount
+  // The mount useEffect above handles initial load
+  // TODO: Add back focus listener if needed for refresh when returning to screen
 
   const profileSections: ProfileSection[] = useMemo(
     () => [
