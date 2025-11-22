@@ -519,13 +519,24 @@ export default function ProfileScreen() {
   // Load notification time on mount
   useEffect(() => {
     console.log(`🔍 ProfileScreen mount - user role: ${user?.role}`);
+
+    // Safety timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
+      console.log("⏰ Timeout reached, marking as initialized");
+      setNotificationTimeInitialized(true);
+      setLoadingNotificationTime(false);
+    }, 3000); // 3 second timeout
+
     if (user?.role === "provider") {
       console.log("📞 Calling loadNotificationTime on mount");
       loadNotificationTime();
     } else {
       console.log("⏭️  Not a provider, skipping notification time load");
       setLoadingNotificationTime(false);
+      setNotificationTimeInitialized(true);
     }
+
+    return () => clearTimeout(timeout);
   }, [loadNotificationTime, user?.role]);
 
   // Reload notification time when screen is focused
