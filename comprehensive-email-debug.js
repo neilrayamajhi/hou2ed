@@ -9,7 +9,13 @@ async function comprehensiveEmailDebug() {
   console.log('Step 1: Checking SendGrid Activity via API');
   console.log('-------------------------------------------');
 
-  const sendgridApiKey = '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';
+  const sendgridApiKey = process.env.SENDGRID_API_KEY || 'YOUR_SENDGRID_API_KEY_HERE';
+  
+  if (sendgridApiKey === 'YOUR_SENDGRID_API_KEY_HERE') {
+    console.log('⚠️  Please set SENDGRID_API_KEY environment variable');
+    console.log('   Run: export SENDGRID_API_KEY="your-api-key-here"\n');
+    return;
+  }
 
   try {
     // Get recent email activity

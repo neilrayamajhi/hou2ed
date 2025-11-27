@@ -5,7 +5,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const SENDGRID_API_KEY = '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'
+// Get SendGrid API key from environment variable
+const SENDGRID_API_KEY = Deno.env.get('SENDGRID_API_KEY')
+
+if (!SENDGRID_API_KEY) {
+  throw new Error('SENDGRID_API_KEY environment variable is required')
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {

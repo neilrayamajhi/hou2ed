@@ -2,6 +2,7 @@
 
 ALSO PLEASE UNDERSTAND IM A CODING NEWBIE TRYING TO LEARN! Teach me methodically to someone who knows very little.
 
+never ever ask me to appy a supabase file, always do it yourself using supabase cli
 ### 0 — Purpose  
 
 These rules ensure maintainability, safety, and developer velocity. 

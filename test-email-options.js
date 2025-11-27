@@ -20,7 +20,7 @@ async function testEmailOptions() {
   console.log('   Host: smtp.sendgrid.net');
   console.log('   Port: 587');
   console.log('   Username: apikey');
-  console.log('   Password: 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');
+  console.log('   Password: [YOUR_SENDGRID_API_KEY_HERE]');
   console.log('   Sender email: hou2eddirectory@gmail.com');
   console.log('   Sender name: Hou2ed');
   console.log('5. Click Save');

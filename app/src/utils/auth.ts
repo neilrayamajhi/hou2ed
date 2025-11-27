@@ -13,7 +13,11 @@ export const transformUserData = async (user: User) => {
   try {
     console.log("[transformUserData] Fetching profile for user:", user.id);
     const { data: profile, error } = await Promise.race([
-      supabase.from("profiles").select("avatar_url").eq("id", user.id).single(),
+      supabase
+        .from("profiles")
+        .select("avatar_url")
+        .eq("id", user.id)
+        .maybeSingle(),
       // Add a timeout to prevent hanging
       new Promise<{ data: null; error: Error }>((resolve) =>
         setTimeout(

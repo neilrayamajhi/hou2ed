@@ -1,11 +1,27 @@
-# Environment Variables
+# Environment Variables - NEVER COMMIT THESE!
 .env
 .env.local
 .env.*.local
+.env.service
+.env.production
+.env.development
+
+# API Keys and Secrets - NEVER COMMIT!
+*_credentials.json
+*_secrets.json
+sendgrid_key.txt
+api_keys.txt
+*SENDGRID*KEY*
+*SG.*
+*.key
+*.pem
 
 # Temporary database scripts with credentials
 *.temp.js
 *-with-credentials.js
+test-*-email*.js
+debug-*-connection.js
+comprehensive-*.js
 
 # Node modules
 node_modules/

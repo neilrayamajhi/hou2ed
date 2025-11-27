@@ -11,7 +11,7 @@ async function debugSMTPConnection() {
     secure: false, // true for 465, false for other ports
     auth: {
       user: 'apikey', // This MUST be the string 'apikey'
-      pass: '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'
+      pass: process.env.SENDGRID_API_KEY || 'YOUR_SENDGRID_API_KEY_HERE'
     }
   });
 
