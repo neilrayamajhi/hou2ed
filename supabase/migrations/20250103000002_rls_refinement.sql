@@ -1,90 +1,8 @@
 -- Phase B5.1: RLS Refinement for Security
 -- Comprehensive Row Level Security policies for all tables
 -- Implements least-privilege access with DV protection
-
--- ============================================
--- PROFILES TABLE POLICIES
--- ============================================
-
--- Drop existing policies if any
-DROP POLICY IF EXISTS "Users can view own profile" ON profiles;
-DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
-DROP POLICY IF EXISTS "Admins can view all profiles" ON profiles;
-DROP POLICY IF EXISTS "Admins can update any profile" ON profiles;
-
--- Enable RLS
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-
--- Users can view their own profile
-CREATE POLICY "Users can view own profile"
-    ON profiles FOR SELECT
-    USING (auth.uid() = user_id);
-
--- Users can update their own profile
-CREATE POLICY "Users can update own profile"
-    ON profiles FOR UPDATE
-    USING (auth.uid() = user_id)
-    WITH CHECK (auth.uid() = user_id);
-
--- Admins can view all profiles
-CREATE POLICY "Admins can view all profiles"
-    ON profiles FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM profiles
-            WHERE user_id = auth.uid()
-            AND role = 'admin'
-        )
-    );
-
--- Admins can update any profile
-CREATE POLICY "Admins can update any profile"
-    ON profiles FOR UPDATE
-    USING (
-        EXISTS (
-            SELECT 1 FROM profiles
-            WHERE user_id = auth.uid()
-            AND role = 'admin'
-        )
-    );
-
--- ============================================
--- PROVIDERS TABLE POLICIES
--- ============================================
-
-DROP POLICY IF EXISTS "Providers can view own record" ON providers;
-DROP POLICY IF EXISTS "Providers can update own record" ON providers;
-DROP POLICY IF EXISTS "Public can view provider info" ON providers;
-DROP POLICY IF EXISTS "Admins can manage providers" ON providers;
-
-ALTER TABLE providers ENABLE ROW LEVEL SECURITY;
-
--- Providers can view their own record
-CREATE POLICY "Providers can view own record"
-    ON providers FOR SELECT
-    USING (auth.uid() = user_id);
-
--- Providers can update their own record
-CREATE POLICY "Providers can update own record"
-    ON providers FOR UPDATE
-    USING (auth.uid() = user_id)
-    WITH CHECK (auth.uid() = user_id);
-
--- Public can view basic provider info (not sensitive data)
-CREATE POLICY "Public can view provider info"
-    ON providers FOR SELECT
-    USING (verified = true);
-
--- Admins can manage all providers
-CREATE POLICY "Admins can manage providers"
-    ON providers FOR ALL
-    USING (
-        EXISTS (
-            SELECT 1 FROM profiles
-            WHERE user_id = auth.uid()
-            AND role = 'admin'
-        )
-    );
+-- Note: profiles table policies are defined in 20241002000001_create_profiles_table.sql
+-- Note: providers table does not exist - provider info is in profiles table with role='provider'
 
 -- ============================================
 -- LISTINGS TABLE POLICIES (WITH DV PROTECTION)
@@ -112,13 +30,13 @@ CREATE POLICY "Public can view listings with DV protection"
                 AND (
                     -- Provider owns the listing
                     provider_id IN (
-                        SELECT id FROM providers WHERE user_id = auth.uid()
+                        SELECT id FROM profiles WHERE id = auth.uid() AND role = 'provider'
                     )
                     OR
                     -- User is an admin
                     EXISTS (
                         SELECT 1 FROM profiles
-                        WHERE user_id = auth.uid()
+                        WHERE id = auth.uid()
                         AND role = 'admin'
                     )
                     OR
@@ -139,12 +57,12 @@ CREATE POLICY "Providers can manage own listings"
     ON listings FOR ALL
     USING (
         provider_id IN (
-            SELECT id FROM providers WHERE user_id = auth.uid()
+            SELECT id FROM profiles WHERE id = auth.uid() AND role = 'provider'
         )
     )
     WITH CHECK (
         provider_id IN (
-            SELECT id FROM providers WHERE user_id = auth.uid()
+            SELECT id FROM profiles WHERE id = auth.uid() AND role = 'provider'
         )
     );
 
@@ -154,7 +72,7 @@ CREATE POLICY "Admins can manage all listings"
     USING (
         EXISTS (
             SELECT 1 FROM profiles
-            WHERE user_id = auth.uid()
+            WHERE id = auth.uid()
             AND role = 'admin'
         )
     );
@@ -250,7 +168,7 @@ CREATE POLICY "Providers can view applications for their listings"
         listing_id IN (
             SELECT id FROM listings
             WHERE provider_id IN (
-                SELECT id FROM providers WHERE user_id = auth.uid()
+                SELECT id FROM profiles WHERE id = auth.uid() AND role = 'provider'
             )
         )
     );
@@ -262,7 +180,7 @@ CREATE POLICY "Providers can update application status"
         listing_id IN (
             SELECT id FROM listings
             WHERE provider_id IN (
-                SELECT id FROM providers WHERE user_id = auth.uid()
+                SELECT id FROM profiles WHERE id = auth.uid() AND role = 'provider'
             )
         )
     )
@@ -271,7 +189,7 @@ CREATE POLICY "Providers can update application status"
         listing_id IN (
             SELECT id FROM listings
             WHERE provider_id IN (
-                SELECT id FROM providers WHERE user_id = auth.uid()
+                SELECT id FROM profiles WHERE id = auth.uid() AND role = 'provider'
             )
         )
     );
@@ -282,7 +200,7 @@ CREATE POLICY "Admins can manage all applications"
     USING (
         EXISTS (
             SELECT 1 FROM profiles
-            WHERE user_id = auth.uid()
+            WHERE id = auth.uid()
             AND role = 'admin'
         )
     );
@@ -337,7 +255,7 @@ CREATE POLICY "Providers can view documents for their applications"
             SELECT a.id FROM applications a
             JOIN listings l ON a.listing_id = l.id
             WHERE l.provider_id IN (
-                SELECT id FROM providers WHERE user_id = auth.uid()
+                SELECT id FROM profiles WHERE id = auth.uid() AND role = 'provider'
             )
         )
     );
@@ -348,7 +266,7 @@ CREATE POLICY "Admins can manage all documents"
     USING (
         EXISTS (
             SELECT 1 FROM profiles
-            WHERE user_id = auth.uid()
+            WHERE id = auth.uid()
             AND role = 'admin'
         )
     );
@@ -454,23 +372,23 @@ ALTER TABLE saved_listings ENABLE ROW LEVEL SECURITY;
 -- Users can only see their own saved items
 CREATE POLICY "Users can view own saved items"
     ON saved_listings FOR SELECT
-    USING (user_id = auth.uid());
+    USING (id = auth.uid());
 
 -- Users can save new items
 CREATE POLICY "Users can save items"
     ON saved_listings FOR INSERT
-    WITH CHECK (user_id = auth.uid());
+    WITH CHECK (id = auth.uid());
 
 -- Users can update their own saved items (notes)
 CREATE POLICY "Users can update own saved items"
     ON saved_listings FOR UPDATE
-    USING (user_id = auth.uid())
-    WITH CHECK (user_id = auth.uid());
+    USING (id = auth.uid())
+    WITH CHECK (id = auth.uid());
 
 -- Users can delete their own saved items
 CREATE POLICY "Users can delete own saved items"
     ON saved_listings FOR DELETE
-    USING (user_id = auth.uid());
+    USING (id = auth.uid());
 
 -- ============================================
 -- SAVED SEARCHES TABLE POLICIES
@@ -486,23 +404,23 @@ ALTER TABLE saved_searches ENABLE ROW LEVEL SECURITY;
 -- Users can only see their own saved searches
 CREATE POLICY "Users can view own saved searches"
     ON saved_searches FOR SELECT
-    USING (user_id = auth.uid());
+    USING (id = auth.uid());
 
 -- Users can create saved searches
 CREATE POLICY "Users can create saved searches"
     ON saved_searches FOR INSERT
-    WITH CHECK (user_id = auth.uid());
+    WITH CHECK (id = auth.uid());
 
 -- Users can update their own saved searches
 CREATE POLICY "Users can update own saved searches"
     ON saved_searches FOR UPDATE
-    USING (user_id = auth.uid())
-    WITH CHECK (user_id = auth.uid());
+    USING (id = auth.uid())
+    WITH CHECK (id = auth.uid());
 
 -- Users can delete their own saved searches
 CREATE POLICY "Users can delete own saved searches"
     ON saved_searches FOR DELETE
-    USING (user_id = auth.uid());
+    USING (id = auth.uid());
 
 -- ============================================
 -- SAVED SEARCH ALERTS TABLE POLICIES
@@ -517,7 +435,7 @@ ALTER TABLE saved_search_alerts ENABLE ROW LEVEL SECURITY;
 -- Users can view their own alerts
 CREATE POLICY "Users can view own alerts"
     ON saved_search_alerts FOR SELECT
-    USING (user_id = auth.uid());
+    USING (id = auth.uid());
 
 -- System can create alerts (via service role)
 -- This will be handled by RPC functions with SECURITY DEFINER
@@ -525,8 +443,8 @@ CREATE POLICY "Users can view own alerts"
 -- Users can update their own alerts (mark as seen)
 CREATE POLICY "Users can update own alerts"
     ON saved_search_alerts FOR UPDATE
-    USING (user_id = auth.uid())
-    WITH CHECK (user_id = auth.uid());
+    USING (id = auth.uid())
+    WITH CHECK (id = auth.uid());
 
 -- ============================================
 -- AVAILABILITY HISTORY TABLE POLICIES
@@ -542,7 +460,7 @@ CREATE POLICY "Providers can view own availability history"
     ON availability_history FOR SELECT
     USING (
         provider_id IN (
-            SELECT id FROM providers WHERE user_id = auth.uid()
+            SELECT id FROM profiles WHERE id = auth.uid() AND role = 'provider'
         )
     );
 
@@ -552,7 +470,7 @@ CREATE POLICY "Admins can view all availability history"
     USING (
         EXISTS (
             SELECT 1 FROM profiles
-            WHERE user_id = auth.uid()
+            WHERE id = auth.uid()
             AND role = 'admin'
         )
     );
@@ -656,7 +574,7 @@ CREATE POLICY "Providers can upload listing images"
     WITH CHECK (
         bucket_id = 'listing-images'
         AND EXISTS (
-            SELECT 1 FROM providers WHERE user_id = auth.uid()
+            SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'provider'
         )
     );
 
@@ -669,7 +587,7 @@ CREATE POLICY "Providers can update listing images"
     USING (
         bucket_id = 'listing-images'
         AND EXISTS (
-            SELECT 1 FROM providers WHERE user_id = auth.uid()
+            SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'provider'
         )
     );
 
@@ -678,7 +596,7 @@ CREATE POLICY "Providers can delete listing images"
     USING (
         bucket_id = 'listing-images'
         AND EXISTS (
-            SELECT 1 FROM providers WHERE user_id = auth.uid()
+            SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'provider'
         )
     );
 
@@ -692,7 +610,7 @@ RETURNS BOOLEAN AS $$
 BEGIN
     RETURN EXISTS (
         SELECT 1 FROM profiles
-        WHERE user_id = auth.uid()
+        WHERE id = auth.uid()
         AND role = 'admin'
     );
 END;
@@ -703,8 +621,8 @@ CREATE OR REPLACE FUNCTION is_provider()
 RETURNS BOOLEAN AS $$
 BEGIN
     RETURN EXISTS (
-        SELECT 1 FROM providers
-        WHERE user_id = auth.uid()
+        SELECT 1 FROM profiles
+        WHERE id = auth.uid()
     );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -716,8 +634,8 @@ DECLARE
     provider_id UUID;
 BEGIN
     SELECT id INTO provider_id
-    FROM providers
-    WHERE user_id = auth.uid();
+    FROM profiles
+    WHERE id = auth.uid();
 
     RETURN provider_id;
 END;
@@ -736,7 +654,7 @@ BEGIN
             OR
             -- User is the provider
             l.provider_id IN (
-                SELECT id FROM providers WHERE user_id = auth.uid()
+                SELECT id FROM profiles WHERE id = auth.uid() AND role = 'provider'
             )
             OR
             -- User is admin

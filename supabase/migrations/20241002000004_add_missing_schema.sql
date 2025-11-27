@@ -1,26 +1,10 @@
 -- HOU2ED Database Schema - Add Missing Objects Only
 -- This migration only adds what doesn't exist yet
+-- Note: profiles table is created in 20241002000001_create_profiles_table.sql
 
 -- Enable necessary extensions if not exists
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "postgis";
-
--- ===============================================
--- Add missing columns to profiles if needed
--- ===============================================
-
-DO $$
-BEGIN
-  -- Add columns that might be missing
-  ALTER TABLE profiles ADD COLUMN IF NOT EXISTS verified_provider BOOLEAN DEFAULT false;
-  ALTER TABLE profiles ADD COLUMN IF NOT EXISTS verification_status TEXT;
-  ALTER TABLE profiles ADD COLUMN IF NOT EXISTS verification_documents JSONB;
-  ALTER TABLE profiles ADD COLUMN IF NOT EXISTS seeker_profile JSONB DEFAULT '{}';
-  ALTER TABLE profiles ADD COLUMN IF NOT EXISTS provider_profile JSONB DEFAULT '{}';
-EXCEPTION
-  WHEN OTHERS THEN
-    RAISE NOTICE 'Error updating profiles: %', SQLERRM;
-END $$;
 
 -- ===============================================
 -- Create missing tables only

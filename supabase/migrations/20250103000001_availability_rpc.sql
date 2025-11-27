@@ -20,8 +20,8 @@ DECLARE
 BEGIN
     -- Get the current user's provider ID
     SELECT id INTO v_provider_id
-    FROM providers
-    WHERE user_id = auth.uid();
+    FROM profiles
+    WHERE id = auth.uid() AND role = 'provider';
 
     IF v_provider_id IS NULL THEN
         RETURN jsonb_build_object(
@@ -188,7 +188,7 @@ $$;
 CREATE TABLE IF NOT EXISTS availability_history (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     listing_id UUID NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
-    provider_id UUID NOT NULL REFERENCES providers(id),
+    provider_id UUID NOT NULL REFERENCES profiles(id),
     beds_available_today INTEGER,
     beds_available_this_week INTEGER,
     waitlist_days INTEGER,
@@ -209,9 +209,7 @@ ALTER TABLE availability_history ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Providers can view own availability history"
     ON availability_history
     FOR SELECT
-    USING (provider_id IN (
-        SELECT id FROM providers WHERE user_id = auth.uid()
-    ));
+    USING (provider_id = auth.uid());
 
 -- Function to check and create alerts for saved searches when availability changes
 CREATE OR REPLACE FUNCTION fn_check_saved_search_alerts(p_listing_id UUID)

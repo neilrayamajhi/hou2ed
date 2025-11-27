@@ -503,72 +503,15 @@ export async function signUpUser(
       console.log("=================================");
     }
 
-    // CRITICAL FIX: Ensure profile exists after signup
+    // Profile is created automatically by database trigger
     if (data?.user) {
-      console.log("✅ Auth user created, ensuring profile exists...");
+      console.log("✅ Auth user created");
+      console.log(
+        "  Profile will be created by database trigger (SECURITY DEFINER)",
+      );
 
-      // Wait a moment for any database triggers to complete
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      // Check if profile was created by the trigger
-      const { data: existingProfile, error: profileCheckError } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("id", data.user.id)
-        .maybeSingle();
-
-      if (
-        profileCheckError &&
-        !profileCheckError.message?.includes("No rows")
-      ) {
-        console.error("Error checking profile:", profileCheckError);
-      }
-
-      if (!existingProfile) {
-        console.warn("⚠️ Profile not created by trigger, creating manually...");
-
-        // Manually create the profile to prevent orphaned account
-        const { error: insertError } = await supabase.from("profiles").insert({
-          id: data.user.id, // id is the primary key, not user_id
-          email: email.toLowerCase(),
-          full_name: fullName,
-          username,
-          role,
-          phone: null,
-          avatar_url: null,
-          is_verified: false,
-          push_notifications_enabled: true,
-          email_notifications_enabled: true,
-        });
-
-        if (insertError) {
-          console.error("❌ CRITICAL: Failed to create profile:", insertError);
-
-          // Profile creation failed - we have an orphaned account!
-          // Try to clean up the auth user to prevent future issues
-          console.error("Attempting to clean up orphaned auth user...");
-          try {
-            // We can't delete users with anon key, so just log the issue
-            console.error("User", data.user.id, "created without profile!");
-            console.error(
-              "This will cause login issues. User needs manual cleanup.",
-            );
-          } catch (cleanupError) {
-            console.error("Cleanup failed:", cleanupError);
-          }
-
-          return {
-            success: false,
-            error:
-              "Account created but profile setup failed. Please contact support.",
-            errorCode: "PROFILE_CREATION_FAILED",
-          };
-        }
-
-        console.log("✅ Profile created manually");
-      } else {
-        console.log("✅ Profile exists:", existingProfile.id);
-      }
+      // Wait longer for trigger to complete
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       const userData = await transformUserData(data.user);
 
@@ -582,10 +525,7 @@ export async function signUpUser(
         data.user.email_confirmed_at ? "Yes" : "No",
       );
       console.log("  - Session created:", data.session ? "Yes" : "No");
-      console.log(
-        "  - Profile created:",
-        existingProfile ? "By trigger" : "Manually",
-      );
+      console.log("  - Profile created: By database trigger");
 
       // Warn if no session was created (might indicate password issue)
       if (!data.session) {
