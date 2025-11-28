@@ -55,7 +55,9 @@
       "Bash(npx supabase@latest sql:*)",
       "Bash(supabase migration new:*)",
       "Bash(find:*)",
-      "Bash(supabase db reset:*)"
+      "Bash(supabase db reset:*)",
+      "Bash(git commit:*)",
+      "Bash(psql:*)"
     ],
     "deny": [],
     "ask": []
