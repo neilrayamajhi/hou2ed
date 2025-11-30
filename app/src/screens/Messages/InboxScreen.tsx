@@ -72,7 +72,9 @@ export default function InboxScreen() {
       let userId = user?.id;
 
       if (!userId) {
-        console.log("⏳ [InboxScreen] No user in store, trying Supabase auth...");
+        console.log(
+          "⏳ [InboxScreen] No user in store, trying Supabase auth...",
+        );
         const { data } = await supabase.auth.getUser();
         userId = data?.user?.id;
       }
@@ -93,6 +95,10 @@ export default function InboxScreen() {
       console.log("🔍 [InboxScreen] Calling getThreads...");
       const fetchedThreads = await messageService.getThreads();
       console.log("✅ [InboxScreen] Fetched", fetchedThreads.length, "threads");
+      console.log(
+        "📋 [InboxScreen] Thread details:",
+        JSON.stringify(fetchedThreads, null, 2),
+      );
 
       setThreads(fetchedThreads);
       setTablesMissing(false);
@@ -153,9 +159,11 @@ export default function InboxScreen() {
           .map((msg: any) => msg.id);
 
         if (unreadMessageIds.length > 0) {
-          messageService.markMessagesAsRead(thread.id, unreadMessageIds).catch(error => {
-            console.error("Failed to mark messages as read:", error);
-          });
+          messageService
+            .markMessagesAsRead(thread.id, unreadMessageIds)
+            .catch((error) => {
+              console.error("Failed to mark messages as read:", error);
+            });
         }
       }
 

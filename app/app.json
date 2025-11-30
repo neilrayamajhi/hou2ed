@@ -15,7 +15,7 @@
       "backgroundColor": "#000000"
     },
     "ios": {
-      "supportsTablet": false,
+      "supportsTablet": true,
       "bundleIdentifier": "com.neilrayamajhi.hou2ed",
       "buildNumber": "1",
       "infoPlist": {

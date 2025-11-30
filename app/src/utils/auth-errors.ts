@@ -10,6 +10,7 @@ export interface AuthError extends Error {
 export const AUTH_ERROR_CODES = {
   INVALID_CREDENTIALS: "invalid_credentials",
   EMAIL_NOT_VERIFIED: "email_not_confirmed",
+  EMAIL_UNVERIFIED_EXISTING: "email_unverified_existing",
   USER_NOT_FOUND: "user_not_found",
   EMAIL_EXISTS: "email_exists",
   USERNAME_EXISTS: "username_exists",

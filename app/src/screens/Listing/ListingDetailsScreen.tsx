@@ -24,6 +24,7 @@ import {
   unblockUser,
   hasBlockedUser,
 } from "../../services/blockingService";
+import { messageService } from "../../services/messageService";
 import {
   parseAmenities,
   parseServices,
@@ -292,9 +293,8 @@ export default function ListingDetailsScreen() {
 
     // Check for existing application before allowing to proceed
     try {
-      const { getExistingApplication } = await import(
-        "../../services/application.service"
-      );
+      const { getExistingApplication } =
+        await import("../../services/application.service");
       const existingApp = await getExistingApplication(merged.id);
 
       if (existingApp.exists && !existingApp.canResubmit) {
@@ -399,6 +399,49 @@ export default function ListingDetailsScreen() {
       ]);
     }
   }, [merged.providerId, merged.providerName, user, isBlocked]);
+
+  // Handle message provider
+  const handleMessageProvider = useCallback(async () => {
+    if (!user) {
+      Alert.alert("Sign In Required", "Please sign in to message providers");
+      return;
+    }
+
+    if (!merged.providerId) {
+      Alert.alert("Error", "Provider information not available");
+      return;
+    }
+
+    try {
+      // Initialize message service if needed
+      await messageService.initialize(user.id);
+
+      // Create or get existing thread with this provider
+      const thread = await messageService.createThread(
+        [merged.providerId],
+        merged.title ? `Re: ${merged.title}` : "New message",
+        merged.id, // listingId
+      );
+
+      // Navigate to the thread with all expected params
+      (navigation as any).navigate("Thread", {
+        threadId: thread.id,
+        participantId: merged.providerId,
+        propertyTitle: merged.title,
+        senderName: merged.providerName,
+      });
+    } catch (error) {
+      console.error("Error creating message thread:", error);
+      Alert.alert("Error", "Failed to start conversation. Please try again.");
+    }
+  }, [
+    user,
+    merged.providerId,
+    merged.title,
+    merged.providerName,
+    merged.id,
+    navigation,
+  ]);
 
   // Handle block/unblock
   const handleBlockUnblock = useCallback(async () => {
@@ -653,6 +696,19 @@ export default function ListingDetailsScreen() {
             />
           )}
         </TouchableOpacity>
+        {merged.providerId && user && merged.providerId !== user.id && (
+          <TouchableOpacity
+            style={styles.messageButton}
+            onPress={handleMessageProvider}
+          >
+            <Ionicons
+              name="chatbubble-outline"
+              size={20}
+              color={colors.white}
+            />
+            <Text style={styles.messageButtonText}>Message</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={[
             styles.applyButton,
@@ -791,6 +847,22 @@ const styles = StyleSheet.create({
     borderColor: colors.white,
     justifyContent: "center",
     alignItems: "center",
+  },
+  messageButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    height: 48,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.white,
+    justifyContent: "center",
+  },
+  messageButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.white,
   },
   applyButton: {
     flex: 1,

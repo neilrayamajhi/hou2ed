@@ -360,6 +360,25 @@ export async function signUpUser(
 
     if (existingEmailUser) {
       console.log("Email already registered:", email);
+
+      // Try to resend verification code to check if account is unverified
+      console.log("Attempting to resend OTP to check verification status...");
+      const { error: resendError } = await authHelpers.resendOtp(email);
+
+      if (!resendError) {
+        // Resend succeeded = account exists but is unverified
+        console.log(
+          "Account exists but is unverified. Resending verification code.",
+        );
+        return {
+          success: false,
+          error: email,
+          errorCode: AUTH_ERROR_CODES.EMAIL_UNVERIFIED_EXISTING,
+        };
+      }
+
+      // Resend failed = account is verified or other error
+      console.log("Email already registered and verified:", email);
       return {
         success: false,
         error:

@@ -1,10 +1,33 @@
 import React from "react";
-import { ScrollView, Text, StyleSheet, SafeAreaView } from "react-native";
+import {
+  ScrollView,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing } from "../../theme/tokens";
 
 export default function TermsOfService() {
+  const navigation = useNavigation();
+
   return (
     <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          accessibilityLabel="Go back"
+          accessibilityRole="button"
+        >
+          <Ionicons name="arrow-back" size={24} color={colors.white} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Legal</Text>
+        <View style={styles.headerSpacer} />
+      </View>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         {/* ========================================
             PRIVACY POLICY
@@ -334,6 +357,29 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.black,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray[800],
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: colors.white,
+  },
+  headerSpacer: {
+    width: 40,
   },
   scroll: {
     flex: 1,

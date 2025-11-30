@@ -51,17 +51,21 @@ class MessageServiceFix {
       if (!resolvedUserId) {
         const { data, error } = await supabase.auth.getUser();
         if (error) {
-          console.error('[messageService] getUser error during init:', error);
+          console.error("[messageService] getUser error during init:", error);
         }
         resolvedUserId = data?.user?.id || null;
       }
 
       if (!resolvedUserId) {
-        console.error('[messageService] No authenticated user for message init');
-        throw new Error('userId is required for message service initialization');
+        console.error(
+          "[messageService] No authenticated user for message init",
+        );
+        throw new Error(
+          "userId is required for message service initialization",
+        );
       }
 
-      console.log('[messageService] Initializing with userId:', resolvedUserId);
+      console.log("[messageService] Initializing with userId:", resolvedUserId);
       this.userId = resolvedUserId;
 
       // Check which table name to use
@@ -161,6 +165,8 @@ class MessageServiceFix {
     const uniqueIds = [...new Set(userIds)];
     const profiles = new Map<string, any>();
 
+    console.log("🔍 [getBatchProfiles] Requested user IDs:", uniqueIds);
+
     // Check cache first
     const uncachedIds = uniqueIds.filter((id) => {
       if (this.profileCache.has(id)) {
@@ -170,12 +176,31 @@ class MessageServiceFix {
       return true;
     });
 
+    console.log(
+      "📦 [getBatchProfiles] From cache:",
+      uniqueIds.length - uncachedIds.length,
+    );
+    console.log("🌐 [getBatchProfiles] Need to fetch:", uncachedIds);
+
     // Fetch uncached profiles
     if (uncachedIds.length > 0) {
       const { data: fetchedProfiles, error } = await supabase
         .from("profiles")
         .select("*")
         .in("id", uncachedIds);
+
+      console.log(
+        "✅ [getBatchProfiles] Fetched profiles:",
+        fetchedProfiles?.length || 0,
+      );
+      console.log("❌ [getBatchProfiles] Error:", error);
+
+      if (fetchedProfiles) {
+        console.log(
+          "📋 [getBatchProfiles] Profile IDs fetched:",
+          fetchedProfiles.map((p) => p.id),
+        );
+      }
 
       if (!error && fetchedProfiles) {
         fetchedProfiles.forEach((profile) => {
@@ -185,6 +210,7 @@ class MessageServiceFix {
       }
     }
 
+    console.log("✅ [getBatchProfiles] Returning", profiles.size, "profiles");
     return profiles;
   }
 
@@ -331,13 +357,20 @@ class MessageServiceFix {
         ).length;
 
         // Last message preview (normalize body/content)
-        const lastMessage = threadMessages.length > 0
-          ? {
-              ...threadMessages[0],
-              body: (threadMessages[0] as any).body ?? (threadMessages[0] as any).content ?? "",
-              content: (threadMessages[0] as any).content ?? (threadMessages[0] as any).body ?? "",
-            }
-          : null;
+        const lastMessage =
+          threadMessages.length > 0
+            ? {
+                ...threadMessages[0],
+                body:
+                  (threadMessages[0] as any).body ??
+                  (threadMessages[0] as any).content ??
+                  "",
+                content:
+                  (threadMessages[0] as any).content ??
+                  (threadMessages[0] as any).body ??
+                  "",
+              }
+            : null;
 
         return {
           ...thread,
@@ -495,7 +528,9 @@ class MessageServiceFix {
       // Add defensive check for undefined messageIds
       if (!this.userId || !messageIds || messageIds.length === 0) {
         if (!messageIds) {
-          console.warn("⚠️ markMessagesAsRead called with undefined messageIds");
+          console.warn(
+            "⚠️ markMessagesAsRead called with undefined messageIds",
+          );
         }
         return;
       }
@@ -707,7 +742,9 @@ class MessageServiceFix {
     try {
       // Return no-op if not initialized yet
       if (!this.userId) {
-        console.warn("⚠️ subscribeToInbox called before initialization, skipping");
+        console.warn(
+          "⚠️ subscribeToInbox called before initialization, skipping",
+        );
         return () => {}; // Return no-op cleanup function
       }
 
@@ -786,4 +823,3 @@ class MessageServiceFix {
 
 // Export singleton instance
 export const messageService = new MessageServiceFix();
-

@@ -114,6 +114,7 @@ export default function SignUp() {
     formState: { errors, isValid, isSubmitting },
     watch,
     trigger,
+    reset,
   } = useForm<FormData>({
     resolver: zodResolver(signUpSchema),
     mode: "onChange",
@@ -259,6 +260,26 @@ export default function SignUp() {
           const errorCode = result.errorCode || AUTH_ERROR_CODES.UNKNOWN;
 
           switch (errorCode) {
+            case AUTH_ERROR_CODES.EMAIL_UNVERIFIED_EXISTING:
+              // Account exists but not verified - show verification modal
+              console.log(
+                "Unverified account detected, showing verification modal",
+              );
+              Alert.alert(
+                "Account Not Verified",
+                "You already started signing up with this email! We've sent a new verification code to your email. Please check your inbox (and spam folder).",
+                [
+                  {
+                    text: "Enter Code",
+                    onPress: () => {
+                      setVerificationEmail(result.error || data.email);
+                      setShowVerification(true);
+                    },
+                  },
+                ],
+              );
+              break;
+
             case AUTH_ERROR_CODES.EMAIL_EXISTS:
               Alert.alert(
                 "Email Already Registered",
