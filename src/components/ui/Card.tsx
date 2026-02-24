@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, MouseEventHandler, ReactNode } from 'react';
 import { theme } from '../../theme/tokens';
 
 type CardProps = {
@@ -6,9 +6,11 @@ type CardProps = {
   children: ReactNode;
   footer?: ReactNode;
   style?: CSSProperties;
+  onMouseEnter?: MouseEventHandler<HTMLDivElement>;
+  onMouseLeave?: MouseEventHandler<HTMLDivElement>;
 };
 
-export function Card({ header, children, footer, style }: CardProps) {
+export function Card({ header, children, footer, style, onMouseEnter, onMouseLeave }: CardProps) {
   const cardStyle: CSSProperties = {
     backgroundColor: theme.colors.black,
     border: `1px solid ${theme.colors.gold}`,
@@ -40,7 +42,7 @@ export function Card({ header, children, footer, style }: CardProps) {
   };
 
   return (
-    <div style={{ ...cardStyle, ...style }}>
+    <div style={{ ...cardStyle, ...style }} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
       {header && <div style={headerStyle}>{header}</div>}
       <div style={bodyStyle}>{children}</div>
       {footer && <div style={footerStyle}>{footer}</div>}

@@ -1,3 +1,4 @@
+import { forwardRef } from 'react';
 import type { CSSProperties, InputHTMLAttributes } from 'react';
 import { theme } from '../../theme/tokens';
 import { column } from '../../theme/styles';
@@ -8,7 +9,10 @@ type InputProps = InputHTMLAttributes<HTMLInputElement> & {
   helpText?: string;
 };
 
-export function Input({ label, error, helpText, id, style, ...props }: InputProps) {
+export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
+  { label, error, helpText, id, style, ...props },
+  ref,
+) {
   const inputId = id || `input-${Math.random().toString(36).substring(2, 9)}`;
   const errorId = error ? `${inputId}-error` : undefined;
   const helpId = helpText ? `${inputId}-help` : undefined;
@@ -57,6 +61,7 @@ export function Input({ label, error, helpText, id, style, ...props }: InputProp
         </label>
       )}
       <input
+        ref={ref}
         id={inputId}
         style={inputStyle}
         aria-invalid={error ? true : undefined}
@@ -83,4 +88,4 @@ export function Input({ label, error, helpText, id, style, ...props }: InputProp
       )}
     </div>
   );
-}
+});

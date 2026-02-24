@@ -1,7 +1,8 @@
-import type { CSSProperties } from 'react';
+import type { CSSProperties, FocusEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { supabase } from '../../lib/supabase';
 import { container, section, column } from '../../theme/styles';
 import { theme } from '../../theme/tokens';
 import { Input } from '../ui/Input';
@@ -60,10 +61,25 @@ export function Waitlist() {
   const message = watch('message');
 
   const onSubmit = async (data: WaitlistFormData) => {
-    // Mock submit - backend will be wired in Prompt 5.4
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    const { error } = await supabase.from('waitlist_users').insert({
+      full_name: data.fullName,
+      email: data.email,
+      role: data.role,
+      organization: data.organization || null,
+      message: data.message || null,
+      source: 'website',
+    });
 
-    console.log('Form submitted:', data);
+    if (error) {
+      // Gracefully handle duplicate email
+      if (error.code === '23505') {
+        showToast("You're already on the Hou2ed waitlist.", 'success');
+        reset();
+      } else {
+        showToast('Something went wrong. Please try again.', 'error');
+      }
+      return;
+    }
 
     showToast("Thank you. You've been added to the Hou2ed waitlist.", 'success');
     reset();
@@ -266,13 +282,14 @@ export function Waitlist() {
                         e.currentTarget.style.boxShadow = `0 0 0 3px rgba(212, 175, 55, 0.2)`;
                       }
                     }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = errors.message
-                        ? theme.colors.error
-                        : theme.colors.white;
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
-                    {...register('message')}
+                    {...register('message', {
+                      onBlur: (e: FocusEvent<HTMLTextAreaElement>) => {
+                        e.currentTarget.style.borderColor = errors.message
+                          ? theme.colors.error
+                          : theme.colors.white;
+                        e.currentTarget.style.boxShadow = 'none';
+                      },
+                    })}
                   />
                   <div
                     style={{

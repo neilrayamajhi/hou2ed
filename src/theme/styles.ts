@@ -55,13 +55,13 @@ export const styleBody: CSSProperties = {
   lineHeight: 1.6,
 };
 
-export const row = (gap = theme.spacing.md): CSSProperties => ({
+export const row = (gap: number = theme.spacing.md): CSSProperties => ({
   display: 'flex',
   flexDirection: 'row',
   gap: `${gap}px`,
 });
 
-export const column = (gap = theme.spacing.md): CSSProperties => ({
+export const column = (gap: number = theme.spacing.md): CSSProperties => ({
   display: 'flex',
   flexDirection: 'column',
   gap: `${gap}px`,
