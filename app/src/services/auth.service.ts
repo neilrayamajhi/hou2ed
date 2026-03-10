@@ -22,26 +22,16 @@ async function resolveEmailFromUsername(
   username: string,
 ): Promise<string | null> {
   try {
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("email")
-      .eq("username", username)
-      .maybeSingle(); // Use maybeSingle to handle no results gracefully
+    const { data, error } = await supabase.rpc("get_email_from_username", {
+      p_username: username,
+    });
 
     if (error) {
-      // Only log actual errors, not "no rows" results
-      if (!error.message?.includes("No rows")) {
-        console.error("Error resolving username:", error);
-      }
+      console.error("Error resolving username:", error);
       return null;
     }
 
-    if (!profile) {
-      // Username doesn't exist
-      return null;
-    }
-
-    return profile?.email || null;
+    return data || null;
   } catch (error) {
     console.error("Unexpected error resolving username:", error);
     return null;
@@ -304,6 +294,7 @@ export interface SignUpResult {
   user?: any;
   error?: string;
   errorCode?: string;
+  needsVerification?: boolean;
 }
 
 /**
@@ -557,6 +548,7 @@ export async function signUpUser(
       return {
         success: true,
         user: userData,
+        needsVerification: !data.session,
       };
     }
 
