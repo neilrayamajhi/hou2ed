@@ -33,6 +33,7 @@ import {
 } from "../../constants/listingOptions";
 import { useSavedListings } from "../../hooks/useSavedItems";
 import { useAuthStore } from "../../state/useAuthStore";
+import { isOSMListing } from "../../utils/listingHelpers";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -173,6 +174,7 @@ export default function ListingDetailsScreen() {
       services: listingFromParams.services ?? [],
       rules: listingFromParams.rules ?? [],
       eligibility: listingFromParams.eligibility ?? [],
+      contact: listingFromParams.contact || null,
       location: {
         latitude:
           listingFromParams.coordinates?.latitude ?? listingFromParams.lat,
@@ -229,6 +231,12 @@ export default function ListingDetailsScreen() {
   // Load block status
   useEffect(() => {
     async function loadBlockStatus() {
+      // Skip block check for OSM listings (community resources)
+      if (isOSMListing(merged.providerId)) {
+        setLoadingBlockStatus(false);
+        return;
+      }
+
       if (!merged.providerId || !user || merged.providerId === user.id) {
         setLoadingBlockStatus(false);
         return;
@@ -523,7 +531,7 @@ export default function ListingDetailsScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.white} />
         </TouchableOpacity>
 
-        {merged.providerId && user && merged.providerId !== user.id && (
+        {merged.providerId && user && merged.providerId !== user.id && !isOSMListing(merged.providerId) && (
           <TouchableOpacity
             style={styles.menuBtn}
             onPress={handleOptionsMenu}
@@ -542,6 +550,7 @@ export default function ListingDetailsScreen() {
           <Text style={styles.title}>{merged.title || "Listing"}</Text>
           <View style={styles.providerRow}>
             {merged.isVerified && <Badge text="Verified" />}
+            {isOSMListing(merged.id) && <Badge text="Community Resource" />}
             {!!merged.providerName && (
               <Text style={styles.providerName}>{merged.providerName}</Text>
             )}
@@ -670,12 +679,68 @@ export default function ListingDetailsScreen() {
                 </View>
               ) : null}
               <Text style={styles.addressText}>
-                {merged.location?.address} {merged.location?.city}{" "}
-                {merged.location?.state} {merged.location?.zip}
+                {(() => {
+                  const { address, city, state, zip } = merged.location || {};
+
+                  // If address is the placeholder text, skip it
+                  const street = address === "Address not available" ? "" : address;
+
+                  // Only show state if it's not the placeholder
+                  const stateText = state === "State" ? "" : state;
+
+                  // Only show zip if it's not the placeholder
+                  const zipText = zip === "00000" ? "" : zip;
+
+                  // Build address parts, filtering out empty values
+                  const parts = [street, city, stateText, zipText].filter(Boolean);
+
+                  // If we have at least city, show it
+                  if (parts.length > 0) {
+                    return parts.join(", ");
+                  }
+
+                  // Fallback if everything is missing
+                  return "Location details available by phone";
+                })()}
               </Text>
             </>
           )}
         </CollapsibleSection>
+
+        {isOSMListing(merged.id) && (merged as any).contact && (
+          <CollapsibleSection title="Contact Information" defaultExpanded>
+            <View style={styles.contactInfoContainer}>
+              {(merged as any).contact.phone && (
+                <View style={styles.contactItem}>
+                  <Ionicons name="call" size={20} color={colors.gold} />
+                  <Text style={styles.contactLabel}>Phone:</Text>
+                  <Text style={styles.contactValue}>{(merged as any).contact.phone}</Text>
+                </View>
+              )}
+              {(merged as any).contact.email && (
+                <View style={styles.contactItem}>
+                  <Ionicons name="mail" size={20} color={colors.gold} />
+                  <Text style={styles.contactLabel}>Email:</Text>
+                  <Text style={styles.contactValue}>{(merged as any).contact.email}</Text>
+                </View>
+              )}
+              {(merged as any).contact.website && (
+                <View style={styles.contactItem}>
+                  <Ionicons name="globe" size={20} color={colors.gold} />
+                  <Text style={styles.contactLabel}>Website:</Text>
+                  <Text style={styles.contactLink}>{(merged as any).contact.website}</Text>
+                </View>
+              )}
+              {(merged as any).contact.hours && (
+                <View style={styles.contactItem}>
+                  <Ionicons name="time" size={20} color={colors.gold} />
+                  <Text style={styles.contactLabel}>Hours:</Text>
+                  <Text style={styles.contactValue}>{(merged as any).contact.hours}</Text>
+                </View>
+              )}
+            </View>
+          </CollapsibleSection>
+        )}
 
         <View style={{ height: 100 }} />
       </ScrollView>
@@ -696,7 +761,7 @@ export default function ListingDetailsScreen() {
             />
           )}
         </TouchableOpacity>
-        {merged.providerId && user && merged.providerId !== user.id && (
+        {merged.providerId && user && merged.providerId !== user.id && !isOSMListing(merged.providerId) && (
           <TouchableOpacity
             style={styles.messageButton}
             onPress={handleMessageProvider}
@@ -709,20 +774,29 @@ export default function ListingDetailsScreen() {
             <Text style={styles.messageButtonText}>Message</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity
-          style={[
-            styles.applyButton,
-            checkingApplication && styles.applyButtonDisabled,
-          ]}
-          onPress={handleApply}
-          disabled={checkingApplication}
-        >
-          {checkingApplication ? (
-            <ActivityIndicator color={colors.white} />
-          ) : (
-            <Text style={styles.applyButtonText}>Apply Now</Text>
-          )}
-        </TouchableOpacity>
+        {!isOSMListing(merged.id) ? (
+          <TouchableOpacity
+            style={[
+              styles.applyButton,
+              checkingApplication && styles.applyButtonDisabled,
+            ]}
+            onPress={handleApply}
+            disabled={checkingApplication}
+          >
+            {checkingApplication ? (
+              <ActivityIndicator color={colors.white} />
+            ) : (
+              <Text style={styles.applyButtonText}>Apply Now</Text>
+            )}
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.osmInfoContainer}>
+            <Ionicons name="information-circle" size={20} color={colors.gold} />
+            <Text style={styles.osmInfoText}>
+              This is a community resource. Please contact the shelter directly using the information above.
+            </Text>
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -876,4 +950,57 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   applyButtonText: { fontSize: 16, fontWeight: "bold", color: colors.black },
+  osmInfoContainer: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.darkGray,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.gold,
+  },
+  osmInfoText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.gray[300],
+  },
+  contactInfoContainer: {
+    gap: spacing.md,
+  },
+  contactItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  contactLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.gray[300],
+    minWidth: 70,
+  },
+  contactValue: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.white,
+  },
+  contactLink: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.gold,
+    textDecorationLine: "underline",
+  },
+  loadingContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: spacing.md,
+  },
+  loadingText: {
+    marginTop: spacing.sm,
+    fontSize: 14,
+    color: colors.gray[400],
+  },
 });
