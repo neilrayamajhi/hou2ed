@@ -57,7 +57,8 @@
       "Bash(find:*)",
       "Bash(supabase db reset:*)",
       "Bash(git commit:*)",
-      "Bash(psql:*)"
+      "Bash(psql:*)",
+      "Bash(rm:*)"
     ],
     "deny": [],
     "ask": []
