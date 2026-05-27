@@ -11,6 +11,7 @@ import {
   Alert,
   ActionSheetIOS,
   Platform,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -117,6 +118,10 @@ export default function ListingDetailsScreen() {
 
   const [dbListing, setDbListing] = useState<any>(null);
   const [loadingDb, setLoadingDb] = useState(false);
+  const [providerProfile, setProviderProfile] = useState<{
+    full_name: string;
+    avatar_url: string | null;
+  } | null>(null);
   const [checkingApplication, setCheckingApplication] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
   const [loadingBlockStatus, setLoadingBlockStatus] = useState(true);
@@ -206,6 +211,22 @@ export default function ListingDetailsScreen() {
       },
     };
   }, [listingFromParams, dbListing, routeListingId]);
+
+  // Fetch provider's name and avatar once we know their ID
+  useEffect(() => {
+    const providerId = merged.providerId;
+    if (!providerId) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name, avatar_url")
+        .eq("id", providerId)
+        .maybeSingle();
+      if (!cancelled && data) setProviderProfile(data);
+    })();
+    return () => { cancelled = true; };
+  }, [merged.providerId]);
 
   // Use the new parsing functions that convert codes to nice labels
   const amenitiesList = parseAmenities(merged.amenities);
@@ -540,12 +561,30 @@ export default function ListingDetailsScreen() {
       >
         <View style={styles.header}>
           <Text style={styles.title}>{merged.title || "Listing"}</Text>
-          <View style={styles.providerRow}>
-            {merged.isVerified && <Badge text="Verified" />}
-            {!!merged.providerName && (
-              <Text style={styles.providerName}>{merged.providerName}</Text>
-            )}
-          </View>
+
+          {/* Provider card — shows avatar + name */}
+          {merged.providerId && (
+            <View style={styles.providerCard}>
+              {providerProfile?.avatar_url ? (
+                <Image
+                  source={{ uri: providerProfile.avatar_url }}
+                  style={styles.avatar}
+                />
+              ) : (
+                <View style={styles.avatarFallback}>
+                  <Text style={styles.avatarInitial}>
+                    {(providerProfile?.full_name || merged.providerName || "?")[0].toUpperCase()}
+                  </Text>
+                </View>
+              )}
+              <View style={styles.providerInfo}>
+                <Text style={styles.providerName}>
+                  {providerProfile?.full_name || merged.providerName || "Provider"}
+                </Text>
+                {merged.isVerified && <Badge text="Verified" />}
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Always render the carousel; it shows a nice placeholder when empty */}
@@ -766,13 +805,40 @@ const styles = StyleSheet.create({
     color: colors.gold,
     marginBottom: spacing.xs,
   },
-  providerRow: {
+  providerCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.darkGray,
+  },
+  avatarFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.darkGray,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  avatarInitial: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.gold,
+  },
+  providerInfo: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
     flexWrap: "wrap",
   },
-  providerName: { fontSize: 16, color: colors.white },
+  providerName: { fontSize: 15, fontWeight: "600", color: colors.white },
   section: {
     marginHorizontal: spacing.lg,
     marginTop: spacing.lg,
