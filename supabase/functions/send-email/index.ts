@@ -5,11 +5,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Get SendGrid API key from environment variable
-const SENDGRID_API_KEY = Deno.env.get('SENDGRID_API_KEY')
+// Get Resend API key from environment variable
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 
-if (!SENDGRID_API_KEY) {
-  throw new Error('SENDGRID_API_KEY environment variable is required')
+if (!RESEND_API_KEY) {
+  throw new Error('RESEND_API_KEY environment variable is required')
 }
 
 serve(async (req) => {
@@ -52,35 +52,29 @@ serve(async (req) => {
       `
     }
 
-    // Send via SendGrid API
-    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+    // Send via Resend API
+    const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${SENDGRID_API_KEY}`,
+        'Authorization': `Bearer ${RESEND_API_KEY}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        personalizations: [{ to: [{ email: to }] }],
-        from: {
-          email: 'hou2eddirectory@gmail.com',
-          name: 'Hou2ed'
-        },
+        from: 'Hou2ed <onboarding@resend.dev>',
+        to: [to],
         subject: subject,
-        content: [{
-          type: 'text/html',
-          value: html
-        }]
+        html: html
       })
     })
 
-    if (response.status === 202) {
+    if (response.ok) {
       return new Response(
         JSON.stringify({ success: true, message: 'Email sent successfully' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     } else {
       const error = await response.text()
-      console.error('SendGrid error:', error)
+      console.error('Resend error:', error)
       return new Response(
         JSON.stringify({ success: false, error: 'Failed to send email' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

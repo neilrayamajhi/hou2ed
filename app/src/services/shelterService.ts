@@ -228,6 +228,101 @@ function buildDescription(
   return `${description} Please call ahead to check current bed availability, confirm eligibility requirements, and schedule an intake appointment.`;
 }
 
+/**
+ * Fetch with timeout wrapper
+ * Returns a fetch promise that will reject after timeoutMs
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if ((error as Error).name === "AbortError") {
+      throw new Error(`Request timeout after ${timeoutMs}ms`);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Custom error for non-retryable client errors
+ */
+class ClientError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ClientError";
+  }
+}
+
+/**
+ * Retry a fetch request with exponential backoff
+ * Only retries server errors (5xx), not client errors (4xx)
+ */
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries: number = 2,
+  timeoutMs: number = 30000,
+): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(
+        `🌐 OSM API attempt ${attempt + 1}/${maxRetries + 1} (timeout: ${timeoutMs}ms)`,
+      );
+      const response = await fetchWithTimeout(url, options, timeoutMs);
+
+      if (!response.ok) {
+        // For 5xx errors (server errors), retry. For 4xx (client errors), don't retry
+        if (response.status >= 500) {
+          throw new Error(`HTTP ${response.status}: Server error`);
+        } else {
+          // Don't retry 4xx errors - throw ClientError to skip retries
+          throw new ClientError(`HTTP ${response.status}: Client error`);
+        }
+      }
+
+      console.log(`✅ OSM API request succeeded on attempt ${attempt + 1}`);
+      return response;
+    } catch (error) {
+      lastError = error as Error;
+      console.warn(
+        `⚠️ OSM API attempt ${attempt + 1} failed:`,
+        lastError.message,
+      );
+
+      // Don't retry ClientError (4xx) or if this is the last attempt
+      if (error instanceof ClientError) {
+        console.log(`   Client error - not retrying`);
+        throw error;
+      }
+
+      if (attempt < maxRetries) {
+        // Exponential backoff: 1s, 2s, 4s...
+        const delayMs = 1000 * Math.pow(2, attempt);
+        console.log(`   Retrying in ${delayMs}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+
+  // All retries failed
+  throw lastError || new Error("Unknown error during fetch");
+}
+
 export async function fetchRealShelters(
   latitude: number,
   longitude: number,
@@ -257,17 +352,19 @@ export async function fetchRealShelters(
     // Use public Overpass API endpoint
     const url = "https://overpass-api.de/api/interpreter";
 
-    const response = await fetch(url, {
-      method: "POST",
-      body: `data=${encodeURIComponent(query)}`,
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+    // Use retry logic with timeout to handle network issues during signup
+    const response = await fetchWithRetry(
+      url,
+      {
+        method: "POST",
+        body: `data=${encodeURIComponent(query)}`,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
       },
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+      2, // Max 2 retries (3 total attempts)
+      30000, // 30 second timeout per attempt
+    );
 
     const data = await response.json();
 
