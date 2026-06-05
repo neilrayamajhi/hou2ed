@@ -19,12 +19,13 @@ import {
   ActivityIndicator,
   Linking,
   Alert,
+  Modal,
 } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { MapView, Marker, PROVIDER_GOOGLE } from "../../components/MapView";
+import { MapView, Marker } from "../../components/MapView";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { theme } from "../../theme";
@@ -41,6 +42,7 @@ import {
 } from "../../services/marketplace.service";
 import { usePerformance } from "../../utils/perf";
 import type { RootStackNavigationProp } from "../../navigation/types";
+import type { HousingTypeFilter } from "../../types/filters";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
@@ -74,6 +76,52 @@ const MAP_DARK_STYLE = [
     elementType: "geometry",
     stylers: [{ color: "#000000" }],
   },
+];
+
+const HOUSING_TYPE_TO_LISTING_TYPE: Record<keyof HousingTypeFilter, string> = {
+  emergencyShelter:        "emergency_shelter",
+  transitionalHousing:     "transitional_housing",
+  rapidRehousing:          "rapid_rehousing",
+  permanentSupportive:     "permanent_supportive",
+  soberLiving:             "sober_living",
+  halfwayHouse:            "halfway_house",
+  groupHome:               "group_home",
+  independentLiving:       "independent_living",
+  assistedLiving:          "assisted_living",
+  nursingHome:             "nursing_home",
+  veteransHousing:         "veterans_housing",
+  youthHousing:            "youth_housing",
+  domesticViolenceShelter: "domestic_violence_shelter",
+};
+
+interface HousingTypeChipConfig {
+  key: keyof HousingTypeFilter;
+  label: string;
+  icon: string;
+}
+
+const HOUSING_TYPE_OPTIONS: HousingTypeChipConfig[] = [
+  { key: "emergencyShelter",        label: "Emergency Shelter",    icon: "shield-outline" },
+  { key: "transitionalHousing",     label: "Transitional Housing", icon: "home-outline" },
+  { key: "rapidRehousing",          label: "Rapid Rehousing",      icon: "flash-outline" },
+  { key: "permanentSupportive",     label: "Permanent Supportive", icon: "heart-outline" },
+  { key: "soberLiving",             label: "Sober Living",         icon: "leaf-outline" },
+  { key: "halfwayHouse",            label: "Halfway House",        icon: "arrow-forward-outline" },
+  { key: "groupHome",               label: "Group Home",           icon: "people-outline" },
+  { key: "independentLiving",       label: "Independent Living",   icon: "person-outline" },
+  { key: "assistedLiving",          label: "Assisted Living",      icon: "medkit-outline" },
+  { key: "nursingHome",             label: "Nursing Home",         icon: "medical-outline" },
+  { key: "veteransHousing",         label: "Veterans Housing",     icon: "ribbon-outline" },
+  { key: "youthHousing",            label: "Youth Housing",        icon: "school-outline" },
+  { key: "domesticViolenceShelter", label: "DV Shelter",           icon: "hand-left-outline" },
+];
+
+const QUICK_FILTER_OPTIONS = [
+  { key: "immediate" as const, label: "Available Now", icon: "flash" },
+  { key: "free"      as const, label: "Free",          icon: "pricetag" },
+  { key: "veterans"  as const, label: "Veterans",      icon: "ribbon" },
+  { key: "families"  as const, label: "Families",      icon: "people" },
+  { key: "nearMe"    as const, label: "Near Me",       icon: "navigate" },
 ];
 
 // Memoized marker component defined OUTSIDE HomeScreen to prevent recreation
@@ -196,11 +244,22 @@ export default function HomeScreen() {
   const toggleQuickFilter = useFilterStore((state) => state.toggleQuickFilter);
   const searchQuery = useFilterStore((state) => state.searchQuery);
   const setSearchQuery = useFilterStore((state) => state.setSearchQuery);
+  const housingType = useFilterStore(
+    (state) => state.housingType as HousingTypeFilter,
+  );
+  const setNestedFilter = useFilterStore((state) => state.setNestedFilter);
 
   // Local state
   const [listings, setListings] = useState<MarketplaceListing[]>([]);
   const [activeIndex, setActiveIndex] = useState<number | null>(null); // null = no marker tapped yet
   const [showFilters, setShowFilters] = useState(false);
+  const [showFilterSheet, setShowFilterSheet] = useState(false);
+  const [draftHousingType, setDraftHousingType] = useState<HousingTypeFilter>(
+    () => housingType,
+  );
+  const [draftQuickFilters, setDraftQuickFilters] = useState(
+    () => quickFilters,
+  );
   const [showListView, setShowListView] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
   const [isRealData, setIsRealData] = useState(false);
@@ -352,8 +411,19 @@ export default function HomeScreen() {
 
   // Memoize filtered listings to prevent unnecessary re-renders
   const filteredListings = useMemo(() => {
-    return filterMarketplaceListingsByQuick(listings, quickFilters);
-  }, [listings, quickFilters]);
+    const housingTypeSnakeCase: Record<string, boolean> = {};
+    (
+      Object.keys(HOUSING_TYPE_TO_LISTING_TYPE) as Array<keyof HousingTypeFilter>
+    ).forEach((key) => {
+      housingTypeSnakeCase[HOUSING_TYPE_TO_LISTING_TYPE[key]] =
+        housingType[key] ?? false;
+    });
+    return filterMarketplaceListingsByQuick(
+      listings,
+      quickFilters,
+      housingTypeSnakeCase,
+    );
+  }, [listings, quickFilters, housingType]);
 
   // Validate and reset activeIndex when filtered listings change
   useEffect(() => {
@@ -430,6 +500,54 @@ export default function HomeScreen() {
   const toggleView = () => {
     setShowListView(!showListView);
   };
+
+  const activeFilterCount = useMemo(() => {
+    const housingCount = Object.values(housingType).filter(Boolean).length;
+    const quickCount = Object.values(quickFilters).filter(Boolean).length;
+    return housingCount + quickCount;
+  }, [housingType, quickFilters]);
+
+  const openFilterSheet = useCallback(() => {
+    setDraftHousingType({ ...housingType });
+    setDraftQuickFilters({ ...quickFilters });
+    setShowFilterSheet(true);
+  }, [housingType, quickFilters]);
+
+  const applyFilters = useCallback(() => {
+    (Object.keys(draftHousingType) as Array<keyof HousingTypeFilter>).forEach(
+      (key) => {
+        setNestedFilter("housingType", key, draftHousingType[key]);
+      },
+    );
+    (
+      Object.keys(draftQuickFilters) as Array<keyof typeof draftQuickFilters>
+    ).forEach((key) => {
+      if (draftQuickFilters[key] !== quickFilters[key]) {
+        toggleQuickFilter(key);
+      }
+    });
+    setShowFilterSheet(false);
+  }, [
+    draftHousingType,
+    draftQuickFilters,
+    quickFilters,
+    setNestedFilter,
+    toggleQuickFilter,
+  ]);
+
+  const clearDraftFilters = useCallback(() => {
+    const clearedHousing = Object.fromEntries(
+      Object.keys(draftHousingType).map((k) => [k, false]),
+    ) as unknown as HousingTypeFilter;
+    setDraftHousingType(clearedHousing);
+    setDraftQuickFilters({
+      immediate: false,
+      free: false,
+      veterans: false,
+      families: false,
+      nearMe: false,
+    });
+  }, [draftHousingType]);
 
   // Center map on user location
   const centerOnUserLocation = useCallback(async () => {
@@ -580,7 +698,6 @@ export default function HomeScreen() {
           <MapView
             ref={mapRef}
             style={styles.map}
-            provider={PROVIDER_GOOGLE}
             customMapStyle={MAP_DARK_STYLE}
             initialRegion={mapRegion}
             showsUserLocation
@@ -607,6 +724,35 @@ export default function HomeScreen() {
               <ActivityIndicator size="small" color="#D4AF37" />
             ) : (
               <Ionicons name="navigate" size={24} color="#D4AF37" />
+            )}
+          </TouchableOpacity>
+
+          {/* Floating Filter Button */}
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              activeFilterCount > 0 && styles.filterButtonActive,
+            ]}
+            onPress={openFilterSheet}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="options-outline"
+              size={20}
+              color={activeFilterCount > 0 ? "#000" : "#D4AF37"}
+            />
+            <Text
+              style={[
+                styles.filterButtonText,
+                activeFilterCount > 0 && styles.filterButtonTextActive,
+              ]}
+            >
+              Filter
+            </Text>
+            {activeFilterCount > 0 && (
+              <View style={styles.filterBadge}>
+                <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+              </View>
             )}
           </TouchableOpacity>
 
@@ -769,13 +915,13 @@ export default function HomeScreen() {
                     {filteredListings[activeIndex].name}
                   </Text>
                   {filteredListings[activeIndex].source === "hou2ed" ? (
-                    <View style={styles.partnerBadge}>
+                    <View style={styles.miniPartnerBadge}>
                       <Ionicons
                         name="shield-checkmark"
                         size={12}
                         color="#10B981"
                       />
-                      <Text style={styles.partnerBadgeText}>Partner</Text>
+                      <Text style={styles.miniPartnerBadgeText}>Partner</Text>
                     </View>
                   ) : (
                     <View style={styles.externalBadge}>
@@ -831,6 +977,114 @@ export default function HomeScreen() {
         visible={showFilters}
         onClose={() => setShowFilters(false)}
       />
+
+      {/* Housing Type Filter Bottom Sheet */}
+      <Modal
+        visible={showFilterSheet}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowFilterSheet(false)}
+      >
+        <TouchableOpacity
+          style={styles.sheetBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowFilterSheet(false)}
+        />
+        <View style={styles.sheetContainer}>
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>Filter Listings</Text>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.sheetScroll}
+          >
+            <Text style={styles.sheetSectionLabel}>Housing Type</Text>
+            {HOUSING_TYPE_OPTIONS.map((option) => (
+              <TouchableOpacity
+                key={option.key}
+                style={styles.sheetRow}
+                onPress={() =>
+                  setDraftHousingType((prev) => ({
+                    ...prev,
+                    [option.key]: !prev[option.key],
+                  }))
+                }
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={option.icon as any}
+                  size={20}
+                  color="#D4AF37"
+                  style={styles.sheetRowIcon}
+                />
+                <Text style={styles.sheetRowLabel}>{option.label}</Text>
+                <View
+                  style={[
+                    styles.checkbox,
+                    draftHousingType[option.key] && styles.checkboxChecked,
+                  ]}
+                >
+                  {draftHousingType[option.key] && (
+                    <Ionicons name="checkmark" size={14} color="#000" />
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))}
+
+            <Text style={[styles.sheetSectionLabel, { marginTop: 20 }]}>
+              Quick Filters
+            </Text>
+            {QUICK_FILTER_OPTIONS.map((option) => (
+              <TouchableOpacity
+                key={option.key}
+                style={styles.sheetRow}
+                onPress={() =>
+                  setDraftQuickFilters((prev) => ({
+                    ...prev,
+                    [option.key]: !prev[option.key],
+                  }))
+                }
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={option.icon as any}
+                  size={20}
+                  color="#D4AF37"
+                  style={styles.sheetRowIcon}
+                />
+                <Text style={styles.sheetRowLabel}>{option.label}</Text>
+                <View
+                  style={[
+                    styles.checkbox,
+                    draftQuickFilters[option.key] && styles.checkboxChecked,
+                  ]}
+                >
+                  {draftQuickFilters[option.key] && (
+                    <Ionicons name="checkmark" size={14} color="#000" />
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <View style={styles.sheetFooter}>
+            <TouchableOpacity
+              style={styles.clearButton}
+              onPress={clearDraftFilters}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.clearButtonText}>Clear All</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.applyButton}
+              onPress={applyFilters}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.applyButtonText}>Apply</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1261,7 +1515,7 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     flex: 1,
   },
-  partnerBadge: {
+  miniPartnerBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
@@ -1272,7 +1526,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#10B981",
   },
-  partnerBadgeText: {
+  miniPartnerBadgeText: {
     fontSize: 10,
     color: "#10B981",
     fontWeight: "600",
@@ -1326,5 +1580,147 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+  filterButton: {
+    position: "absolute",
+    bottom: 100,
+    right: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#1a1a1a",
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#2a2a2a",
+    zIndex: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 6,
+  },
+  filterButtonActive: {
+    backgroundColor: "#D4AF37",
+    borderColor: "#D4AF37",
+  },
+  filterButtonText: {
+    color: "#D4AF37",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  filterButtonTextActive: {
+    color: "#000",
+  },
+  filterBadge: {
+    backgroundColor: "#000",
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterBadgeText: {
+    color: "#D4AF37",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  sheetContainer: {
+    backgroundColor: "#1a1a1a",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "75%",
+    paddingBottom: 32,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: "#444",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  sheetTitle: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "700",
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  sheetScroll: {
+    paddingHorizontal: 20,
+  },
+  sheetSectionLabel: {
+    color: "#8a8a8a",
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  sheetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#2a2a2a",
+  },
+  sheetRowIcon: {
+    marginRight: 12,
+  },
+  sheetRowLabel: {
+    flex: 1,
+    color: "#FFFFFF",
+    fontSize: 16,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#444",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxChecked: {
+    backgroundColor: "#D4AF37",
+    borderColor: "#D4AF37",
+  },
+  sheetFooter: {
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  clearButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#444",
+    alignItems: "center",
+  },
+  clearButtonText: {
+    color: "#8a8a8a",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  applyButton: {
+    flex: 2,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: "#D4AF37",
+    alignItems: "center",
+  },
+  applyButtonText: {
+    color: "#000",
+    fontSize: 16,
+    fontWeight: "700",
   },
 });

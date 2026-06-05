@@ -598,6 +598,7 @@ export function filterMarketplaceListingsByQuick<
     price: { isFree: boolean };
     features: { acceptsVeterans: boolean; acceptsFamilies: boolean };
     distance?: number;
+    type?: string;
   },
 >(
   listings: T[],
@@ -608,43 +609,52 @@ export function filterMarketplaceListingsByQuick<
     families: boolean;
     nearMe: boolean;
   },
+  housingTypeFilter?: Partial<Record<string, boolean>>,
 ): T[] {
   // Guard against undefined inputs
   if (!listings) return [];
   if (!quickFilters) return listings;
 
   // If no filters are active, return all listings
-  const activeFilters = Object.values(quickFilters).some((v) => v);
-  if (!activeFilters) {
-    console.log("📝 No active filters, returning all listings");
+  const activeQuickFilters = Object.values(quickFilters).some((v) => v);
+  const activeHousingTypes = housingTypeFilter
+    ? Object.values(housingTypeFilter).some((v) => v)
+    : false;
+  if (!activeQuickFilters && !activeHousingTypes) {
     return listings;
   }
 
   let filtered = [...listings];
 
   if (quickFilters.immediate) {
-    // Check if beds are available today
     filtered = filtered.filter((l) => l.bedsAvailable > 0);
   }
 
   if (quickFilters.free) {
-    // Check if cost is free
     filtered = filtered.filter((l) => l.price?.isFree === true);
   }
 
   if (quickFilters.veterans) {
-    // Check if accepts veterans
     filtered = filtered.filter((l) => l.features?.acceptsVeterans === true);
   }
 
   if (quickFilters.families) {
-    // Check if accepts families
     filtered = filtered.filter((l) => l.features?.acceptsFamilies === true);
   }
 
   if (quickFilters.nearMe) {
-    // Filter by distance
     filtered = filtered.filter((l) => (l.distance || 0) < 2);
+  }
+
+  if (housingTypeFilter) {
+    const selectedTypes = Object.entries(housingTypeFilter)
+      .filter(([, active]) => active)
+      .map(([typeValue]) => typeValue);
+    if (selectedTypes.length > 0) {
+      filtered = filtered.filter(
+        (l) => l.type !== undefined && selectedTypes.includes(l.type),
+      );
+    }
   }
 
   return filtered;

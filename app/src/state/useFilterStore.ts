@@ -10,7 +10,21 @@ import {
 
 // Default filter values (match EXACTLY what ListingWizard collects)
 const createDefaultFilters = (): FilterState => ({
-  housingType: {} as any,
+  housingType: {
+    emergencyShelter:        false,
+    transitionalHousing:     false,
+    rapidRehousing:          false,
+    permanentSupportive:     false,
+    soberLiving:             false,
+    halfwayHouse:            false,
+    groupHome:               false,
+    independentLiving:       false,
+    assistedLiving:          false,
+    nursingHome:             false,
+    veteransHousing:         false,
+    youthHousing:            false,
+    domesticViolenceShelter: false,
+  },
   unitBedType: {} as any,
   amenities: {
     wifi: false,

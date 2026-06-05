@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { View, Text, TouchableOpacity, SafeAreaView, StyleSheet } from "react-native";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
 import AddressAutocompleteClean, { type AddressData } from "../../components/forms/AddressAutocompleteClean";
-import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import MapView, { Marker } from "react-native-maps";
 import { useNavigation } from "@react-navigation/native";
 import type { RootStackNavigationProp } from "../../navigation/types";
 
@@ -42,7 +42,6 @@ export default function AddressPicker() {
               }}
             >
               <MapView
-                provider={PROVIDER_GOOGLE}
                 style={{ height: 220, width: "100%" }}
                 initialRegion={{
                   latitude: selected.latitude,

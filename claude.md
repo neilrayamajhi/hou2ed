@@ -1,6 +1,6 @@
 ## Implementation Best Practices
 
-ALSO PLEASE UNDERSTAND IM A CODING NEWBIE TRYING TO LEARN! Teach me methodically to someone who knows very little.
+ALSO PLEASE UNDERSTAND IM A CODING NEWBIE TRYING TO LEARN! Teach me methodically to someone who knows very little. Explain what the code does step by step, and aid my fundamental understanding of how each component works to improve my computational reasoning.
 
 never ever ask me to appy a supabase file, always do it yourself using supabase cli
 ### 0 — Purpose  

@@ -552,15 +552,22 @@ export default function ListingDetailsScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.white} />
         </TouchableOpacity>
 
-        {merged.providerId && user && merged.providerId !== user.id && !isOSMListing(merged.providerId) && (
-          <TouchableOpacity
-            style={styles.menuBtn}
-            onPress={handleOptionsMenu}
-            disabled={loadingBlockStatus}
-          >
-            <Ionicons name="ellipsis-vertical" size={24} color={colors.white} />
-          </TouchableOpacity>
-        )}
+        {merged.providerId &&
+          user &&
+          merged.providerId !== user.id &&
+          !isOSMListing(merged.providerId) && (
+            <TouchableOpacity
+              style={styles.menuBtn}
+              onPress={handleOptionsMenu}
+              disabled={loadingBlockStatus}
+            >
+              <Ionicons
+                name="ellipsis-vertical"
+                size={24}
+                color={colors.white}
+              />
+            </TouchableOpacity>
+          )}
       </View>
 
       <ScrollView
@@ -722,7 +729,8 @@ export default function ListingDetailsScreen() {
                   const { address, city, state, zip } = merged.location || {};
 
                   // If address is the placeholder text, skip it
-                  const street = address === "Address not available" ? "" : address;
+                  const street =
+                    address === "Address not available" ? "" : address;
 
                   // Only show state if it's not the placeholder
                   const stateText = state === "State" ? "" : state;
@@ -731,7 +739,9 @@ export default function ListingDetailsScreen() {
                   const zipText = zip === "00000" ? "" : zip;
 
                   // Build address parts, filtering out empty values
-                  const parts = [street, city, stateText, zipText].filter(Boolean);
+                  const parts = [street, city, stateText, zipText].filter(
+                    Boolean,
+                  );
 
                   // If we have at least city, show it
                   if (parts.length > 0) {
@@ -753,28 +763,36 @@ export default function ListingDetailsScreen() {
                 <View style={styles.contactItem}>
                   <Ionicons name="call" size={20} color={colors.gold} />
                   <Text style={styles.contactLabel}>Phone:</Text>
-                  <Text style={styles.contactValue}>{(merged as any).contact.phone}</Text>
+                  <Text style={styles.contactValue}>
+                    {(merged as any).contact.phone}
+                  </Text>
                 </View>
               )}
               {(merged as any).contact.email && (
                 <View style={styles.contactItem}>
                   <Ionicons name="mail" size={20} color={colors.gold} />
                   <Text style={styles.contactLabel}>Email:</Text>
-                  <Text style={styles.contactValue}>{(merged as any).contact.email}</Text>
+                  <Text style={styles.contactValue}>
+                    {(merged as any).contact.email}
+                  </Text>
                 </View>
               )}
               {(merged as any).contact.website && (
                 <View style={styles.contactItem}>
                   <Ionicons name="globe" size={20} color={colors.gold} />
                   <Text style={styles.contactLabel}>Website:</Text>
-                  <Text style={styles.contactLink}>{(merged as any).contact.website}</Text>
+                  <Text style={styles.contactLink}>
+                    {(merged as any).contact.website}
+                  </Text>
                 </View>
               )}
               {(merged as any).contact.hours && (
                 <View style={styles.contactItem}>
                   <Ionicons name="time" size={20} color={colors.gold} />
                   <Text style={styles.contactLabel}>Hours:</Text>
-                  <Text style={styles.contactValue}>{(merged as any).contact.hours}</Text>
+                  <Text style={styles.contactValue}>
+                    {(merged as any).contact.hours}
+                  </Text>
                 </View>
               )}
             </View>
@@ -800,19 +818,22 @@ export default function ListingDetailsScreen() {
             />
           )}
         </TouchableOpacity>
-        {merged.providerId && user && merged.providerId !== user.id && !isOSMListing(merged.providerId) && (
-          <TouchableOpacity
-            style={styles.messageButton}
-            onPress={handleMessageProvider}
-          >
-            <Ionicons
-              name="chatbubble-outline"
-              size={20}
-              color={colors.white}
-            />
-            <Text style={styles.messageButtonText}>Message</Text>
-          </TouchableOpacity>
-        )}
+        {merged.providerId &&
+          user &&
+          merged.providerId !== user.id &&
+          !isOSMListing(merged.providerId) && (
+            <TouchableOpacity
+              style={styles.messageButton}
+              onPress={handleMessageProvider}
+            >
+              <Ionicons
+                name="chatbubble-outline"
+                size={20}
+                color={colors.white}
+              />
+              <Text style={styles.messageButtonText}>Message</Text>
+            </TouchableOpacity>
+          )}
         {!isOSMListing(merged.id) ? (
           <TouchableOpacity
             style={[
@@ -832,7 +853,8 @@ export default function ListingDetailsScreen() {
           <View style={styles.osmInfoContainer}>
             <Ionicons name="information-circle" size={20} color={colors.gold} />
             <Text style={styles.osmInfoText}>
-              This is a community resource. Please contact the shelter directly using the information above.
+              This is a community resource. Please contact the shelter directly
+              using the information above.
             </Text>
           </View>
         )}

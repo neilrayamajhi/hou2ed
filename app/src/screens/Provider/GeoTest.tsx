@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, SafeAreaView, StyleSheet, KeyboardAvoidingView, Platform, Alert } from "react-native";
-import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import MapView, { Marker } from "react-native-maps";
 import { colors, spacing, typography, radius } from "../../theme/tokens";
 import AddressAutocompleteClean, { type AddressData } from "../../components/forms/AddressAutocompleteClean";
 import { geocodeAddress } from "../../lib/geocoding";
@@ -94,7 +94,6 @@ export default function GeoTest() {
         {mapCoords && (
           <View style={{ marginTop: spacing.lg, borderRadius: radius.md, overflow: 'hidden', borderWidth: 1, borderColor: colors.gray[800] }}>
             <MapView
-              provider={PROVIDER_GOOGLE}
               style={{ height: 220, width: '100%' }}
               initialRegion={{
                 latitude: mapCoords.lat,

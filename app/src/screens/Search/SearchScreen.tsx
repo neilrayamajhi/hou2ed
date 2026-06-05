@@ -11,7 +11,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { MapView, Marker, PROVIDER_GOOGLE } from "../../components/MapView";
+import { MapView, Marker } from "../../components/MapView";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { theme } from "../../theme";
@@ -406,7 +406,6 @@ export default function SearchScreen() {
         <View style={styles.mapContainer}>
           <MapView
             style={styles.map}
-            provider={PROVIDER_GOOGLE}
             customMapStyle={MAP_DARK_STYLE}
             initialRegion={{
               latitude: 37.7749,

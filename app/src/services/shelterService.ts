@@ -16,6 +16,8 @@ import {
   ShelterWebsiteUrls,
 } from "./shelterWebsiteMapping";
 import { findShelterCity } from "./shelterCityMapping";
+import { findShelterEnrichment } from "./shelterEnrichmentMapping";
+import { fetchWikipediaEnrichment } from "./wikipediaEnrichment";
 
 interface OSMShelter {
   id: number;
@@ -373,7 +375,7 @@ export async function fetchRealShelters(
     );
 
     // Transform OSM data to our format
-    const shelters = data.elements
+    const validElements = data.elements
       .filter((element: any) => {
         // Only include named places
         if (!element.tags?.name) {
@@ -525,8 +527,13 @@ export async function fetchRealShelters(
 
         console.log(`✅ Accepted: ${tags.name} - Verified homeless shelter`);
         return true;
-      })
-      .map((element: OSMShelter): any | null => {
+      });
+
+    // Promise.all runs every Wikipedia lookup in parallel — all at once, not one by one.
+    // Each element's callback is async so it can await the Wikipedia fetch.
+    const shelters = (
+      await Promise.all(
+        validElements.map(async (element: OSMShelter): Promise<any | null> => {
         const tags = element.tags;
 
         // Extract coordinates - handle both nodes (lat/lon) and ways (center.lat/center.lon)
@@ -686,29 +693,54 @@ export async function fetchRealShelters(
         }
 
         // Extract amenities from tags
-        const amenities: string[] = [];
-        if (tags.wheelchair === "yes") amenities.push("Wheelchair Accessible");
+        const osmAmenities: string[] = [];
+        if (tags.wheelchair === "yes") osmAmenities.push("Wheelchair Accessible");
         if (tags["service:mental_health"])
-          amenities.push("Mental Health Support");
-        if (tags["service:addiction"]) amenities.push("Addiction Services");
-        if (tags["service:domestic_violence"]) amenities.push("DV Support");
+          osmAmenities.push("Mental Health Support");
+        if (tags["service:addiction"]) osmAmenities.push("Addiction Services");
+        if (tags["service:domestic_violence"]) osmAmenities.push("DV Support");
+
+        // Look up manually-curated enrichment data for this shelter.
+        // If found, it fills in gaps that OSM doesn't cover (address, phone,
+        // amenities, services, rules, eligibility, etc.).
+        const enrichment = findShelterEnrichment(name, tags.operator);
+        if (enrichment) {
+          console.log(`   📋 Enrichment applied for: ${name}`);
+        }
+
+        // Merge OSM address fields with enrichment — OSM wins per-field if truthy
+        const osmStreet = `${tags["addr:housenumber"] || ""} ${tags["addr:street"] || ""}`.trim();
+        const mergedStreet = osmStreet || enrichment?.address?.street || "Address not available";
+        const mergedCity = city !== "Los Angeles" ? city : (enrichment?.address?.city ?? city);
+        const mergedState = tags["addr:state"] || enrichment?.address?.state || "State";
+        const mergedZip = tags["addr:postcode"] || enrichment?.address?.zip || "00000";
+
+        // OSM amenity flags win when present; enrichment fills when OSM found nothing
+        const amenities = osmAmenities.length > 0 ? osmAmenities : (enrichment?.amenities ?? osmAmenities);
+
+        // Fetch Wikipedia data using the OSM `wikipedia` tag (e.g. "en:Union Rescue Mission").
+        // If OSM has no wikipedia tag, this returns null immediately without a network call.
+        // Wikipedia fills in description and photo — the last resort after OSM and manual enrichment.
+        const wiki = await fetchWikipediaEnrichment(tags.wikipedia);
+        if (wiki) {
+          console.log(`   📖 Wikipedia enriched: ${name}`);
+        }
 
         return {
           id: `osm-${element.id}`,
           provider_id: `osm-${element.id}`,
           name,
           type,
-          description,
+          description: enrichment?.description ?? wiki?.description ?? description,
           coordinates: {
             latitude: shelterLat!,
             longitude: shelterLon!,
           },
           address: {
-            street:
-              `${tags["addr:housenumber"] || ""} ${tags["addr:street"] || "Address not available"}`.trim(),
-            city,
-            state: tags["addr:state"] || "State",
-            zipCode: tags["addr:postcode"] || "00000",
+            street: mergedStreet,
+            city: mergedCity,
+            state: mergedState,
+            zipCode: mergedZip,
           },
           distance:
             distance !== undefined ? Math.round(distance * 10) / 10 : undefined,
@@ -720,8 +752,11 @@ export async function fetchRealShelters(
           },
           availability: "unknown", // OSM doesn't have real-time availability
           bedsAvailable: 0,
-          totalBeds: parseInt(tags.capacity || tags.beds || "0"),
+          totalBeds: enrichment?.capacity ?? parseInt(tags.capacity || tags.beds || "0"),
           amenities,
+          services: enrichment?.services ?? [],
+          rules: enrichment?.rules ?? [],
+          eligibility: enrichment?.eligibility ?? [],
           requirements: [],
           features: {
             acceptsFamilies:
@@ -737,8 +772,8 @@ export async function fetchRealShelters(
             lgbtqFriendly: false,
           },
           contact: {
-            phone,
-            email,
+            phone: phone ?? enrichment?.contact?.phone,
+            email: email ?? enrichment?.contact?.email,
             website: websiteUrls ? websiteUrls.primary : website, // Use corrected URL for backward compatibility
             websiteUrls, // New field with primary and fallback URLs
             hours: tags.opening_hours || "Contact for hours",
@@ -749,7 +784,8 @@ export async function fetchRealShelters(
           provider: tags.operator || tags.name || "Community Resource",
           verified: false, // Not a Hou2ed partner
           source: "osm" as const,
-          coverImage,
+          coverImage: enrichment?.photos?.[0] ?? wiki?.photo ?? coverImage,
+          images: enrichment?.photos ?? (wiki?.photo ? [wiki.photo] : (coverImage ? [coverImage] : [])),
           externalMetadata: {
             placeId: `osm-${element.id}`,
             dataProvider: "OpenStreetMap",
@@ -758,7 +794,9 @@ export async function fetchRealShelters(
             externalUrl: website || "",
           },
         };
-      })
+        }),
+      )
+    )
       .filter((shelter: any): shelter is any => shelter !== null) // Remove null entries from broken URLs
       .sort((a: any, b: any) => a.distance - b.distance);
 
