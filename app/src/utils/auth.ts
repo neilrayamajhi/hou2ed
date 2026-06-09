@@ -8,14 +8,18 @@ import { supabase } from "../lib/supabase";
 export const transformUserData = async (user: User) => {
   console.log("Transforming user data. Raw metadata:", user.user_metadata);
 
-  // Fetch profile data including avatar_url
+  // Fetch profile data including avatar_url and role.
+  // The profiles table is the source of truth for role (RLS policies check
+  // profiles.role), so we read it from there rather than auth user_metadata.
   let avatar_url: string | undefined;
+  let role: "seeker" | "provider" | "admin" =
+    (user.user_metadata?.role as "seeker" | "provider" | "admin") || "seeker";
   try {
     console.log("[transformUserData] Fetching profile for user:", user.id);
     const { data: profile, error } = await Promise.race([
       supabase
         .from("profiles")
-        .select("avatar_url")
+        .select("avatar_url, role")
         .eq("id", user.id)
         .maybeSingle(),
       // Add a timeout to prevent hanging
@@ -29,16 +33,17 @@ export const transformUserData = async (user: User) => {
 
     if (error) {
       console.warn(
-        "[transformUserData] Failed to fetch avatar_url:",
+        "[transformUserData] Failed to fetch profile:",
         error.message,
       );
     } else {
       avatar_url = profile?.avatar_url || undefined;
-      console.log("[transformUserData] Fetched avatar_url:", avatar_url);
+      role = (profile?.role as "seeker" | "provider" | "admin") || role;
+      console.log("[transformUserData] Fetched profile:", { avatar_url, role });
     }
   } catch (error) {
-    console.warn("[transformUserData] Error fetching avatar_url:", error);
-    // Don't fail the entire login process if avatar fetch fails
+    console.warn("[transformUserData] Error fetching profile:", error);
+    // Don't fail the entire login process if profile fetch fails
   }
 
   const transformed = {
@@ -46,7 +51,7 @@ export const transformUserData = async (user: User) => {
     email: user.email || "",
     fullName: user.user_metadata?.full_name || "",
     username: user.user_metadata?.username || "",
-    role: (user.user_metadata?.role as "seeker" | "provider") || "seeker",
+    role,
     isVerified: user.email_confirmed_at !== null,
     createdAt: user.created_at || new Date().toISOString(),
     avatar_url,

@@ -8,6 +8,7 @@ import InboxScreen from "../screens/Messages/InboxScreen";
 import SavedScreen from "../screens/Saved/SavedScreen";
 import ProfileScreen from "../screens/Profile/ProfileScreen";
 import DashboardStack from "./DashboardStack";
+import AdminDashboard from "../screens/Admin/AdminDashboard";
 import { useAuthStore } from "../state/useAuthStore";
 import { RootStackNavigationProp } from "./types";
 
@@ -20,6 +21,7 @@ export default function TabNavigator() {
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isProvider = user?.role === "provider";
+  const isAdmin = user?.role === "admin";
 
   console.log("📱 [TabNavigator] =========== RENDERING ===========");
   console.log("   User:", user?.email || "NO USER");
@@ -59,7 +61,9 @@ export default function TabNavigator() {
 
   return (
     <Tab.Navigator
-      initialRouteName={isProvider ? "Dashboard" : "Home"}
+      initialRouteName={
+        isAdmin ? "Dashboard" : isProvider ? "Dashboard" : "Home"
+      }
       screenOptions={{
         // Black background for tab bar
         tabBarStyle: {
@@ -73,8 +77,19 @@ export default function TabNavigator() {
         headerShown: false,
       }}
     >
-      {/* Provider-specific tabs */}
-      {isProvider ? (
+      {/* Admin-specific tabs */}
+      {isAdmin ? (
+        <Tab.Screen
+          name="Dashboard"
+          component={AdminDashboard}
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="grid-outline" size={size} color={color} />
+            ),
+            tabBarAccessibilityLabel: "Admin dashboard tab",
+          }}
+        />
+      ) : isProvider ? (
         <>
           <Tab.Screen
             name="Dashboard"

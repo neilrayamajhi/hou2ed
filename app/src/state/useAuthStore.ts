@@ -4,7 +4,7 @@ import * as SecureStore from "expo-secure-store";
 import { supabase } from "../lib/supabase";
 import { queryClient } from "../providers/QueryProvider";
 
-export type UserRole = "seeker" | "provider";
+export type UserRole = "seeker" | "provider" | "admin";
 
 export type User = {
   id: string;
