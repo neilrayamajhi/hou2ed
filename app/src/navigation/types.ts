@@ -47,6 +47,11 @@ export type RootStackParamList = {
   SearchScreen: { savedFilters?: any };
   BlockedUsers: undefined;
   TermsOfService: undefined;
+  AdminDashboardHome: undefined;
+  UserManagementList: undefined;
+  UserDetail: { userId: string };
+  ListingModerationList: undefined;
+  ListingModerationDetail: { listingId: string };
 };
 
 export type RootStackNavigationProp =

@@ -8,7 +8,7 @@ import InboxScreen from "../screens/Messages/InboxScreen";
 import SavedScreen from "../screens/Saved/SavedScreen";
 import ProfileScreen from "../screens/Profile/ProfileScreen";
 import DashboardStack from "./DashboardStack";
-import AdminDashboard from "../screens/Admin/AdminDashboard";
+import AdminStack from "./AdminStack";
 import { useAuthStore } from "../state/useAuthStore";
 import { RootStackNavigationProp } from "./types";
 
@@ -81,12 +81,16 @@ export default function TabNavigator() {
       {isAdmin ? (
         <Tab.Screen
           name="Dashboard"
-          component={AdminDashboard}
+          component={AdminStack}
           options={{
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="grid-outline" size={size} color={color} />
             ),
             tabBarAccessibilityLabel: "Admin dashboard tab",
+            tabBarStyle: {
+              backgroundColor: "#000000",
+              borderTopWidth: 0,
+            },
           }}
         />
       ) : isProvider ? (

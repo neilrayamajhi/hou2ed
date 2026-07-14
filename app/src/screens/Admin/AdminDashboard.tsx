@@ -140,6 +140,31 @@ function InlineLoader() {
   );
 }
 
+function NavCard({
+  label,
+  icon,
+  onPress,
+}: {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      style={styles.navCard}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <View style={styles.navCardIconContainer}>
+        <Ionicons name={icon} size={20} color={colors.primary[500]} />
+      </View>
+      <Text style={styles.navCardLabel}>{label}</Text>
+      <Ionicons name="chevron-forward" size={18} color={colors.gray[500]} />
+    </TouchableOpacity>
+  );
+}
+
 // ─── Main screen ─────────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
@@ -218,6 +243,21 @@ export default function AdminDashboard() {
           />
         }
       >
+        {/* ── Manage ── */}
+        <SectionHeader title="Manage" />
+        <View style={styles.navCardsGrid}>
+          <NavCard
+            label="Users"
+            icon="people-outline"
+            onPress={() => navigation.navigate("UserManagementList")}
+          />
+          <NavCard
+            label="Listings"
+            icon="home-outline"
+            onPress={() => navigation.navigate("ListingModerationList")}
+          />
+        </View>
+
         {/* ── Snapshot Cards ── */}
         <SectionHeader title="Platform Snapshot" />
 
@@ -512,6 +552,37 @@ const styles = StyleSheet.create({
     color: colors.red,
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.md,
+  },
+  // Nav cards
+  navCardsGrid: {
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
+  },
+  navCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.gray[850],
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.gray[800],
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
+    ...shadows.subtle,
+  },
+  navCardIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    backgroundColor: colors.gray[800],
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: spacing.md,
+  },
+  navCardLabel: {
+    flex: 1,
+    fontSize: typography.sizes.md,
+    fontWeight: "600",
+    color: colors.gray[50],
   },
   // Stat cards grid
   cardsGrid: {
