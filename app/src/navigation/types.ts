@@ -52,6 +52,8 @@ export type RootStackParamList = {
   UserDetail: { userId: string };
   ListingModerationList: undefined;
   ListingModerationDetail: { listingId: string };
+  ReportsList: undefined;
+  ReportDetail: { reportId: string };
 };
 
 export type RootStackNavigationProp =

@@ -256,6 +256,11 @@ export default function AdminDashboard() {
             icon="home-outline"
             onPress={() => navigation.navigate("ListingModerationList")}
           />
+          <NavCard
+            label="Reports"
+            icon="flag-outline"
+            onPress={() => navigation.navigate("ReportsList")}
+          />
         </View>
 
         {/* ── Snapshot Cards ── */}

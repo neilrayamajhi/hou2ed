@@ -70,9 +70,38 @@ Every piece above was tested against the real, live Supabase project (not just u
 
 ---
 
-## Phase 2: Reports & Disputes — Not yet started
+## Phase 2: Reports & Disputes ✅ Complete
 
-Will add a `reports` table, wire the existing (currently fake) "Report Abuse" button in `ThreadScreen.tsx` to actually persist reports, and give admins a screen to review and act on them (reusing the ban mechanism from Phase 1).
+### 1. **Database Layer** (✅ Complete)
+- New `reports` table: reporter, reported user, optional thread context, a free-text reason, and a status (`open` → `reviewed`/`actioned`).
+- RLS: a user can submit a report and see their own submitted reports; only admins can see or update *all* reports (including ones filed against themselves — the reported user has no visibility into reports about them, verified during testing).
+- Also cleaned up the `blocks` table's admin policy to use the same `is_admin()` helper as everything else, instead of its older inline form.
+- Migration: `20260714090000_create_reports_table.sql`.
+
+### 2. **The "Report Abuse" button now actually works** (✅ Complete)
+`ThreadScreen.tsx`'s report modal existed for a while but was a complete stub — it showed a fake "Report Sent" success message and saved nothing anywhere. It now calls `reports.service.ts::submitReport()` for real, and shows an actual error if the submission fails instead of always claiming success.
+
+### 3. **Service** (✅ Complete)
+`app/src/services/reports.service.ts` — `submitReport`, `listOpenReports`, `getReportDetail`, `markReportReviewed`, `actionReport` (warn or ban), plus `listRecentBlocksForAdmin` for a read-only view of recent blocks alongside reports. Fully unit tested.
+
+### 4. **Screens** (✅ Complete)
+- `ReportsList` — two sections: open reports needing triage, and a read-only feed of recent user-initiated blocks (kept separate from reports since blocks don't have a reason/status — they're just a self-service safety feature, not an admin queue).
+- `ReportDetail` — shows the full report, with three actions: Mark Reviewed, Warn (records the decision — there's no notification system yet to actually message the user, so this is a soft "no ban needed" outcome), and Ban (reuses the exact same Phase 1 ban mechanism, closing the loop from report → consequence).
+- Reachable from a new "Reports" card on the admin dashboard.
+
+### How It Works
+
+```
+User taps "Report Abuse" in a conversation → writes a reason → submits →
+row lands in `reports` with status "open" → admin opens Reports screen →
+sees it (reported user cannot) → reviews → either marks reviewed, warns
+(no real effect yet), or bans (reported user is immediately locked out of
+the app, report marked "actioned").
+```
+
+### Verification
+
+Tested against the real, live Supabase project end-to-end: a disposable "reporter" account filed a real report against a disposable "target" account; confirmed the target *could not* see the report about themselves while an admin *could*; had the admin ban the target through the report and confirmed the ban actually rejected their next login attempt; confirmed the report was marked `actioned`. All disposable accounts deleted afterward.
 
 ## Phase 3: Provider Verification Review — Not yet started
 

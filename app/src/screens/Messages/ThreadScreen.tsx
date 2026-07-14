@@ -43,6 +43,7 @@ import {
   hasBlockedUser,
   isBlockedRelationship,
 } from "../../services/blockingService";
+import { submitReport as submitReportToBackend } from "../../services/reports.service";
 
 interface Attachment {
   id: string;
@@ -529,18 +530,28 @@ export default function ThreadScreen() {
     }
   }, [participantId, senderName, isBlocked, navigation]);
 
-  const submitReport = useCallback(() => {
-    if (!reportText.trim()) return;
+  const submitReport = useCallback(async () => {
+    if (!reportText.trim() || !participantId) return;
 
-    Alert.alert(
-      "Report Sent",
-      "Your report has been sent to our moderation team. We'll review it within 24 hours.",
-      [{ text: "OK" }],
-    );
+    const result = await submitReportToBackend({
+      reportedUserId: participantId,
+      threadId,
+      reason: reportText.trim(),
+    });
 
     setReportModalVisible(false);
     setReportText("");
-  }, [reportText]);
+
+    if (result.success) {
+      Alert.alert(
+        "Report Sent",
+        "Your report has been sent to our moderation team.",
+        [{ text: "OK" }],
+      );
+    } else {
+      Alert.alert("Error", result.error || "Failed to send report");
+    }
+  }, [reportText, participantId, threadId]);
 
   const renderMessage = useCallback(
     ({ item }: { item: MessageWithSender }) => {
