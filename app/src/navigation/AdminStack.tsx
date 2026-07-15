@@ -7,6 +7,8 @@ import ListingModerationList from "../screens/Admin/ListingModerationList";
 import ListingModerationDetail from "../screens/Admin/ListingModerationDetail";
 import ReportsList from "../screens/Admin/ReportsList";
 import ReportDetail from "../screens/Admin/ReportDetail";
+import VerificationReviewList from "../screens/Admin/VerificationReviewList";
+import VerificationReviewDetail from "../screens/Admin/VerificationReviewDetail";
 
 export type AdminStackParamList = {
   AdminDashboardHome: undefined;
@@ -16,6 +18,8 @@ export type AdminStackParamList = {
   ListingModerationDetail: { listingId: string };
   ReportsList: undefined;
   ReportDetail: { reportId: string };
+  VerificationReviewList: undefined;
+  VerificationReviewDetail: { userId: string };
 };
 
 const Stack = createNativeStackNavigator<AdminStackParamList>();
@@ -46,6 +50,14 @@ export default function AdminStack() {
       />
       <Stack.Screen name="ReportsList" component={ReportsList} />
       <Stack.Screen name="ReportDetail" component={ReportDetail} />
+      <Stack.Screen
+        name="VerificationReviewList"
+        component={VerificationReviewList}
+      />
+      <Stack.Screen
+        name="VerificationReviewDetail"
+        component={VerificationReviewDetail}
+      />
     </Stack.Navigator>
   );
 }

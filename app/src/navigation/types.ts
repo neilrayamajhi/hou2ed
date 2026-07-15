@@ -54,6 +54,8 @@ export type RootStackParamList = {
   ListingModerationDetail: { listingId: string };
   ReportsList: undefined;
   ReportDetail: { reportId: string };
+  VerificationReviewList: undefined;
+  VerificationReviewDetail: { userId: string };
 };
 
 export type RootStackNavigationProp =

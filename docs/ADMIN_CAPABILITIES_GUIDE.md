@@ -103,6 +103,29 @@ the app, report marked "actioned").
 
 Tested against the real, live Supabase project end-to-end: a disposable "reporter" account filed a real report against a disposable "target" account; confirmed the target *could not* see the report about themselves while an admin *could*; had the admin ban the target through the report and confirmed the ban actually rejected their next login attempt; confirmed the report was marked `actioned`. All disposable accounts deleted afterward.
 
-## Phase 3: Provider Verification Review — Not yet started
+## Phase 3: Provider Verification Review ✅ Complete (admin-side only)
 
-Scoped as **admin-side review only** — there is currently no provider-facing document submission flow anywhere in the app, so this phase builds just the approve/reject screen over the existing (currently unused) `verification_status`/`verification_documents` columns. A real submission flow is an explicit separate future project.
+Scoped deliberately narrow: there is still no provider-facing document submission flow anywhere in the app, so this phase is just the admin approve/reject screen over the existing `verification_status`/`verification_documents` columns. A real submission flow (provider-facing upload screen, storage bucket) remains an explicit separate future project — this phase has nothing to review until that exists, and the list screen says so clearly instead of just looking broken/empty.
+
+### 1. **Database Layer** (✅ Complete)
+- Added a `CHECK` constraint so `verification_status` can only ever be `unsubmitted`, `pending`, `verified`, or `rejected` (previously totally unconstrained).
+- **Found and fixed a real security gap while testing this phase**: exactly like the original admin-role bug that started this whole effort, `verification_status` had no trigger protecting it — any user could set their own status to `verified` directly, completely bypassing admin review. Added `prevent_verification_self_escalation`, the same trigger pattern used for `role` and `is_banned`.
+- Migrations: `20260714100000_constrain_verification_status.sql`, `20260714100100_prevent_verification_self_escalation.sql`.
+
+### 2. **Service** (✅ Complete)
+`app/src/services/verification.service.ts` — `listPendingVerifications`, `getVerificationDetail`, `setVerificationStatus`. Fully unit tested.
+
+### 3. **Screens** (✅ Complete)
+- `VerificationReviewList` — shows any profile with `verification_status = 'pending'`. Since nothing populates this today, it renders an explicit "nothing to review yet" empty state explaining why, rather than looking broken.
+- `VerificationReviewDetail` — shows the submitted documents (raw JSON, since there's no real document viewer yet) with Approve/Reject actions.
+- Reachable from a new "Verification Review" card on the admin dashboard.
+
+### Verification
+
+Tested against the real, live project: confirmed the CHECK constraint rejects a garbage status value; confirmed a user could NOT self-verify (caught this as a real bug via live testing, fixed it, then re-confirmed it's blocked); manually seeded a test profile with `pending` status and fake documents, confirmed it showed up for an admin, and confirmed the admin's approval actually persisted. All disposable test data removed afterward.
+
+---
+
+## All three phases complete
+
+Every admin capability originally scoped is now built, tested against the live database (not just unit tests), and documented. The admin dashboard went from read-only stats to a real moderation tool: ban/promote/delete users, moderate listings, triage reports with real consequences, and review provider verification (once a submission flow exists to feed it).

@@ -261,6 +261,11 @@ export default function AdminDashboard() {
             icon="flag-outline"
             onPress={() => navigation.navigate("ReportsList")}
           />
+          <NavCard
+            label="Verification Review"
+            icon="shield-checkmark-outline"
+            onPress={() => navigation.navigate("VerificationReviewList")}
+          />
         </View>
 
         {/* ── Snapshot Cards ── */}
