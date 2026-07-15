@@ -47,6 +47,10 @@ export default function UserDetail() {
   const queryClient = useQueryClient();
   const currentUserId = useAuthStore((s) => s.user?.id);
   const [banReason, setBanReason] = useState("");
+  const [pendingAdminPromotion, setPendingAdminPromotion] = useState(false);
+  const [adminConfirmText, setAdminConfirmText] = useState("");
+
+  const ADMIN_CONFIRM_PHRASE = "GRANT ADMIN";
 
   const { userId } = route.params;
 
@@ -68,6 +72,8 @@ export default function UserDetail() {
     mutationFn: (role: UserRole) => setUserRole(userId, role),
     onSuccess: async (result) => {
       if (result.success) {
+        setPendingAdminPromotion(false);
+        setAdminConfirmText("");
         await invalidateAndGoBack();
       } else {
         Alert.alert("Error", result.error || "Failed to change role");
@@ -112,27 +118,67 @@ export default function UserDetail() {
 
   const handleChangeRole = (role: UserRole) => {
     if (!user || role === user.role) return;
+
+    // Granting admin is the single most dangerous mistake an admin can make
+    // here - it gets a dedicated typed-confirmation flow instead of a quick
+    // tap-through Alert.
+    if (role === "admin") {
+      setAdminConfirmText("");
+      setPendingAdminPromotion(true);
+      return;
+    }
+
     Alert.alert(
       "Change Role",
       `Change ${user.fullName || user.email}'s role to ${role}?`,
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Change", onPress: () => roleMutation.mutate(role) },
+        {
+          text: "Continue",
+          onPress: () => {
+            Alert.alert(
+              "Are you sure?",
+              `${user.fullName || user.email} will immediately lose access tied to their current role.`,
+              [
+                { text: "Cancel", style: "cancel" },
+                { text: "Confirm", onPress: () => roleMutation.mutate(role) },
+              ],
+            );
+          },
+        },
       ],
     );
   };
 
+  const handleConfirmAdminPromotion = () => {
+    if (!user || adminConfirmText.trim().toUpperCase() !== ADMIN_CONFIRM_PHRASE) return;
+    roleMutation.mutate("admin");
+  };
+
   const handleBan = () => {
-    if (!user) return;
+    if (!user || !banReason.trim()) return;
     Alert.alert(
       "Ban User",
       `Ban ${user.fullName || user.email}? They will be unable to log in.`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Ban",
+          text: "Continue",
           style: "destructive",
-          onPress: () => banMutation.mutate(),
+          onPress: () => {
+            Alert.alert(
+              "Are you sure?",
+              "Double-check the reason you entered is accurate before confirming.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Ban User",
+                  style: "destructive",
+                  onPress: () => banMutation.mutate(),
+                },
+              ],
+            );
+          },
         },
       ],
     );
@@ -253,7 +299,7 @@ export default function UserDetail() {
                       styles.roleChip,
                       user.role === role && styles.roleChipActive,
                     ]}
-                    disabled={isMutating}
+                    disabled={isMutating || pendingAdminPromotion}
                     onPress={() => handleChangeRole(role)}
                     activeOpacity={0.8}
                   >
@@ -268,6 +314,49 @@ export default function UserDetail() {
                   </TouchableOpacity>
                 ))}
               </View>
+
+              {pendingAdminPromotion && (
+                <View style={styles.dangerPanel}>
+                  <View style={styles.dangerPanelHeader}>
+                    <Ionicons name="warning" size={18} color={colors.primary[500]} />
+                    <Text style={styles.dangerPanelTitle}>Grant Admin Access</Text>
+                  </View>
+                  <Text style={styles.dangerPanelText}>
+                    {user.fullName || user.email} will get full admin
+                    powers - user management, listing moderation, bans, and
+                    account deletion. Type{" "}
+                    <Text style={styles.dangerPanelPhrase}>{ADMIN_CONFIRM_PHRASE}</Text>{" "}
+                    to confirm.
+                  </Text>
+                  <TextInput
+                    style={styles.confirmInput}
+                    placeholder={ADMIN_CONFIRM_PHRASE}
+                    placeholderTextColor={colors.gray[600]}
+                    value={adminConfirmText}
+                    onChangeText={setAdminConfirmText}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                  />
+                  <AdminButton
+                    label="Grant Admin Access"
+                    variant="destructive"
+                    disabled={
+                      isMutating ||
+                      adminConfirmText.trim().toUpperCase() !== ADMIN_CONFIRM_PHRASE
+                    }
+                    loading={roleMutation.isPending}
+                    onPress={handleConfirmAdminPromotion}
+                  />
+                  <AdminButton
+                    label="Cancel"
+                    variant="secondary"
+                    onPress={() => {
+                      setPendingAdminPromotion(false);
+                      setAdminConfirmText("");
+                    }}
+                  />
+                </View>
+              )}
 
               <Text style={styles.eyebrow}>
                 {user.isBanned ? "Ban Status" : "Ban User"}
@@ -284,16 +373,21 @@ export default function UserDetail() {
                 <>
                   <TextInput
                     style={styles.reasonInput}
-                    placeholder="Reason for ban (optional)"
+                    placeholder="Reason for ban (required)"
                     placeholderTextColor={colors.gray[500]}
                     value={banReason}
                     onChangeText={setBanReason}
                     multiline
                   />
+                  {!banReason.trim() && (
+                    <Text style={styles.helperText}>
+                      A reason is required before you can ban this user.
+                    </Text>
+                  )}
                   <AdminButton
                     label="Ban User"
                     variant="destructive"
-                    disabled={isMutating}
+                    disabled={isMutating || !banReason.trim()}
                     loading={banMutation.isPending}
                     onPress={handleBan}
                   />
@@ -433,5 +527,50 @@ const styles = StyleSheet.create({
     minHeight: 60,
     textAlignVertical: "top",
     marginBottom: spacing.sm,
+  },
+  helperText: {
+    fontSize: typography.sizes.xs,
+    color: colors.gray[500],
+    marginBottom: spacing.sm,
+  },
+  dangerPanel: {
+    backgroundColor: "rgba(212, 175, 55, 0.08)",
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: "rgba(212, 175, 55, 0.35)",
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  dangerPanelHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  dangerPanelTitle: {
+    fontSize: typography.sizes.md,
+    fontWeight: "700",
+    color: colors.gray[50],
+  },
+  dangerPanelText: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray[300],
+    lineHeight: 20,
+    marginBottom: spacing.md,
+  },
+  dangerPanelPhrase: {
+    fontWeight: "700",
+    color: colors.primary[400],
+  },
+  confirmInput: {
+    backgroundColor: colors.gray[900],
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.gray[700],
+    padding: spacing.md,
+    color: colors.gray[50],
+    fontSize: typography.sizes.sm,
+    marginBottom: spacing.sm,
+    letterSpacing: 1,
   },
 });

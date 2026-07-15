@@ -100,9 +100,22 @@ export default function ReportDetail() {
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Ban",
+          text: "Continue",
           style: "destructive",
-          onPress: () => actionMutation.mutate("ban"),
+          onPress: () => {
+            Alert.alert(
+              "Are you sure?",
+              `This bans based on the report reason: "${report.reason}". Double-check that's accurate before confirming.`,
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Ban User",
+                  style: "destructive",
+                  onPress: () => actionMutation.mutate("ban"),
+                },
+              ],
+            );
+          },
         },
       ],
     );
