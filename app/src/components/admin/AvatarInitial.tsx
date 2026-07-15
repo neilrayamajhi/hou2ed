@@ -3,12 +3,12 @@ import { View, Text, StyleSheet } from "react-native";
 import { colors, radius, typography } from "../../theme/tokens";
 
 interface AvatarInitialProps {
-  name: string;
+  name: string | null | undefined;
   size?: number;
 }
 
 export default function AvatarInitial({ name, size = 40 }: AvatarInitialProps) {
-  const initial = name.trim().charAt(0).toUpperCase() || "?";
+  const initial = (name ?? "").trim().charAt(0).toUpperCase() || "?";
 
   return (
     <View

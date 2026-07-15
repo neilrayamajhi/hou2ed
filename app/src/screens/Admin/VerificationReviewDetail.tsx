@@ -120,7 +120,7 @@ export default function VerificationReviewDetail() {
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.card}>
             <View style={styles.identityRow}>
-              <AvatarInitial name={verification.fullName} size={52} />
+              <AvatarInitial name={verification.fullName || verification.email} size={52} />
               <View style={styles.identityBody}>
                 <Text style={styles.name}>{verification.fullName}</Text>
                 <Text style={styles.email}>{verification.email}</Text>

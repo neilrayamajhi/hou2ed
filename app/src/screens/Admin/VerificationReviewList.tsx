@@ -42,7 +42,7 @@ export default function VerificationReviewList() {
       accessibilityLabel={`Review ${item.fullName}`}
       activeOpacity={0.7}
     >
-      <AvatarInitial name={item.fullName} />
+      <AvatarInitial name={item.fullName || item.email} />
       <View style={styles.cardBody}>
         <Text style={styles.cardName} numberOfLines={1}>
           {item.fullName}
