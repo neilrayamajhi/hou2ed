@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MapView, Marker, PROVIDER_GOOGLE } from "../../components/MapView";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { theme } from "../../theme";
 import ListingCard from "../../components/ListingCard";
 import EmptyState from "../../components/EmptyState";
@@ -60,6 +60,7 @@ const MAP_DARK_STYLE = [
 
 export default function SearchScreen() {
   const navigation = useNavigation();
+  const route = useRoute<any>();
 
   // Store state
   const {
@@ -71,7 +72,18 @@ export default function SearchScreen() {
     clearAll,
     hasActiveFilters,
     getActiveFilterCount,
+    loadSnapshot,
   } = useFilterStore();
+
+  // Apply filters from a saved search, if we were navigated here with one
+  useEffect(() => {
+    const savedFilters = route.params?.savedFilters;
+    if (savedFilters) {
+      loadSnapshot(savedFilters);
+    }
+    // Only ever apply the filters this screen was opened with, once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Local state
   const [viewMode, setViewMode] = useState<ViewMode>("list");

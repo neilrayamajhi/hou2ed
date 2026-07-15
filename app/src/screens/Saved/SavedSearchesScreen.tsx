@@ -77,7 +77,7 @@ export default function SavedSearchesScreen() {
     (search: any) => {
       // Navigate back to search screen and apply the saved filters
       navigation.navigate("SearchScreen", {
-        savedFilters: search.search_criteria,
+        savedFilters: search.filters,
       });
     },
     [navigation],
@@ -108,7 +108,7 @@ export default function SavedSearchesScreen() {
                 color={colors.gray[400]}
               />
               <Text style={styles.detailText}>
-                {item.search_criteria?.location || "Any location"}
+                {item.filters?.location || "Any location"}
               </Text>
             </View>
 
@@ -119,11 +119,11 @@ export default function SavedSearchesScreen() {
                 color={colors.gray[400]}
               />
               <Text style={styles.detailText}>
-                {item.search_criteria?.housing_type || "Any housing type"}
+                {item.filters?.housing_type || "Any housing type"}
               </Text>
             </View>
 
-            {item.search_criteria?.price_max && (
+            {item.filters?.price_max && (
               <View style={styles.detailRow}>
                 <Ionicons
                   name="cash-outline"
@@ -131,7 +131,7 @@ export default function SavedSearchesScreen() {
                   color={colors.gray[400]}
                 />
                 <Text style={styles.detailText}>
-                  Up to ${item.search_criteria.price_max}/mo
+                  Up to ${item.filters.price_max}/mo
                 </Text>
               </View>
             )}

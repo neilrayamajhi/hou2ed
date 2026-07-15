@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -64,8 +64,35 @@ export default function Step4Review({
     });
   }, []);
 
-  // Get masked IP (placeholder)
-  const maskedIP = "192.168.***.***";
+  // Capture the real public IP for the signature record. If it can't be
+  // fetched, the signature is still valid - we just don't fabricate one.
+  const [ipAddress, setIpAddress] = useState<string | null>(
+    draft.ipAddress || null,
+  );
+
+  useEffect(() => {
+    if (draft.ipAddress) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const response = await fetch("https://api.ipify.org?format=json");
+        const json = await response.json();
+        if (!cancelled && json?.ip) {
+          setIpAddress(json.ip);
+          onUpdate({ ipAddress: json.ip });
+        }
+      } catch (error) {
+        console.error("Failed to capture IP address for signature:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // Only ever attempt this once per screen visit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Format phone number for display
   const formatPhone = (phone: string) => {
@@ -265,7 +292,8 @@ export default function Step4Review({
               <Text style={styles.signaturePreviewLabel}>Your signature:</Text>
               <Text style={styles.signatureText}>{signature}</Text>
               <Text style={styles.signatureMetadata}>
-                Signed on {timestamp} from IP: {maskedIP}
+                Signed on {timestamp}
+                {ipAddress ? ` from IP: ${ipAddress}` : ""}
               </Text>
             </View>
           )}

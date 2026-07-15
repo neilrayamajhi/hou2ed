@@ -342,10 +342,9 @@ export default function ApplicationsListScreen() {
       return (
         <TouchableOpacity
           style={styles.applicationCard}
-          onPress={() => {
-            // TODO: Navigate to application details screen
-            console.log("View application:", item.id);
-          }}
+          onPress={() =>
+            navigation.navigate("MyApplicationDetail", { applicationId: item.id })
+          }
           accessibilityLabel={`Application ${index + 1} for ${item.listing?.title || "Unknown"}`}
           accessibilityRole="button"
         >

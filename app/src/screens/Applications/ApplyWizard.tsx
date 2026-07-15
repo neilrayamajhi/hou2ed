@@ -52,6 +52,7 @@ export interface ApplicationDraft {
   // Step 4
   signature?: string;
   agreedToTerms?: boolean;
+  ipAddress?: string;
 }
 
 type ApplyWizardRouteProp = RouteProp<RootStackParamList, "ApplyWizard">;
@@ -411,6 +412,7 @@ export default function ApplyWizard() {
           documents: draft.documents,
           signature: draft.signature,
           agreedToTerms: draft.agreedToTerms,
+          ipAddress: draft.ipAddress,
         },
         stage_timestamps: {
           new: new Date().toISOString(),
