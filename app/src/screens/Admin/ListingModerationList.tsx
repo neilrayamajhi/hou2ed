@@ -18,6 +18,7 @@ import {
   listAllListingsForAdmin,
   type AdminListingSummary,
 } from "../../services/listingModeration.service";
+import StatusBadge from "../../components/admin/StatusBadge";
 
 const STATUS_FILTERS: { label: string; value: "active" | "inactive" | undefined }[] = [
   { label: "All", value: undefined },
@@ -55,16 +56,10 @@ export default function ListingModerationList() {
         <Text style={styles.listingTitle} numberOfLines={1}>
           {item.title}
         </Text>
-        <View
-          style={[
-            styles.badge,
-            item.isActive ? styles.activeBadge : styles.inactiveBadge,
-          ]}
-        >
-          <Text style={styles.badgeText}>
-            {item.isActive ? "Active" : "Inactive"}
-          </Text>
-        </View>
+        <StatusBadge
+          label={item.isActive ? "Active" : "Inactive"}
+          tone={item.isActive ? "success" : "neutral"}
+        />
       </View>
       <View style={styles.detailRow}>
         <Ionicons name="location-outline" size={14} color={colors.gray[400]} />
@@ -94,7 +89,14 @@ export default function ListingModerationList() {
         >
           <Ionicons name="arrow-back" size={24} color={colors.gray[50]} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Listings</Text>
+        <View>
+          <Text style={styles.headerTitle}>Listings</Text>
+          {!isLoading && !isError && (
+            <Text style={styles.headerSubtitle}>
+              {listings?.length ?? 0} total
+            </Text>
+          )}
+        </View>
       </View>
 
       <View style={styles.filterRow}>
@@ -106,6 +108,7 @@ export default function ListingModerationList() {
               statusFilter === filter.value && styles.filterChipActive,
             ]}
             onPress={() => setStatusFilter(filter.value)}
+            activeOpacity={0.8}
           >
             <Text
               style={[
@@ -136,13 +139,14 @@ export default function ListingModerationList() {
           data={listings || []}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
           contentContainerStyle={[
             styles.listContainer,
             (!listings || listings.length === 0) && styles.emptyListContainer,
           ]}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Ionicons name="home-outline" size={64} color={colors.gray[600]} />
+              <Ionicons name="home-outline" size={56} color={colors.gray[700]} />
               <Text style={styles.emptyStateTitle}>No listings found</Text>
             </View>
           }
@@ -175,6 +179,11 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xl,
     fontWeight: "700",
     color: colors.gray[50],
+  },
+  headerSubtitle: {
+    fontSize: typography.sizes.xs,
+    color: colors.gray[500],
+    marginTop: 2,
   },
   filterRow: {
     flexDirection: "row",
@@ -212,8 +221,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   retryButtonText: { fontSize: typography.sizes.md, fontWeight: "600", color: colors.gray[900] },
-  listContainer: { padding: spacing.lg },
+  listContainer: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   emptyListContainer: { flexGrow: 1 },
+  separator: { height: spacing.sm },
   emptyState: {
     flex: 1,
     alignItems: "center",
@@ -247,10 +257,6 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: spacing.sm,
   },
-  badge: { paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.sm },
-  activeBadge: { backgroundColor: colors.green },
-  inactiveBadge: { backgroundColor: colors.gray[600] },
-  badgeText: { fontSize: typography.sizes.xs, fontWeight: "600", color: colors.white },
   detailRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   detailText: { fontSize: typography.sizes.sm, color: colors.gray[400] },
   detailDot: { color: colors.gray[600] },

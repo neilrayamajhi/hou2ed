@@ -18,6 +18,7 @@ import {
   listPendingVerifications,
   type VerificationSummary,
 } from "../../services/verification.service";
+import AvatarInitial from "../../components/admin/AvatarInitial";
 
 export default function VerificationReviewList() {
   const navigation = useNavigation<RootStackNavigationProp>();
@@ -39,13 +40,18 @@ export default function VerificationReviewList() {
       onPress={() => navigation.navigate("VerificationReviewDetail", { userId: item.id })}
       accessibilityRole="button"
       accessibilityLabel={`Review ${item.fullName}`}
+      activeOpacity={0.7}
     >
-      <Text style={styles.cardName} numberOfLines={1}>
-        {item.fullName}
-      </Text>
-      <Text style={styles.cardEmail} numberOfLines={1}>
-        {item.email}
-      </Text>
+      <AvatarInitial name={item.fullName} />
+      <View style={styles.cardBody}>
+        <Text style={styles.cardName} numberOfLines={1}>
+          {item.fullName}
+        </Text>
+        <Text style={styles.cardEmail} numberOfLines={1}>
+          {item.email}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.gray[600]} />
     </TouchableOpacity>
   );
 
@@ -87,11 +93,13 @@ export default function VerificationReviewList() {
           ]}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Ionicons
-                name="shield-checkmark-outline"
-                size={64}
-                color={colors.gray[600]}
-              />
+              <View style={styles.emptyIconContainer}>
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={40}
+                  color={colors.gray[600]}
+                />
+              </View>
               <Text style={styles.emptyStateTitle}>Nothing to review</Text>
               <Text style={styles.emptyStateSubtitle}>
                 There's no provider document submission flow in the app yet,
@@ -149,7 +157,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   retryButtonText: { fontSize: typography.sizes.md, fontWeight: "600", color: colors.gray[900] },
-  listContainer: { padding: spacing.lg },
+  listContainer: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   emptyListContainer: { flexGrow: 1 },
   emptyState: {
     flex: 1,
@@ -157,6 +165,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: spacing["3xl"],
     paddingHorizontal: spacing.xl,
+  },
+  emptyIconContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: radius.full,
+    backgroundColor: colors.gray[850],
+    borderWidth: 1,
+    borderColor: colors.gray[800],
+    alignItems: "center",
+    justifyContent: "center",
   },
   emptyStateTitle: {
     fontSize: typography.sizes.lg,
@@ -170,8 +188,12 @@ const styles = StyleSheet.create({
     color: colors.gray[500],
     textAlign: "center",
     lineHeight: 20,
+    maxWidth: 280,
   },
   card: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
     backgroundColor: colors.gray[850],
     borderRadius: radius.lg,
     padding: spacing.md,
@@ -179,11 +201,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.gray[800],
   },
+  cardBody: { flex: 1 },
   cardName: {
     fontSize: typography.sizes.md,
     fontWeight: "600",
     color: colors.gray[50],
-    marginBottom: spacing.xs,
+    marginBottom: 2,
   },
   cardEmail: { fontSize: typography.sizes.sm, color: colors.gray[400] },
 });

@@ -24,6 +24,9 @@ import {
   type UserRole,
 } from "../../services/userModeration.service";
 import { useAuthStore } from "../../state/useAuthStore";
+import StatusBadge, { type StatusBadgeTone } from "../../components/admin/StatusBadge";
+import AdminButton from "../../components/admin/AdminButton";
+import AvatarInitial from "../../components/admin/AvatarInitial";
 
 type UserDetailRouteProp = RouteProp<
   { UserDetail: { userId: string } },
@@ -31,6 +34,11 @@ type UserDetailRouteProp = RouteProp<
 >;
 
 const ROLES: UserRole[] = ["seeker", "provider", "admin"];
+const ROLE_TONE: Record<UserRole, StatusBadgeTone> = {
+  admin: "primary",
+  provider: "success",
+  seeker: "neutral",
+};
 
 export default function UserDetail() {
   const navigation = useNavigation<RootStackNavigationProp>();
@@ -199,17 +207,16 @@ export default function UserDetail() {
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.card}>
-            <Text style={styles.name}>{user.fullName || user.username}</Text>
-            <Text style={styles.email}>{user.email}</Text>
-            <View style={styles.badgeRow}>
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{user.role}</Text>
+            <View style={styles.identityRow}>
+              <AvatarInitial name={user.fullName || user.username} size={52} />
+              <View style={styles.identityBody}>
+                <Text style={styles.name}>{user.fullName || user.username}</Text>
+                <Text style={styles.email}>{user.email}</Text>
               </View>
-              {user.isBanned && (
-                <View style={[styles.badge, styles.bannedBadge]}>
-                  <Text style={styles.badgeText}>Banned</Text>
-                </View>
-              )}
+            </View>
+            <View style={styles.badgeRow}>
+              <StatusBadge label={user.role} tone={ROLE_TONE[user.role]} />
+              {user.isBanned && <StatusBadge label="Banned" tone="danger" />}
             </View>
             {user.isBanned && user.bannedReason && (
               <Text style={styles.bannedReason}>Reason: {user.bannedReason}</Text>
@@ -228,12 +235,15 @@ export default function UserDetail() {
           </View>
 
           {isSelf ? (
-            <Text style={styles.selfNote}>
-              You can't ban, delete, or change the role of your own account.
-            </Text>
+            <View style={styles.selfNoteBox}>
+              <Ionicons name="information-circle-outline" size={18} color={colors.gray[500]} />
+              <Text style={styles.selfNote}>
+                You can't ban, delete, or change the role of your own account.
+              </Text>
+            </View>
           ) : (
             <>
-              <Text style={styles.sectionTitle}>Role</Text>
+              <Text style={styles.eyebrow}>Role</Text>
               <View style={styles.roleRow}>
                 {ROLES.map((role) => (
                   <TouchableOpacity
@@ -244,6 +254,7 @@ export default function UserDetail() {
                     ]}
                     disabled={isMutating}
                     onPress={() => handleChangeRole(role)}
+                    activeOpacity={0.8}
                   >
                     <Text
                       style={[
@@ -257,17 +268,17 @@ export default function UserDetail() {
                 ))}
               </View>
 
-              <Text style={styles.sectionTitle}>
+              <Text style={styles.eyebrow}>
                 {user.isBanned ? "Ban Status" : "Ban User"}
               </Text>
               {user.isBanned ? (
-                <TouchableOpacity
-                  style={styles.actionButton}
+                <AdminButton
+                  label="Unban User"
+                  variant="secondary"
                   disabled={isMutating}
+                  loading={unbanMutation.isPending}
                   onPress={handleUnban}
-                >
-                  <Text style={styles.actionButtonText}>Unban User</Text>
-                </TouchableOpacity>
+                />
               ) : (
                 <>
                   <TextInput
@@ -278,24 +289,24 @@ export default function UserDetail() {
                     onChangeText={setBanReason}
                     multiline
                   />
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.destructiveButton]}
+                  <AdminButton
+                    label="Ban User"
+                    variant="destructive"
                     disabled={isMutating}
+                    loading={banMutation.isPending}
                     onPress={handleBan}
-                  >
-                    <Text style={styles.actionButtonText}>Ban User</Text>
-                  </TouchableOpacity>
+                  />
                 </>
               )}
 
-              <Text style={styles.sectionTitle}>Danger Zone</Text>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.destructiveButton]}
+              <Text style={styles.eyebrow}>Danger Zone</Text>
+              <AdminButton
+                label="Delete Account"
+                variant="destructive"
                 disabled={isMutating}
+                loading={deleteMutation.isPending}
                 onPress={handleDelete}
-              >
-                <Text style={styles.actionButtonText}>Delete Account</Text>
-              </TouchableOpacity>
+              />
             </>
           )}
         </ScrollView>
@@ -337,22 +348,21 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     ...shadows.subtle,
   },
+  identityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  identityBody: { flex: 1 },
   name: {
     fontSize: typography.sizes.xl,
     fontWeight: "700",
     color: colors.gray[50],
-    marginBottom: spacing.xs,
+    marginBottom: 2,
   },
-  email: { fontSize: typography.sizes.sm, color: colors.gray[400], marginBottom: spacing.sm },
+  email: { fontSize: typography.sizes.sm, color: colors.gray[400] },
   badgeRow: { flexDirection: "row", gap: spacing.xs },
-  badge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: radius.sm,
-    backgroundColor: colors.primary[500],
-  },
-  bannedBadge: { backgroundColor: colors.red },
-  badgeText: { fontSize: typography.sizes.xs, fontWeight: "600", color: colors.white },
   bannedReason: {
     fontSize: typography.sizes.sm,
     color: colors.gray[400],
@@ -374,20 +384,32 @@ const styles = StyleSheet.create({
     color: colors.primary[500],
   },
   statLabel: { fontSize: typography.sizes.xs, color: colors.gray[400], marginTop: spacing.xs },
+  selfNoteBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    backgroundColor: colors.gray[850],
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.gray[800],
+    padding: spacing.md,
+    marginTop: spacing.sm,
+  },
   selfNote: {
+    flex: 1,
     fontSize: typography.sizes.sm,
     color: colors.gray[500],
-    fontStyle: "italic",
-    marginTop: spacing.md,
   },
-  sectionTitle: {
-    fontSize: typography.sizes.md,
-    fontWeight: "600",
-    color: colors.gray[50],
+  eyebrow: {
+    fontSize: typography.sizes.xs,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: colors.gray[500],
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
-  roleRow: { flexDirection: "row", gap: spacing.sm },
+  roleRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.sm },
   roleChip: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
@@ -411,14 +433,4 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
     marginBottom: spacing.sm,
   },
-  actionButton: {
-    backgroundColor: colors.gray[850],
-    borderWidth: 1,
-    borderColor: colors.gray[800],
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-  },
-  destructiveButton: { backgroundColor: colors.red, borderColor: colors.red },
-  actionButtonText: { fontSize: typography.sizes.md, fontWeight: "600", color: colors.white },
 });

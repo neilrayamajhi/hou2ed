@@ -21,11 +21,14 @@ import {
   shadows,
 } from "../../theme/tokens";
 import type { RootStackNavigationProp } from "../../navigation/types";
+import { useQuery } from "@tanstack/react-query";
 import { useAdminStats } from "../../hooks/useAdminStats";
 import { useAdminAnalytics } from "../../hooks/useAdminAnalytics";
 import { useRequireAdmin } from "../../hooks/useRequireAdmin";
 import { useAuthStore } from "../../state/useAuthStore";
+import { listOpenReports } from "../../services/reports.service";
 import type { WeeklyBucket, KeyCount } from "../../utils/analytics";
+import AvatarInitial from "../../components/admin/AvatarInitial";
 
 // ─── Chart color palette ─────────────────────────────────────────────────────
 
@@ -143,10 +146,12 @@ function InlineLoader() {
 function NavCard({
   label,
   icon,
+  badge,
   onPress,
 }: {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
+  badge?: number;
   onPress: () => void;
 }) {
   return (
@@ -155,12 +160,19 @@ function NavCard({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
+      activeOpacity={0.75}
     >
-      <View style={styles.navCardIconContainer}>
-        <Ionicons name={icon} size={20} color={colors.primary[500]} />
+      <View style={styles.navCardIconRow}>
+        <View style={styles.navCardIconContainer}>
+          <Ionicons name={icon} size={20} color={colors.primary[500]} />
+        </View>
+        {!!badge && (
+          <View style={styles.navCardBadge}>
+            <Text style={styles.navCardBadgeText}>{badge}</Text>
+          </View>
+        )}
       </View>
       <Text style={styles.navCardLabel}>{label}</Text>
-      <Ionicons name="chevron-forward" size={18} color={colors.gray[500]} />
     </TouchableOpacity>
   );
 }
@@ -188,6 +200,11 @@ export default function AdminDashboard() {
     refetch: refetchAnalytics,
   } = useAdminAnalytics();
 
+  const { data: openReports } = useQuery({
+    queryKey: ["adminOpenReports"],
+    queryFn: listOpenReports,
+  });
+
   const handleRefresh = () => {
     refetchStats();
     refetchAnalytics();
@@ -212,9 +229,12 @@ export default function AdminDashboard() {
       {/* ── Header ── */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <View>
-            <Text style={styles.welcomeText}>Admin Dashboard</Text>
-            <Text style={styles.adminName}>{user?.fullName || "Admin"}</Text>
+          <View style={styles.headerIdentity}>
+            <AvatarInitial name={user?.fullName || "Admin"} size={44} />
+            <View>
+              <Text style={styles.welcomeText}>Admin Dashboard</Text>
+              <Text style={styles.adminName}>{user?.fullName || "Admin"}</Text>
+            </View>
           </View>
           <TouchableOpacity
             onPress={handleLogout}
@@ -259,6 +279,7 @@ export default function AdminDashboard() {
           <NavCard
             label="Reports"
             icon="flag-outline"
+            badge={openReports?.length}
             onPress={() => navigation.navigate("ReportsList")}
           />
           <NavCard
@@ -523,6 +544,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+  headerIdentity: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
   logoutButton: {
     padding: spacing.sm,
     borderRadius: radius.md,
@@ -565,19 +591,26 @@ const styles = StyleSheet.create({
   },
   // Nav cards
   navCardsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     paddingHorizontal: spacing.lg,
     gap: spacing.md,
   },
   navCard: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexBasis: "46%",
+    flexGrow: 1,
     backgroundColor: colors.gray[850],
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.gray[800],
     padding: spacing.lg,
-    marginBottom: spacing.sm,
     ...shadows.subtle,
+  },
+  navCardIconRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: spacing.md,
   },
   navCardIconContainer: {
     width: 36,
@@ -586,10 +619,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gray[800],
     alignItems: "center",
     justifyContent: "center",
-    marginRight: spacing.md,
+  },
+  navCardBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: radius.full,
+    backgroundColor: colors.red,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  navCardBadgeText: {
+    fontSize: typography.sizes.xs,
+    fontWeight: "700",
+    color: colors.white,
   },
   navCardLabel: {
-    flex: 1,
     fontSize: typography.sizes.md,
     fontWeight: "600",
     color: colors.gray[50],

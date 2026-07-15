@@ -18,6 +18,8 @@ import {
   getListingForAdmin,
   setListingActive,
 } from "../../services/listingModeration.service";
+import StatusBadge from "../../components/admin/StatusBadge";
+import AdminButton from "../../components/admin/AdminButton";
 
 type ListingModerationDetailRouteProp = RouteProp<
   { ListingModerationDetail: { listingId: string } },
@@ -104,21 +106,11 @@ export default function ListingModerationDetail() {
           <View style={styles.card}>
             <Text style={styles.title}>{listing.title}</Text>
             <View style={styles.badgeRow}>
-              <View
-                style={[
-                  styles.badge,
-                  listing.isActive ? styles.activeBadge : styles.inactiveBadge,
-                ]}
-              >
-                <Text style={styles.badgeText}>
-                  {listing.isActive ? "Active" : "Inactive"}
-                </Text>
-              </View>
-              {listing.verified && (
-                <View style={[styles.badge, styles.verifiedBadge]}>
-                  <Text style={styles.badgeText}>Verified</Text>
-                </View>
-              )}
+              <StatusBadge
+                label={listing.isActive ? "Active" : "Inactive"}
+                tone={listing.isActive ? "success" : "neutral"}
+              />
+              {listing.verified && <StatusBadge label="Verified" tone="primary" />}
             </View>
 
             <View style={styles.detailRow}>
@@ -139,19 +131,14 @@ export default function ListingModerationDetail() {
             )}
           </View>
 
-          <Text style={styles.sectionTitle}>Moderation</Text>
-          <TouchableOpacity
-            style={[
-              styles.actionButton,
-              listing.isActive && styles.destructiveButton,
-            ]}
+          <Text style={styles.eyebrow}>Moderation</Text>
+          <AdminButton
+            label={listing.isActive ? "Deactivate Listing" : "Reactivate Listing"}
+            variant={listing.isActive ? "destructive" : "secondary"}
             disabled={toggleActiveMutation.isPending}
+            loading={toggleActiveMutation.isPending}
             onPress={handleToggleActive}
-          >
-            <Text style={styles.actionButtonText}>
-              {listing.isActive ? "Deactivate Listing" : "Reactivate Listing"}
-            </Text>
-          </TouchableOpacity>
+          />
         </ScrollView>
       )}
     </SafeAreaView>
@@ -198,11 +185,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   badgeRow: { flexDirection: "row", gap: spacing.xs, marginBottom: spacing.md },
-  badge: { paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.sm },
-  activeBadge: { backgroundColor: colors.green },
-  inactiveBadge: { backgroundColor: colors.gray[600] },
-  verifiedBadge: { backgroundColor: colors.primary[500] },
-  badgeText: { fontSize: typography.sizes.xs, fontWeight: "600", color: colors.white },
   detailRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.xs },
   detailText: { fontSize: typography.sizes.sm, color: colors.gray[300], flex: 1 },
   description: {
@@ -211,20 +193,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     lineHeight: 20,
   },
-  sectionTitle: {
-    fontSize: typography.sizes.md,
-    fontWeight: "600",
-    color: colors.gray[50],
+  eyebrow: {
+    fontSize: typography.sizes.xs,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: colors.gray[500],
     marginBottom: spacing.sm,
   },
-  actionButton: {
-    backgroundColor: colors.gray[850],
-    borderWidth: 1,
-    borderColor: colors.gray[800],
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-  },
-  destructiveButton: { backgroundColor: colors.red, borderColor: colors.red },
-  actionButtonText: { fontSize: typography.sizes.md, fontWeight: "600", color: colors.white },
 });

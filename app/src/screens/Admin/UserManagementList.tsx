@@ -20,6 +20,8 @@ import {
   type UserRole,
   type UserSummary,
 } from "../../services/userModeration.service";
+import StatusBadge, { type StatusBadgeTone } from "../../components/admin/StatusBadge";
+import AvatarInitial from "../../components/admin/AvatarInitial";
 
 const ROLE_FILTERS: { label: string; value: UserRole | undefined }[] = [
   { label: "All", value: undefined },
@@ -28,16 +30,11 @@ const ROLE_FILTERS: { label: string; value: UserRole | undefined }[] = [
   { label: "Admins", value: "admin" },
 ];
 
-function roleColor(role: UserRole) {
-  switch (role) {
-    case "admin":
-      return colors.primary[500];
-    case "provider":
-      return colors.green;
-    default:
-      return colors.gray[500];
-  }
-}
+const ROLE_TONE: Record<UserRole, StatusBadgeTone> = {
+  admin: "primary",
+  provider: "success",
+  seeker: "neutral",
+};
 
 export default function UserManagementList() {
   const navigation = useNavigation<RootStackNavigationProp>();
@@ -59,29 +56,26 @@ export default function UserManagementList() {
 
   const renderItem = ({ item }: { item: UserSummary }) => (
     <TouchableOpacity
-      style={styles.userCard}
+      style={styles.row}
       onPress={() => navigation.navigate("UserDetail", { userId: item.id })}
       accessibilityRole="button"
       accessibilityLabel={`View ${item.fullName}`}
+      activeOpacity={0.7}
     >
-      <View style={styles.userCardHeader}>
+      <AvatarInitial name={item.fullName || item.username} />
+      <View style={styles.rowBody}>
         <Text style={styles.userName} numberOfLines={1}>
           {item.fullName || item.username}
         </Text>
+        <Text style={styles.userEmail} numberOfLines={1}>
+          {item.email}
+        </Text>
         <View style={styles.badgeRow}>
-          {item.isBanned && (
-            <View style={[styles.badge, styles.bannedBadge]}>
-              <Text style={styles.badgeText}>Banned</Text>
-            </View>
-          )}
-          <View style={[styles.badge, { backgroundColor: roleColor(item.role) }]}>
-            <Text style={styles.badgeText}>{item.role}</Text>
-          </View>
+          <StatusBadge label={item.role} tone={ROLE_TONE[item.role]} />
+          {item.isBanned && <StatusBadge label="Banned" tone="danger" />}
         </View>
       </View>
-      <Text style={styles.userEmail} numberOfLines={1}>
-        {item.email}
-      </Text>
+      <Ionicons name="chevron-forward" size={18} color={colors.gray[600]} />
     </TouchableOpacity>
   );
 
@@ -96,7 +90,14 @@ export default function UserManagementList() {
         >
           <Ionicons name="arrow-back" size={24} color={colors.gray[50]} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Users</Text>
+        <View>
+          <Text style={styles.headerTitle}>Users</Text>
+          {!isLoading && !isError && (
+            <Text style={styles.headerSubtitle}>
+              {users?.length ?? 0} {users?.length === 1 ? "person" : "people"}
+            </Text>
+          )}
+        </View>
       </View>
 
       <View style={styles.searchRow}>
@@ -120,6 +121,7 @@ export default function UserManagementList() {
               roleFilter === filter.value && styles.filterChipActive,
             ]}
             onPress={() => setRoleFilter(filter.value)}
+            activeOpacity={0.8}
           >
             <Text
               style={[
@@ -150,6 +152,7 @@ export default function UserManagementList() {
           data={users || []}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
           contentContainerStyle={[
             styles.listContainer,
             (!users || users.length === 0) && styles.emptyListContainer,
@@ -158,10 +161,13 @@ export default function UserManagementList() {
             <View style={styles.emptyState}>
               <Ionicons
                 name="people-outline"
-                size={64}
-                color={colors.gray[600]}
+                size={56}
+                color={colors.gray[700]}
               />
               <Text style={styles.emptyStateTitle}>No users found</Text>
+              <Text style={styles.emptyStateSubtitle}>
+                Try a different search term or filter.
+              </Text>
             </View>
           }
           refreshControl={
@@ -193,6 +199,11 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xl,
     fontWeight: "700",
     color: colors.gray[50],
+  },
+  headerSubtitle: {
+    fontSize: typography.sizes.xs,
+    color: colors.gray[500],
+    marginTop: 2,
   },
   searchRow: {
     flexDirection: "row",
@@ -259,7 +270,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: colors.gray[900],
   },
-  listContainer: { padding: spacing.lg },
+  listContainer: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
   emptyListContainer: { flexGrow: 1 },
   emptyState: {
     flex: 1,
@@ -273,38 +287,32 @@ const styles = StyleSheet.create({
     color: colors.gray[300],
     marginTop: spacing.lg,
   },
-  userCard: {
+  emptyStateSubtitle: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray[500],
+    marginTop: spacing.xs,
+  },
+  separator: { height: spacing.sm },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
     backgroundColor: colors.gray[850],
     borderRadius: radius.lg,
     padding: spacing.md,
-    marginBottom: spacing.md,
     borderWidth: 1,
     borderColor: colors.gray[800],
   },
-  userCardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: spacing.xs,
-  },
+  rowBody: { flex: 1, gap: 2 },
   userName: {
     fontSize: typography.sizes.md,
     fontWeight: "600",
     color: colors.gray[50],
-    flex: 1,
-    marginRight: spacing.sm,
+  },
+  userEmail: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray[500],
+    marginBottom: spacing.xs,
   },
   badgeRow: { flexDirection: "row", gap: spacing.xs },
-  badge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: radius.sm,
-  },
-  bannedBadge: { backgroundColor: colors.red },
-  badgeText: {
-    fontSize: typography.sizes.xs,
-    fontWeight: "600",
-    color: colors.white,
-  },
-  userEmail: { fontSize: typography.sizes.sm, color: colors.gray[400] },
 });

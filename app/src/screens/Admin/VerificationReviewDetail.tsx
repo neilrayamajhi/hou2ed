@@ -17,7 +17,18 @@ import { RootStackNavigationProp } from "../../navigation/types";
 import {
   getVerificationDetail,
   setVerificationStatus,
+  type VerificationStatus,
 } from "../../services/verification.service";
+import StatusBadge, { type StatusBadgeTone } from "../../components/admin/StatusBadge";
+import AdminButton from "../../components/admin/AdminButton";
+import AvatarInitial from "../../components/admin/AvatarInitial";
+
+const STATUS_TONE: Record<VerificationStatus, StatusBadgeTone> = {
+  unsubmitted: "neutral",
+  pending: "warning",
+  verified: "success",
+  rejected: "danger",
+};
 
 type VerificationReviewDetailRouteProp = RouteProp<
   { VerificationReviewDetail: { userId: string } },
@@ -108,16 +119,20 @@ export default function VerificationReviewDetail() {
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.card}>
-            <Text style={styles.name}>{verification.fullName}</Text>
-            <Text style={styles.email}>{verification.email}</Text>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>
-                {verification.verificationStatus || "unsubmitted"}
-              </Text>
+            <View style={styles.identityRow}>
+              <AvatarInitial name={verification.fullName} size={52} />
+              <View style={styles.identityBody}>
+                <Text style={styles.name}>{verification.fullName}</Text>
+                <Text style={styles.email}>{verification.email}</Text>
+              </View>
             </View>
+            <StatusBadge
+              label={verification.verificationStatus || "unsubmitted"}
+              tone={STATUS_TONE[verification.verificationStatus || "unsubmitted"]}
+            />
           </View>
 
-          <Text style={styles.sectionTitle}>Submitted Documents</Text>
+          <Text style={styles.eyebrow}>Submitted Documents</Text>
           <View style={styles.card}>
             {verification.verificationDocuments ? (
               <Text style={styles.documentsText}>
@@ -132,21 +147,21 @@ export default function VerificationReviewDetail() {
 
           {verification.verificationStatus === "pending" && (
             <>
-              <Text style={styles.sectionTitle}>Decision</Text>
-              <TouchableOpacity
-                style={styles.actionButton}
+              <Text style={styles.eyebrow}>Decision</Text>
+              <AdminButton
+                label="Approve"
+                variant="secondary"
                 disabled={statusMutation.isPending}
+                loading={statusMutation.isPending && statusMutation.variables === "verified"}
                 onPress={handleApprove}
-              >
-                <Text style={styles.actionButtonText}>Approve</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.destructiveButton]}
+              />
+              <AdminButton
+                label="Reject"
+                variant="destructive"
                 disabled={statusMutation.isPending}
+                loading={statusMutation.isPending && statusMutation.variables === "rejected"}
                 onPress={handleReject}
-              >
-                <Text style={styles.actionButtonText}>Reject</Text>
-              </TouchableOpacity>
+              />
             </>
           )}
         </ScrollView>
@@ -188,25 +203,26 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     ...shadows.subtle,
   },
+  identityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  identityBody: { flex: 1 },
   name: {
     fontSize: typography.sizes.xl,
     fontWeight: "700",
     color: colors.gray[50],
-    marginBottom: spacing.xs,
+    marginBottom: 2,
   },
-  email: { fontSize: typography.sizes.sm, color: colors.gray[400], marginBottom: spacing.sm },
-  badge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: radius.sm,
-    backgroundColor: colors.primary[500],
-  },
-  badgeText: { fontSize: typography.sizes.xs, fontWeight: "600", color: colors.gray[900] },
-  sectionTitle: {
-    fontSize: typography.sizes.md,
-    fontWeight: "600",
-    color: colors.gray[50],
+  email: { fontSize: typography.sizes.sm, color: colors.gray[400] },
+  eyebrow: {
+    fontSize: typography.sizes.xs,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: colors.gray[500],
     marginBottom: spacing.sm,
   },
   documentsText: {
@@ -215,15 +231,4 @@ const styles = StyleSheet.create({
     fontFamily: "monospace",
   },
   noDocumentsText: { fontSize: typography.sizes.sm, color: colors.gray[500] },
-  actionButton: {
-    backgroundColor: colors.gray[850],
-    borderWidth: 1,
-    borderColor: colors.gray[800],
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-    marginBottom: spacing.sm,
-  },
-  destructiveButton: { backgroundColor: colors.red, borderColor: colors.red },
-  actionButtonText: { fontSize: typography.sizes.md, fontWeight: "600", color: colors.white },
 });

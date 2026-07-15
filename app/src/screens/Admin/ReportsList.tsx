@@ -61,22 +61,32 @@ export default function ReportsList() {
       onPress={() => navigation.navigate("ReportDetail", { reportId: item.id })}
       accessibilityRole="button"
       accessibilityLabel={`Report against ${item.reportedUserName}`}
+      activeOpacity={0.7}
     >
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle} numberOfLines={1}>
-          {item.reportedUserName}
-        </Text>
-        <Text style={styles.cardDate}>{formatDate(item.createdAt)}</Text>
+      <View style={styles.reportIconContainer}>
+        <Ionicons name="flag" size={16} color={colors.red} />
       </View>
-      <Text style={styles.reportReason} numberOfLines={2}>
-        {item.reason}
-      </Text>
-      <Text style={styles.reportedBy}>Reported by {item.reporterName}</Text>
+      <View style={styles.reportBody}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle} numberOfLines={1}>
+            {item.reportedUserName}
+          </Text>
+          <Text style={styles.cardDate}>{formatDate(item.createdAt)}</Text>
+        </View>
+        <Text style={styles.reportReason} numberOfLines={2}>
+          {item.reason}
+        </Text>
+        <Text style={styles.reportedBy}>Reported by {item.reporterName}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.gray[600]} />
     </TouchableOpacity>
   );
 
-  const renderBlock = (item: RecentBlockSummary) => (
-    <View key={item.id} style={styles.blockRow}>
+  const renderBlock = (item: RecentBlockSummary, index: number) => (
+    <View
+      key={item.id}
+      style={[styles.blockRow, index > 0 && styles.blockRowDivider]}
+    >
       <Ionicons name="ban-outline" size={16} color={colors.gray[500]} />
       <Text style={styles.blockText} numberOfLines={1}>
         {item.blockerName} blocked {item.blockedName}
@@ -109,7 +119,14 @@ export default function ReportsList() {
           />
         }
       >
-        <Text style={styles.sectionTitle}>Open Reports</Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.eyebrow}>Open Reports</Text>
+          {!reportsLoading && !reportsError && reports && reports.length > 0 && (
+            <View style={styles.countPill}>
+              <Text style={styles.countPillText}>{reports.length}</Text>
+            </View>
+          )}
+        </View>
         {reportsLoading ? (
           <ActivityIndicator
             size="large"
@@ -131,7 +148,7 @@ export default function ReportsList() {
           reports.map(renderReport)
         )}
 
-        <Text style={styles.sectionTitle}>Recent Blocks</Text>
+        <Text style={styles.eyebrow}>Recent Blocks</Text>
         {blocksLoading ? (
           <ActivityIndicator size="small" color={colors.primary[500]} />
         ) : !blocks || blocks.length === 0 ? (
@@ -161,13 +178,31 @@ const styles = StyleSheet.create({
     color: colors.gray[50],
   },
   scrollContent: { padding: spacing.lg, paddingBottom: spacing["5xl"] },
-  sectionTitle: {
-    fontSize: typography.sizes.md,
-    fontWeight: "600",
-    color: colors.gray[50],
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  eyebrow: {
+    fontSize: typography.sizes.xs,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: colors.gray[500],
     marginTop: spacing.lg,
     marginBottom: spacing.md,
   },
+  countPill: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: radius.full,
+    backgroundColor: "rgba(239, 68, 68, 0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  countPillText: { fontSize: typography.sizes.xs, fontWeight: "700", color: colors.red },
   loader: { marginTop: spacing.xl },
   errorText: { fontSize: typography.sizes.sm, color: colors.red },
   emptyState: { alignItems: "center", paddingVertical: spacing["2xl"] },
@@ -178,6 +213,9 @@ const styles = StyleSheet.create({
   },
   emptyStateSubtext: { fontSize: typography.sizes.sm, color: colors.gray[500] },
   card: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
     backgroundColor: colors.gray[850],
     borderRadius: radius.lg,
     padding: spacing.md,
@@ -185,6 +223,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.gray[800],
   },
+  reportIconContainer: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.md,
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reportBody: { flex: 1 },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -216,7 +263,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
+  },
+  blockRowDivider: {
+    borderTopWidth: 1,
+    borderTopColor: colors.gray[800],
   },
   blockText: { flex: 1, fontSize: typography.sizes.sm, color: colors.gray[300] },
   blockDate: { fontSize: typography.sizes.xs, color: colors.gray[500] },

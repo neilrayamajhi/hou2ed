@@ -18,7 +18,16 @@ import {
   getReportDetail,
   markReportReviewed,
   actionReport,
+  type ReportStatus,
 } from "../../services/reports.service";
+import StatusBadge, { type StatusBadgeTone } from "../../components/admin/StatusBadge";
+import AdminButton from "../../components/admin/AdminButton";
+
+const STATUS_TONE: Record<ReportStatus, StatusBadgeTone> = {
+  open: "warning",
+  reviewed: "neutral",
+  actioned: "success",
+};
 
 type ReportDetailRouteProp = RouteProp<
   { ReportDetail: { reportId: string } },
@@ -125,9 +134,7 @@ export default function ReportDetail() {
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.card}>
             <View style={styles.badgeRow}>
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{report.status}</Text>
-              </View>
+              <StatusBadge label={report.status} tone={STATUS_TONE[report.status]} />
             </View>
             <Text style={styles.sectionLabel}>Reported User</Text>
             <Text style={styles.value}>{report.reportedUserName}</Text>
@@ -150,28 +157,28 @@ export default function ReportDetail() {
 
           {report.status === "open" && (
             <>
-              <Text style={styles.sectionTitle}>Actions</Text>
-              <TouchableOpacity
-                style={styles.actionButton}
+              <Text style={styles.eyebrow}>Actions</Text>
+              <AdminButton
+                label="Mark Reviewed"
+                variant="secondary"
                 disabled={isMutating}
+                loading={reviewMutation.isPending}
                 onPress={() => reviewMutation.mutate()}
-              >
-                <Text style={styles.actionButtonText}>Mark Reviewed</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.actionButton}
+              />
+              <AdminButton
+                label="Warn User"
+                variant="secondary"
                 disabled={isMutating}
+                loading={actionMutation.isPending && actionMutation.variables === "warn"}
                 onPress={handleWarn}
-              >
-                <Text style={styles.actionButtonText}>Warn User</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.destructiveButton]}
+              />
+              <AdminButton
+                label="Ban User"
+                variant="destructive"
                 disabled={isMutating}
+                loading={actionMutation.isPending && actionMutation.variables === "ban"}
                 onPress={handleBan}
-              >
-                <Text style={styles.actionButtonText}>Ban User</Text>
-              </TouchableOpacity>
+              />
             </>
           )}
         </ScrollView>
@@ -214,36 +221,23 @@ const styles = StyleSheet.create({
     ...shadows.subtle,
   },
   badgeRow: { flexDirection: "row", marginBottom: spacing.md },
-  badge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: radius.sm,
-    backgroundColor: colors.primary[500],
-  },
-  badgeText: { fontSize: typography.sizes.xs, fontWeight: "600", color: colors.gray[900] },
   sectionLabel: {
     fontSize: typography.sizes.xs,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
     color: colors.gray[500],
     marginTop: spacing.md,
     marginBottom: spacing.xs,
   },
   value: { fontSize: typography.sizes.md, color: colors.gray[50] },
   reasonText: { fontSize: typography.sizes.sm, color: colors.gray[300], lineHeight: 20 },
-  sectionTitle: {
-    fontSize: typography.sizes.md,
-    fontWeight: "600",
-    color: colors.gray[50],
+  eyebrow: {
+    fontSize: typography.sizes.xs,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: colors.gray[500],
     marginBottom: spacing.sm,
   },
-  actionButton: {
-    backgroundColor: colors.gray[850],
-    borderWidth: 1,
-    borderColor: colors.gray[800],
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-    marginBottom: spacing.sm,
-  },
-  destructiveButton: { backgroundColor: colors.red, borderColor: colors.red },
-  actionButtonText: { fontSize: typography.sizes.md, fontWeight: "600", color: colors.white },
 });
