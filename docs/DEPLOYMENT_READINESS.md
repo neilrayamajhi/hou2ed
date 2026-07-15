@@ -2,7 +2,7 @@
 
 Living document tracking what's been fixed, what's still open, and what needs a human decision before this app ships. Update this as work continues.
 
-**Last updated:** 2026-07-15
+**Last updated:** 2026-07-15 (all 3 RLS security items closed)
 
 ---
 
@@ -68,16 +68,25 @@ From the original pre-deploy audit:
 
 - `npm run start` was hanging/crashing on a bug in Expo CLI's dependency-version-check network call. Root cause: installed packages had drifted behind the Expo SDK's expected versions. Fixed via `expo install --fix`, verified via a clean `tsc`/Jest run and an actual `expo start` before committing.
 - Fixed a real crash (`Cannot read property 'trim' of null`) in the new admin screens — `AvatarInitial` didn't guard against a null `full_name`, which the Verification Review screens hit since `profiles.full_name` has no `NOT NULL` constraint. Found by actually running the app, not by code review.
+- Fixed invisible text/icons throughout the entire apply-listing flow (all 4 steps) — `colors.gray` (an object of shades) was being used directly as a color value in 18 places instead of a real shade like `colors.gray[500]`. Found while manually testing the fake-IP fix below; fixed everywhere once found, not just the one spot reported.
+
+---
+
+## ✅ Three RLS security holes closed, plus two adjacent bugs found while fixing them
+
+Same rigor as everything else — each fix verified against the live database with disposable test accounts (attack attempted and confirmed blocked, legitimate use confirmed still works, test data cleaned up).
+
+1. **Provider profiles exposed verification documents/phone/email to any seeker.** Replaced the overly-broad table policy with a narrow `provider_public_profiles` view exposing only name/avatar/username/role. Also narrowed two unrelated `select("*")` calls in `messageService.ts` that were over-fetching full profile rows just to show a chat participant's name.
+2. **Providers could rewrite any field of a seeker's application**, including their signature — not just status/notes. Fixed with a column-restricting trigger. Along the way, found `soft_delete_application()` had **no ownership check at all** — any authenticated user could withdraw/delete an application that wasn't theirs. Fixed.
+3. **Messages had no edit policy at all on the live database** (contrary to what migration files suggested) — editing/deleting your own message has been silently broken for every real user this whole time, not "too permissive" as originally assumed. Added a proper 24-hour edit window. Along the way, found `add_user_to_read_by()` trusted a client-supplied user ID with no check it matched the real caller — anyone could manipulate anyone else's read receipts. Fixed to always use the real caller's ID.
 
 ---
 
 ## ⬜ Still open — prioritized
 
-### Security (same severity class as everything fixed above)
-- [ ] **Provider `verification_documents`, phone, and email exposed to any logged-in seeker.** A policy meant to expose just "name + avatar" on the listing detail screen grants the whole profile row.
-- [ ] **Providers can rewrite any field of a seeker's submitted application**, not just status — including tampering with their signature. The RLS `WITH CHECK` doesn't actually restrict which columns change.
-- [ ] **An overly broad message-edit policy** undermines the intended 24-hour edit window / soft-delete rules on messages.
+### Security
 - [ ] Rate limiting on signup/login is client-side only (`AsyncStorage`) — trivially bypassed by anyone hitting the API directly. Lower priority; not an active data-exposure risk.
+- [ ] `messageService.ts`'s `getCachedProfile`/`getBatchProfiles` can still fetch a full profile row (all columns) for any thread participant via the existing "message participants can view each other" policy — narrowed what the app *asks for*, but someone bypassing the app entirely could still pull the full row this way. Lower priority than the fixes above since it requires already being a real conversation partner, not any random user.
 
 ### Waiting on someone else
 - [ ] **Neil needs to revoke his leaked Management API token** (see item 4 above). Still live as of this session.
@@ -97,6 +106,5 @@ From the original pre-deploy audit:
 
 ## Recommended next session
 
-1. Nudge Neil about the token (5 minutes, but real exposure until done).
-2. The 3 RLS security items — same rigor as everything above (live-tested, not just code review).
-3. Everything else on this list can wait until after those.
+1. Nudge Neil about the token (5 minutes, but real exposure until done) — still the only item left that isn't in our control.
+2. Everything else remaining is lower-priority tech debt / feature gaps — safe to tackle opportunistically, nothing else launch-blocking is currently known.
