@@ -219,7 +219,7 @@ export default function ListingDetailsScreen() {
     let cancelled = false;
     (async () => {
       const { data } = await supabase
-        .from("profiles")
+        .from("provider_public_profiles")
         .select("full_name, avatar_url")
         .eq("id", providerId)
         .maybeSingle();

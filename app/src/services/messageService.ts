@@ -147,7 +147,7 @@ class MessageServiceFix {
     // Fetch from database
     const { data: profile, error } = await supabase
       .from("profiles")
-      .select("*")
+      .select("id, full_name, avatar_url, username, role")
       .eq("id", userId)
       .single();
 
@@ -186,7 +186,7 @@ class MessageServiceFix {
     if (uncachedIds.length > 0) {
       const { data: fetchedProfiles, error } = await supabase
         .from("profiles")
-        .select("*")
+        .select("id, full_name, avatar_url, username, role")
         .in("id", uncachedIds);
 
       console.log(
