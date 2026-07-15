@@ -129,8 +129,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[800],
+    borderBottomWidth: 2,
+    borderBottomColor: "rgba(212, 175, 55, 0.25)",
   },
   backButton: { padding: spacing.xs, marginRight: spacing.md },
   headerTitle: {

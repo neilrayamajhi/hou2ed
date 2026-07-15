@@ -24,9 +24,9 @@ export default function AvatarInitial({ name, size = 40 }: AvatarInitialProps) {
 
 const styles = StyleSheet.create({
   circle: {
-    backgroundColor: colors.gray[800],
+    backgroundColor: "rgba(212, 175, 55, 0.14)",
     borderWidth: 1,
-    borderColor: colors.gray[700],
+    borderColor: "rgba(212, 175, 55, 0.35)",
     alignItems: "center",
     justifyContent: "center",
   },

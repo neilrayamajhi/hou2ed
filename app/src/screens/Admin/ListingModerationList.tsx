@@ -146,7 +146,9 @@ export default function ListingModerationList() {
           ]}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Ionicons name="home-outline" size={56} color={colors.gray[700]} />
+              <View style={styles.emptyIconContainer}>
+                <Ionicons name="home-outline" size={40} color={colors.gray[600]} />
+              </View>
               <Text style={styles.emptyStateTitle}>No listings found</Text>
             </View>
           }
@@ -171,8 +173,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[800],
+    borderBottomWidth: 2,
+    borderBottomColor: "rgba(212, 175, 55, 0.25)",
   },
   backButton: { padding: spacing.xs, marginRight: spacing.md },
   headerTitle: {
@@ -229,6 +231,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: spacing["3xl"],
+  },
+  emptyIconContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: radius.full,
+    backgroundColor: colors.gray[850],
+    borderWidth: 1,
+    borderColor: colors.gray[800],
+    alignItems: "center",
+    justifyContent: "center",
   },
   emptyStateTitle: {
     fontSize: typography.sizes.lg,

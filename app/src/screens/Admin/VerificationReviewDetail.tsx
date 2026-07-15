@@ -20,6 +20,7 @@ import {
   type VerificationStatus,
 } from "../../services/verification.service";
 import StatusBadge, { type StatusBadgeTone } from "../../components/admin/StatusBadge";
+import { glowCard } from "../../components/admin/adminTheme";
 import AdminButton from "../../components/admin/AdminButton";
 import AvatarInitial from "../../components/admin/AvatarInitial";
 
@@ -118,7 +119,7 @@ export default function VerificationReviewDetail() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.card}>
+          <View style={[styles.card, styles.identityCard]}>
             <View style={styles.identityRow}>
               <AvatarInitial name={verification.fullName || verification.email} size={52} />
               <View style={styles.identityBody}>
@@ -177,8 +178,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[800],
+    borderBottomWidth: 2,
+    borderBottomColor: "rgba(212, 175, 55, 0.25)",
   },
   backButton: { padding: spacing.xs, marginRight: spacing.md },
   headerTitle: {
@@ -203,6 +204,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     ...shadows.subtle,
   },
+  identityCard: { ...glowCard },
   identityRow: {
     flexDirection: "row",
     alignItems: "center",

@@ -13,6 +13,7 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { colors, spacing, typography, radius, shadows } from "../../theme/tokens";
+import { glowCard } from "../../components/admin/adminTheme";
 import { RootStackNavigationProp } from "../../navigation/types";
 import {
   getReportDetail,
@@ -194,8 +195,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[800],
+    borderBottomWidth: 2,
+    borderBottomColor: "rgba(212, 175, 55, 0.25)",
   },
   backButton: { padding: spacing.xs, marginRight: spacing.md },
   headerTitle: {
@@ -215,10 +216,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gray[850],
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.gray[800],
     padding: spacing.lg,
     marginBottom: spacing.lg,
     ...shadows.subtle,
+    ...glowCard,
   },
   badgeRow: { flexDirection: "row", marginBottom: spacing.md },
   sectionLabel: {

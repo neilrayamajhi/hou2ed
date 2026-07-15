@@ -536,8 +536,8 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xl,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[800],
+    borderBottomWidth: 2,
+    borderBottomColor: "rgba(212, 175, 55, 0.25)",
   },
   headerContent: {
     flexDirection: "row",
@@ -616,7 +616,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: radius.md,
-    backgroundColor: colors.gray[800],
+    backgroundColor: "rgba(212, 175, 55, 0.14)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -661,7 +661,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: radius.md,
-    backgroundColor: colors.gray[800],
+    backgroundColor: "rgba(212, 175, 55, 0.14)",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: spacing.sm,

@@ -59,6 +59,11 @@ const styles = StyleSheet.create({
   },
   primary: {
     backgroundColor: colors.primary[500],
+    shadowColor: colors.primary[500],
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 5,
   },
   destructive: {
     backgroundColor: colors.red,
