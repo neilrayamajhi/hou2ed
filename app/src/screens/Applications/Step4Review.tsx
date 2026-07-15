@@ -279,7 +279,7 @@ export default function Step4Review({
             value={signature}
             onChangeText={handleSignatureChange}
             placeholder="John Doe"
-            placeholderTextColor={colors.gray}
+            placeholderTextColor={colors.gray[500]}
             autoCapitalize="words"
             autoCorrect={false}
             maxLength={50}
@@ -329,7 +329,7 @@ export default function Step4Review({
           <Ionicons
             name="shield-checkmark-outline"
             size={16}
-            color={colors.gray}
+            color={colors.gray[500]}
           />
           <Text style={styles.legalText}>
             This application is submitted under penalty of perjury. All
@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
   },
   reviewLabel: {
     fontSize: 14,
-    color: colors.gray,
+    color: colors.gray[500],
     minWidth: 100,
   },
   reviewValue: {
@@ -516,7 +516,7 @@ const styles = StyleSheet.create({
   },
   signaturePreviewLabel: {
     fontSize: 12,
-    color: colors.gray,
+    color: colors.gray[500],
     marginBottom: spacing.xs,
   },
   signatureText: {
@@ -527,7 +527,7 @@ const styles = StyleSheet.create({
   },
   signatureMetadata: {
     fontSize: 11,
-    color: colors.gray,
+    color: colors.gray[500],
   },
   termsSection: {
     marginBottom: spacing.lg,
@@ -558,7 +558,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: spacing.sm,
     fontSize: 12,
-    color: colors.gray,
+    color: colors.gray[500],
     lineHeight: 16,
   },
   footer: {
@@ -610,7 +610,7 @@ const styles = StyleSheet.create({
   },
   footerHint: {
     fontSize: 12,
-    color: colors.gray,
+    color: colors.gray[500],
     textAlign: "center",
     marginTop: spacing.sm,
   },

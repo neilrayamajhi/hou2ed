@@ -193,7 +193,7 @@ export default function Step2Eligibility({
 
         {/* Privacy Note */}
         <View style={styles.privacyNote}>
-          <Ionicons name="lock-closed-outline" size={16} color={colors.gray} />
+          <Ionicons name="lock-closed-outline" size={16} color={colors.gray[500]} />
           <Text style={styles.privacyText}>
             This information is used solely for matching purposes and is kept strictly confidential.
           </Text>
@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: spacing.sm,
     fontSize: 12,
-    color: colors.gray,
+    color: colors.gray[500],
     lineHeight: 16,
   },
   footer: {
@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
   },
   footerHint: {
     fontSize: 12,
-    color: colors.gray,
+    color: colors.gray[500],
     textAlign: "center",
     marginTop: spacing.sm,
   },

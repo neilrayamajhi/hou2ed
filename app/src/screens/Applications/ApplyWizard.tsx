@@ -739,7 +739,7 @@ const styles = StyleSheet.create({
   stepNumber: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.gray,
+    color: colors.gray[500],
   },
   stepNumberActive: {
     color: colors.black,
@@ -765,7 +765,7 @@ const styles = StyleSheet.create({
   },
   stepSubtitle: {
     fontSize: 14,
-    color: colors.gray,
+    color: colors.gray[500],
   },
   placeholder: {
     flex: 1,

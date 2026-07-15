@@ -579,7 +579,7 @@ export default function Step3Documents({
 
         {/* Privacy Note */}
         <View style={styles.privacyNote}>
-          <Ionicons name="lock-closed-outline" size={16} color={colors.gray} />
+          <Ionicons name="lock-closed-outline" size={16} color={colors.gray[500]} />
           <Text style={styles.privacyText}>
             Your documents are encrypted and securely stored. They will only be
             shared with the housing provider for verification purposes.
@@ -724,7 +724,7 @@ const styles = StyleSheet.create({
   },
   fileSize: {
     fontSize: 12,
-    color: colors.gray,
+    color: colors.gray[500],
   },
   progressContainer: {
     flexDirection: "row",
@@ -788,7 +788,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: spacing.sm,
     fontSize: 12,
-    color: colors.gray,
+    color: colors.gray[500],
     lineHeight: 16,
   },
   footer: {
@@ -840,7 +840,7 @@ const styles = StyleSheet.create({
   },
   footerHint: {
     fontSize: 12,
-    color: colors.gray,
+    color: colors.gray[500],
     textAlign: "center",
     marginTop: spacing.sm,
   },
@@ -851,7 +851,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
-    color: colors.gray,
+    color: colors.gray[500],
     marginTop: spacing.md,
   },
   customNoticeBox: {
@@ -860,7 +860,7 @@ const styles = StyleSheet.create({
   },
   documentDescription: {
     fontSize: 12,
-    color: colors.gray,
+    color: colors.gray[500],
     marginTop: spacing.xs,
   },
 });

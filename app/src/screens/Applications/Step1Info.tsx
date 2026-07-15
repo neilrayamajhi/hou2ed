@@ -96,12 +96,12 @@ export default function Step1Info({ draft, onUpdate, onNext }: Step1InfoProps) {
                     <Ionicons
                       name="person-outline"
                       size={20}
-                      color={errors.fullName ? colors.red : colors.gray}
+                      color={errors.fullName ? colors.red : colors.gray[500]}
                     />
                     <TextInput
                       style={styles.input}
                       placeholder="Enter your full name"
-                      placeholderTextColor={colors.gray}
+                      placeholderTextColor={colors.gray[500]}
                       value={value}
                       onChangeText={(text) => {
                         onChange(text);
@@ -161,12 +161,12 @@ export default function Step1Info({ draft, onUpdate, onNext }: Step1InfoProps) {
                     <Ionicons
                       name="call-outline"
                       size={20}
-                      color={errors.phone ? colors.red : colors.gray}
+                      color={errors.phone ? colors.red : colors.gray[500]}
                     />
                     <TextInput
                       style={styles.input}
                       placeholder="(555) 123-4567"
-                      placeholderTextColor={colors.gray}
+                      placeholderTextColor={colors.gray[500]}
                       value={value}
                       onChangeText={(text) => {
                         onChange(text);
@@ -206,12 +206,12 @@ export default function Step1Info({ draft, onUpdate, onNext }: Step1InfoProps) {
                     <Ionicons
                       name="mail-outline"
                       size={20}
-                      color={errors.email ? colors.red : colors.gray}
+                      color={errors.email ? colors.red : colors.gray[500]}
                     />
                     <TextInput
                       style={styles.input}
                       placeholder="your.email@example.com"
-                      placeholderTextColor={colors.gray}
+                      placeholderTextColor={colors.gray[500]}
                       value={value}
                       onChangeText={(text) => {
                         onChange(text);
@@ -424,7 +424,7 @@ const styles = StyleSheet.create({
   },
   footerHint: {
     fontSize: 12,
-    color: colors.gray,
+    color: colors.gray[500],
     textAlign: "center",
     marginTop: spacing.sm,
   },
