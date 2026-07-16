@@ -2,7 +2,45 @@
 
 Living document tracking what's been fixed, what's still open, and what needs a human decision before this app ships. Update this as work continues.
 
-**Last updated:** 2026-07-15 (legal docs, App Store copy, and the full tech-debt punch list closed out)
+**Last updated:** 2026-07-15 (critical DV-sensitive listing exposure closed - see top of Security section)
+
+---
+
+## 🚨 CRITICAL (fixed): DV-sensitive listing locations were fully exposed to anyone
+
+The single most severe finding of this entire project. Found and fixed during a deep security sweep the owner explicitly requested after the Advisor findings above.
+
+**What was wrong:** Any listing marked `dv_sensitive = true` (the flag meant for domestic-violence shelters and similarly sensitive housing) had its exact street address and GPS coordinates fully readable by **anyone, including a fully anonymous request with no login at all** - not a bug in a rarely-used corner, but through the app's normal, everyday search and listing-detail screens. The app has real, purpose-built safety infrastructure for this (a `public_listings` view and a `get_listing_safe()` function, both of which redact address/zip/lat/lng down to city-level precision for anyone who isn't the listing's own provider or an admin), but:
+1. Two old, unrestricted RLS policies on `listings` (`"Anyone can view listings"` - unconditionally `true` - and `"public_view_active_listings"`, which checked active/blocking status but never checked `dv_sensitive`) were never removed when the DV-safety policy was added later. Since RLS permissive policies are OR'd together, satisfying either old policy alone was enough - the DV-safety check was completely bypassable.
+2. `SearchScreen.tsx`, `ListingDetailsScreen.tsx`, and `marketplace.service.ts` (used by `HomeScreen`) all queried the raw `listings` table directly instead of the safety view, so even fixing the policies alone wouldn't have made the app itself safe.
+3. The `public_listings` view itself was *separately* already broken (`security_invoker=on`, apparently set at some point outside this session) - it needs to run with elevated privileges to read the real address and decide what to redact, and with that setting on it could no longer see anything to redact. This had been silently broken with zero real DV listings in production to expose it.
+
+**Verified live with a disposable test listing** (fake shelter, fake address, deleted after): confirmed the exact leak with a raw `curl` request using only the public API key, no account; confirmed the fix closes it for anonymous and logged-in requests; confirmed the safety view correctly returns the redacted version instead of just hiding the listing entirely; confirmed the listing's own provider and admins still see the real address (they need to); confirmed normal non-DV listing browsing is unaffected.
+
+**Fixed:**
+- Replaced the two overly-permissive policies with one correct policy: `listings.sql` migration [`20260716100000_fix_dv_sensitive_listing_exposure.sql`](../supabase/migrations/20260716100000_fix_dv_sensitive_listing_exposure.sql) - DV-sensitive rows are now visible via the raw table only to their own provider or an admin.
+- Reverted `public_listings`'s `security_invoker` back off, restoring its ability to redact-and-return DV-sensitive rows instead of silently hiding them.
+- Restored a missing `GRANT SELECT` on `public_listings` for the `anon` role (also apparently dropped at some point outside this session) so anonymous browsing keeps working.
+- Updated `SearchScreen.tsx`, `ListingDetailsScreen.tsx`, `marketplace.service.ts`, `ApplyWizard.tsx`, and `Step3Documents.tsx` to query `public_listings` instead of the raw table. Left every provider/admin-scoped query (managing your own listings, admin moderation) on the raw table unchanged - RLS already correctly permits those.
+- Zero real DV-sensitive listings exist in production today, so no real user data was ever actually exposed by this - but the hole was live and exploitable by anyone the moment a real one was created.
+
+**Known follow-up, not a security issue:** the provider-name join (`profiles!listings_provider_id_fkey`) in `marketplace.service.ts` returns `null` for the provider's name when queried through the safety view, for both anon and authenticated callers - confirmed this is an RLS-level embedding quirk, not something this session's changes caused (it reproduces the same way even against the raw table under normal RLS, just masked before by the overly-permissive policies happening to also loosen this path). Worth a follow-up investigation; it's a missing-data/UX issue, not a leak.
+
+---
+
+## ✅ Supabase Security Advisor findings closed
+
+The owner ran Supabase's built-in Security Advisor and got 3 "CRITICAL" findings. Investigated each individually rather than reacting to the label alone:
+
+1. **`public.rate_limits` had no RLS at all** — a real gap this session introduced: wiring up real rate limiting (see above) meant this table started holding real login/signup email addresses in its `key` column, and with RLS off, anyone with the public API key could read them directly, or simply delete their own row to defeat the rate limit entirely. Enabled RLS with no permissive policies — the `check_rate_limit()` RPC is `SECURITY DEFINER` (owned by `postgres`), so it bypasses RLS and keeps working; no other path should ever touch this table directly. Verified live: direct table reads now return nothing, the RPC still works.
+2. **`public.provider_public_profiles` (the view from this session's RLS fixes) ran with its creator's privileges instead of the querying user's** — a legacy Postgres default for views, and a real defense-in-depth gap even though this specific view's own column list was already narrow. Set `security_invoker = true`. This broke the view for real users on the first attempt (`anon` had zero grants on `profiles` at all, and `authenticated`'s only policy covered your own profile or a shared message thread) — fixed properly by adding a column-level `GRANT` for just the 5 safe fields (`id, full_name, avatar_url, username, role`) plus a matching RLS policy scoped to `role = 'provider'`, instead of reverting. This ends up *more* robust than the original: even if the view definition is ever edited to add a sensitive column, the column-level grant still blocks it. Verified live: the view returns real data again, direct requests for sensitive columns (`email`, `phone`, `verification_documents`) are still denied, and only provider rows come back.
+3. **`public.spatial_ref_sys` flagged for having RLS disabled** — not fixed, deliberately. It's a PostGIS extension system table holding public coordinate-system reference data (not application data), owned by `supabase_admin`, a platform-reserved role project owners cannot `ALTER`. This is a standard, commonly-unfixable Advisor finding for any project using PostGIS/maps and is safe to ignore.
+
+Migration: [`20260716090000_fix_advisor_security_findings.sql`](../supabase/migrations/20260716090000_fix_advisor_security_findings.sql).
+
+Two smaller things noticed during the deeper sweep below, checked and confirmed **not** issues, recorded for completeness:
+- `applications` has 4 overlapping INSERT policies, one of which (`"Cannot apply to blocked providers"`) doesn't itself check `seeker_id = auth.uid()`. Looked exploitable on paper - tested it directly with disposable accounts (an attacker trying to insert an application impersonating a different seeker) and it's correctly blocked, safely, by the interaction with the other three policies. Still fragile/confusing design worth cleaning up sometime (same duplicate-policy pattern already fixed once this session on the same table), just not an active hole.
+- A `public.threads` table (RLS on, zero policies, fully deny-all) turns out to be reachable from one code path (`application.service.ts::createApplicationThread`), but traced the full call chain and that path is triple-dead: the function's only caller (`createApplication`) is only called by a hook (`useApplicationWizard.ts`) that no screen anywhere imports. Not a live bug.
 
 ---
 
@@ -123,5 +161,7 @@ Everything from the "still open" list below (as of the previous update) is now d
 
 ## Recommended next session
 
-1. Nudge Neil about the token (5 minutes, but real exposure until done) — still the only item left that isn't in our control.
-2. Build the provider verification submission flow per its scope doc, or start working through the newly-visible `tsc` error backlog, or fix the Jest native-module test-environment gap — pick whichever matters most; none of the three is launch-blocking.
+1. **Commit and push the DV-sensitive listing exposure fix (2026-07-16).** The fix is complete, live on the database, and verified — code changes are staged locally but deliberately not yet committed, held for a fresh review before pushing something this severe. Files: the two migrations in `supabase/migrations/2026071609*` / `2026071610*`, plus `SearchScreen.tsx`, `ListingDetailsScreen.tsx`, `marketplace.service.ts`, `ApplyWizard.tsx`, `Step3Documents.tsx`. See the "🚨 CRITICAL (fixed)" section at the top of this doc for the full writeup.
+2. Nudge Neil about the token (5 minutes, but real exposure until done) — still the only item left that isn't in our control.
+3. Build the provider verification submission flow per its scope doc, or start working through the newly-visible `tsc` error backlog, or fix the Jest native-module test-environment gap — pick whichever matters most; none of the three is launch-blocking.
+4. Optional follow-up, not a security issue: the provider-name join in `marketplace.service.ts` (`profiles!listings_provider_id_fkey`) returns `null` through the safety view for both anon and authenticated callers — noted in the CRITICAL section above, worth a look when convenient.

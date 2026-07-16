@@ -116,8 +116,13 @@ export default function SearchScreen() {
     (async () => {
       try {
         searchPerf.start();
+        // Query the DV-safety view, not the raw table: it obfuscates
+        // address/lat/lng to city-level precision for anyone who isn't the
+        // listing's own provider or an admin, for any listing flagged
+        // dv_sensitive. The raw `listings` table intentionally denies
+        // direct access to those rows for everyone else.
         const { data, error } = await supabase
-          .from("listings")
+          .from("public_listings")
           .select(
             "id,provider_id,title,description,address,city,state,zip_code,lat,lng,housing_type,unit_beds,ada_beds,gender_rooming,amenities,accessibility,eligibility,services,rules,cost,intake,availability,verified,certifications,images,responsiveness,dv_sensitive,is_active,created_at,updated_at",
           )

@@ -133,8 +133,10 @@ export default function ListingDetailsScreen() {
     (async () => {
       try {
         setLoadingDb(true);
+        // Query the DV-safety view, not the raw table - see the matching
+        // comment in SearchScreen.tsx for why.
         const { data, error } = await supabase
-          .from("listings")
+          .from("public_listings")
           .select(
             "id,title,description,amenities,services,rules,eligibility,images,address,city,state,zip_code,lat,lng,provider_id",
           )

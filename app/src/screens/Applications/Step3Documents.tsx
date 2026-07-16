@@ -66,8 +66,11 @@ export default function Step3Documents({
 
       try {
         setLoadingRequirements(true);
+        // Uses the DV-safety view rather than the raw table since the
+        // applicant isn't the listing's owner - intake isn't redacted by
+        // this view (only address/lat/lng/zip are), so this still works.
         const { data, error } = await supabase
-          .from("listings")
+          .from("public_listings")
           .select("intake")
           .eq("id", draft.listingId)
           .single();
@@ -579,7 +582,11 @@ export default function Step3Documents({
 
         {/* Privacy Note */}
         <View style={styles.privacyNote}>
-          <Ionicons name="lock-closed-outline" size={16} color={colors.gray[500]} />
+          <Ionicons
+            name="lock-closed-outline"
+            size={16}
+            color={colors.gray[500]}
+          />
           <Text style={styles.privacyText}>
             Your documents are encrypted and securely stored. They will only be
             shared with the housing provider for verification purposes.

@@ -366,8 +366,10 @@ export async function getMarketplaceListings(
 
     console.log("   Fetching listings via direct query with RLS...");
     console.log("   Including provider info via join...");
+    // Query the DV-safety view, not the raw table - see the matching
+    // comment in SearchScreen.tsx for why.
     const queryPromise = supabase
-      .from("listings")
+      .from("public_listings")
       .select(
         `
         *,
@@ -504,8 +506,10 @@ export async function getMarketplaceListing(
   userLng?: number,
 ): Promise<MarketplaceListing | null> {
   try {
+    // Query the DV-safety view, not the raw table - see the matching
+    // comment in SearchScreen.tsx for why.
     const { data, error } = await supabase
-      .from("listings")
+      .from("public_listings")
       .select(
         `
         *,
