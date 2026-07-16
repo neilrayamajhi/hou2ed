@@ -2,6 +2,37 @@ import { supabase, authHelpers } from "../lib/supabase";
 import { validateEmail } from "../utils/validation";
 import { transformUserData, retryWithBackoff } from "../utils/auth";
 import { AuthError, AUTH_ERROR_CODES } from "../utils/auth-errors";
+import { AUTH_CONSTANTS } from "../constants/auth.constants";
+
+/**
+ * Server-side rate limit check via the `check_rate_limit` Postgres RPC, so
+ * brute-forcing signup/login can't be bypassed by simply clearing the
+ * client-side AsyncStorage lockout (e.g. reinstalling the app). Keyed per
+ * action+email so it tracks the account being targeted, not just the device.
+ *
+ * Fails open on an RPC/network error - this is a defense-in-depth layer on
+ * top of the existing client-side lockout, not the only line of defense, so
+ * a transient outage here should not lock every user out of login entirely.
+ */
+async function checkServerRateLimit(key: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase.rpc("check_rate_limit", {
+      p_key: key,
+      p_max: AUTH_CONSTANTS.MAX_LOGIN_ATTEMPTS,
+      p_window: `${AUTH_CONSTANTS.LOGIN_LOCKOUT_DURATION_MS / 1000} seconds`,
+    });
+
+    if (error) {
+      console.error("Rate limit check failed, allowing attempt:", error);
+      return true;
+    }
+
+    return data !== false;
+  } catch (error) {
+    console.error("Unexpected error checking rate limit:", error);
+    return true;
+  }
+}
 
 export interface LoginCredentials {
   emailOrUsername: string;
@@ -94,7 +125,17 @@ export async function loginUser(
       };
     }
 
-    console.log("Attempting authentication with email:", email);
+    const allowed = await checkServerRateLimit(`login:${email.toLowerCase()}`);
+    if (!allowed) {
+      return {
+        success: false,
+        error:
+          "Too many login attempts. Please wait a few minutes and try again.",
+        errorCode: AUTH_ERROR_CODES.RATE_LIMITED,
+      };
+    }
+
+    console.log("Attempting authentication");
 
     // Perform authentication
     const { data, error } = await performAuthentication(email, password);
@@ -205,8 +246,7 @@ export async function verifyOtp(
   code: string,
 ): Promise<LoginResult> {
   try {
-    console.log("Verifying OTP for:", email);
-    console.log("Code entered:", code);
+    console.log("Verifying OTP");
 
     // Use the correct OTP verification method
     const { data, error } = await supabase.auth.verifyOtp({
@@ -235,7 +275,7 @@ export async function verifyOtp(
     }
 
     if (data?.user) {
-      console.log("Verification successful for:", email);
+      console.log("Verification successful");
       const userData = await transformUserData(data.user);
       return {
         success: true,
@@ -327,6 +367,16 @@ export async function signUpUser(
     };
   }
 
+  const allowed = await checkServerRateLimit(`signup:${email.toLowerCase()}`);
+  if (!allowed) {
+    return {
+      success: false,
+      error:
+        "Too many signup attempts. Please wait a few minutes and try again.",
+      errorCode: AUTH_ERROR_CODES.RATE_LIMITED,
+    };
+  }
+
   try {
     // Log the API endpoint being used (helpful for debugging)
     console.log(
@@ -337,7 +387,7 @@ export async function signUpUser(
     // CRITICAL: Check if email is already registered FIRST
     // This prevents the confusing scenario where signup appears to succeed
     // but verification fails because the email already exists
-    console.log("Checking if email already exists:", email);
+    console.log("Checking if email already exists");
     const { data: existingEmailUser, error: emailCheckError } = await supabase
       .from("profiles")
       .select("id")
@@ -350,7 +400,7 @@ export async function signUpUser(
     }
 
     if (existingEmailUser) {
-      console.log("Email already registered:", email);
+      console.log("Email already registered");
 
       // Try to resend verification code to check if account is unverified
       console.log("Attempting to resend OTP to check verification status...");
@@ -369,7 +419,7 @@ export async function signUpUser(
       }
 
       // Resend failed = account is verified or other error
-      console.log("Email already registered and verified:", email);
+      console.log("Email already registered and verified");
       return {
         success: false,
         error:

@@ -9,6 +9,7 @@ import {
   Modal,
   ScrollView,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MapView, Marker, PROVIDER_GOOGLE } from "../../components/MapView";
@@ -21,6 +22,7 @@ import OfflineBanner from "../../components/OfflineBanner";
 import FiltersSheet from "./FiltersSheet";
 import { useFilterStore } from "../../state/useFilterStore";
 import { supabase } from "../../lib/supabase";
+import { saveSearch } from "../../services/saved.service";
 import { sortListings, SORT_OPTIONS } from "../../utils/sortListings";
 import { usePerformance } from "../../utils/perf";
 import type {
@@ -73,6 +75,7 @@ export default function SearchScreen() {
     hasActiveFilters,
     getActiveFilterCount,
     loadSnapshot,
+    snapshot,
   } = useFilterStore();
 
   // Apply filters from a saved search, if we were navigated here with one
@@ -90,6 +93,9 @@ export default function SearchScreen() {
   const [searchText, setSearchText] = useState(searchQuery);
   const [showSortModal, setShowSortModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [showSaveSearchModal, setShowSaveSearchModal] = useState(false);
+  const [saveSearchName, setSaveSearchName] = useState("");
+  const [isSavingSearch, setIsSavingSearch] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [listings, setListings] = useState<any[]>([]);
@@ -258,6 +264,27 @@ export default function SearchScreen() {
     setShowFilters(true);
   }, []);
 
+  // Save the current search + filters for later
+  const handleSaveSearch = useCallback(async () => {
+    const name = saveSearchName.trim();
+    if (!name) return;
+
+    setIsSavingSearch(true);
+    const result = await saveSearch({
+      name,
+      filters: snapshot() as any,
+    });
+    setIsSavingSearch(false);
+
+    if (result.success) {
+      setShowSaveSearchModal(false);
+      setSaveSearchName("");
+      Alert.alert("Search Saved", `"${name}" has been saved.`);
+    } else {
+      Alert.alert("Error", result.error || "Failed to save search");
+    }
+  }, [saveSearchName, snapshot]);
+
   // Open details
   const openDetails = useCallback(
     (listing: Listing) => {
@@ -377,6 +404,16 @@ export default function SearchScreen() {
               {SORT_OPTIONS.find((o) => o.value === sortBy)?.label || "Sort"}
             </Text>
             <Ionicons name="chevron-down-outline" size={16} color={"#4B5563"} />
+          </TouchableOpacity>
+
+          {/* Save Search */}
+          <TouchableOpacity
+            style={styles.saveSearchButton}
+            onPress={() => setShowSaveSearchModal(true)}
+            accessibilityLabel="Save this search"
+            accessibilityRole="button"
+          >
+            <Ionicons name="bookmark-outline" size={18} color={"#D4AF37"} />
           </TouchableOpacity>
         </View>
       </View>
@@ -512,6 +549,60 @@ export default function SearchScreen() {
         visible={showFilters}
         onClose={() => setShowFilters(false)}
       />
+
+      {/* Save Search Modal */}
+      <Modal
+        visible={showSaveSearchModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSaveSearchModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowSaveSearchModal(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Save Search</Text>
+              <TouchableOpacity onPress={() => setShowSaveSearchModal(false)}>
+                <Ionicons name="close" size={24} color={"#FFFFFF"} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.saveSearchBody}>
+              <Text style={styles.saveSearchLabel}>
+                Give this search a name so you can find it again later
+                {filterCountText
+                  ? ` (${getActiveFilterCount()} filters applied)`
+                  : ""}
+                .
+              </Text>
+              <TextInput
+                style={styles.saveSearchInput}
+                placeholder="e.g. Shelters near downtown"
+                placeholderTextColor={"#4B5563"}
+                value={saveSearchName}
+                onChangeText={setSaveSearchName}
+                autoFocus
+                editable={!isSavingSearch}
+              />
+              <TouchableOpacity
+                style={[
+                  styles.saveSearchSubmit,
+                  (!saveSearchName.trim() || isSavingSearch) &&
+                    styles.saveSearchSubmitDisabled,
+                ]}
+                onPress={handleSaveSearch}
+                disabled={!saveSearchName.trim() || isSavingSearch}
+              >
+                <Text style={styles.saveSearchSubmitText}>
+                  {isSavingSearch ? "Saving..." : "Save"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -612,6 +703,45 @@ const styles = StyleSheet.create({
   sortText: {
     fontSize: theme.typography.fontSize.sm,
     color: "#FFFFFF",
+  },
+  saveSearchButton: {
+    justifyContent: "center",
+    alignItems: "center",
+    width: 36,
+    height: 36,
+    borderRadius: theme.borderRadius.sm,
+    backgroundColor: "#1F2937",
+  },
+  saveSearchBody: {
+    padding: theme.spacing.lg,
+  },
+  saveSearchLabel: {
+    fontSize: theme.typography.fontSize.sm,
+    color: "#9CA3AF",
+    marginBottom: theme.spacing.md,
+  },
+  saveSearchInput: {
+    backgroundColor: "#111827",
+    borderRadius: theme.borderRadius.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    fontSize: theme.typography.fontSize.md,
+    color: "#FFFFFF",
+    marginBottom: theme.spacing.md,
+  },
+  saveSearchSubmit: {
+    backgroundColor: "#D4AF37",
+    borderRadius: theme.borderRadius.md,
+    paddingVertical: theme.spacing.sm,
+    alignItems: "center",
+  },
+  saveSearchSubmitDisabled: {
+    opacity: 0.5,
+  },
+  saveSearchSubmitText: {
+    fontSize: theme.typography.fontSize.md,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: "#000000",
   },
   resultsCount: {
     paddingHorizontal: theme.spacing.md,

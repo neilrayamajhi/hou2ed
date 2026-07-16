@@ -31,6 +31,7 @@ import ApplicationsInbox from "../screens/Provider/ApplicationsInbox";
 import ApplicationDetail from "../screens/Provider/ApplicationDetail";
 import BlockedUsersScreen from "../screens/Profile/BlockedUsersScreen";
 import TermsOfService from "../screens/Legal/TermsOfService";
+import PrivacyPolicy from "../screens/Legal/PrivacyPolicy";
 import { RootStackParamList } from "./types";
 
 // Create a stack navigator - this manages screens that stack on top of each other
@@ -126,6 +127,7 @@ export default function RootNavigator() {
 
         {/* Legal Screens */}
         <Stack.Screen name="TermsOfService" component={TermsOfService} />
+        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicy} />
       </Stack.Navigator>
     </NavigationContainer>
   );

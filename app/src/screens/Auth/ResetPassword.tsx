@@ -25,26 +25,31 @@ import { supabase } from "../../lib/supabase";
 import { AUTH_CONSTANTS, AUTH_MESSAGES } from "../../constants/auth.constants";
 
 // Form validation schema
-const resetPasswordSchema = z.object({
-  email: z
-    .string()
-    .min(1, "Email is required")
-    .email("Please enter a valid email"),
-  code: z
-    .string()
-    .min(6, "Code must be 6 digits")
-    .max(6, "Code must be 6 digits")
-    .regex(/^\d{6}$/, "Code must be 6 digits"),
-  newPassword: z
-    .string()
-    .min(AUTH_CONSTANTS.MIN_PASSWORD_LENGTH, AUTH_MESSAGES.VALIDATION.PASSWORD_TOO_SHORT),
-  confirmPassword: z
-    .string()
-    .min(AUTH_CONSTANTS.MIN_PASSWORD_LENGTH, "Please confirm your password"),
-}).refine((data) => data.newPassword === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"],
-});
+const resetPasswordSchema = z
+  .object({
+    email: z
+      .string()
+      .min(1, "Email is required")
+      .email("Please enter a valid email"),
+    code: z
+      .string()
+      .min(6, "Code must be 6 digits")
+      .max(6, "Code must be 6 digits")
+      .regex(/^\d{6}$/, "Code must be 6 digits"),
+    newPassword: z
+      .string()
+      .min(
+        AUTH_CONSTANTS.MIN_PASSWORD_LENGTH,
+        AUTH_MESSAGES.VALIDATION.PASSWORD_TOO_SHORT,
+      ),
+    confirmPassword: z
+      .string()
+      .min(AUTH_CONSTANTS.MIN_PASSWORD_LENGTH, "Please confirm your password"),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  });
 
 type ResetPasswordForm = z.infer<typeof resetPasswordSchema>;
 
@@ -98,14 +103,15 @@ export default function ResetPassword() {
     clearErrors();
 
     try {
-      console.log("Attempting password reset with OTP for:", data.email);
+      console.log("Attempting password reset with OTP");
 
       // First verify the OTP
-      const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
-        email: data.email,
-        token: data.code,
-        type: 'recovery', // Use 'recovery' for password reset OTP
-      });
+      const { data: verifyData, error: verifyError } =
+        await supabase.auth.verifyOtp({
+          email: data.email,
+          token: data.code,
+          type: "recovery", // Use 'recovery' for password reset OTP
+        });
 
       if (verifyError) {
         console.error("OTP verification error:", verifyError);
@@ -183,7 +189,10 @@ export default function ResetPassword() {
         console.error("Resend code error:", error);
         Alert.alert("Error", "Failed to send new code. Please try again.");
       } else {
-        Alert.alert("Code Sent!", "A new verification code has been sent to your email.");
+        Alert.alert(
+          "Code Sent!",
+          "A new verification code has been sent to your email.",
+        );
       }
     } catch (error) {
       console.error("Resend code error:", error);
@@ -219,7 +228,8 @@ export default function ResetPassword() {
 
             {/* Description */}
             <Text style={styles.description}>
-              Enter the 6-digit code sent to your email and create a new password.
+              Enter the 6-digit code sent to your email and create a new
+              password.
             </Text>
 
             {/* Email Input */}
@@ -256,7 +266,7 @@ export default function ResetPassword() {
                   value={value}
                   onChangeText={(text) => {
                     // Only allow digits and limit to 6
-                    const cleaned = text.replace(/[^0-9]/g, '').slice(0, 6);
+                    const cleaned = text.replace(/[^0-9]/g, "").slice(0, 6);
                     onChange(cleaned);
                   }}
                   onBlur={onBlur}
@@ -276,7 +286,9 @@ export default function ResetPassword() {
               style={styles.resendButton}
               disabled={isSubmitting}
             >
-              <Text style={styles.resendText}>Didn't receive a code? Resend</Text>
+              <Text style={styles.resendText}>
+                Didn't receive a code? Resend
+              </Text>
             </TouchableOpacity>
 
             {/* New Password Input */}
@@ -301,7 +313,9 @@ export default function ResetPassword() {
                   <TouchableOpacity
                     style={styles.eyeButton}
                     onPress={() => setShowPassword(!showPassword)}
-                    accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                    accessibilityLabel={
+                      showPassword ? "Hide password" : "Show password"
+                    }
                   >
                     <Ionicons
                       name={showPassword ? "eye-off-outline" : "eye-outline"}
@@ -335,10 +349,14 @@ export default function ResetPassword() {
                   <TouchableOpacity
                     style={styles.eyeButton}
                     onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                    accessibilityLabel={showConfirmPassword ? "Hide password" : "Show password"}
+                    accessibilityLabel={
+                      showConfirmPassword ? "Hide password" : "Show password"
+                    }
                   >
                     <Ionicons
-                      name={showConfirmPassword ? "eye-off-outline" : "eye-outline"}
+                      name={
+                        showConfirmPassword ? "eye-off-outline" : "eye-outline"
+                      }
                       size={20}
                       color="#9CA3AF"
                     />
@@ -349,8 +367,12 @@ export default function ResetPassword() {
 
             {/* Password Requirements */}
             <View style={styles.requirementsContainer}>
-              <Text style={styles.requirementsTitle}>Password must contain:</Text>
-              <Text style={styles.requirementItem}>• At least {AUTH_CONSTANTS.MIN_PASSWORD_LENGTH} characters</Text>
+              <Text style={styles.requirementsTitle}>
+                Password must contain:
+              </Text>
+              <Text style={styles.requirementItem}>
+                • At least {AUTH_CONSTANTS.MIN_PASSWORD_LENGTH} characters
+              </Text>
             </View>
 
             {/* Submit Button */}

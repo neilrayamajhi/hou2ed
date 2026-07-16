@@ -1,0 +1,116 @@
+import { StyleSheet } from "react-native";
+import { colors, spacing } from "../../theme/tokens";
+
+export const legalStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.black,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray[800],
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: colors.white,
+  },
+  headerSpacer: {
+    width: 40,
+  },
+  scroll: {
+    flex: 1,
+  },
+  content: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xl * 2,
+  },
+  mainTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: colors.gold,
+    marginBottom: spacing.sm,
+    textAlign: "center",
+  },
+  updated: {
+    fontSize: 13,
+    color: colors.gray[400],
+    marginBottom: spacing.xs,
+    fontStyle: "italic",
+    textAlign: "center",
+  },
+  entity: {
+    fontSize: 13,
+    color: colors.gray[400],
+    marginBottom: spacing.lg,
+    textAlign: "center",
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.white,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  heading: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.gold,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  subheading: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.white,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  paragraph: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: colors.white,
+    marginBottom: spacing.md,
+  },
+  important: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: colors.gold,
+    marginBottom: spacing.md,
+    fontWeight: "600",
+  },
+  warning: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: colors.white,
+    backgroundColor: colors.red,
+    padding: spacing.md,
+    borderRadius: 8,
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  footer: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.gray[400],
+    marginTop: spacing.xl,
+    padding: spacing.md,
+    backgroundColor: colors.darkGray,
+    borderRadius: 8,
+    fontStyle: "italic",
+    textAlign: "center",
+  },
+});

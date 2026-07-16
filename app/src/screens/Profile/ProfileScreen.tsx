@@ -277,9 +277,8 @@ export default function ProfileScreen() {
 
     setIsDeletingAccount(true);
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "delete-own-account",
-      );
+      const { data, error } =
+        await supabase.functions.invoke("delete-own-account");
 
       if (error || !data?.success) {
         Alert.alert(
@@ -697,7 +696,7 @@ export default function ProfileScreen() {
           <View style={styles.settingsContent}>
             <TouchableOpacity
               style={styles.settingRow}
-              onPress={() => navigation.navigate("TermsOfService")}
+              onPress={() => navigation.navigate("PrivacyPolicy")}
               accessibilityLabel="Privacy Policy"
               accessibilityRole="button"
             >

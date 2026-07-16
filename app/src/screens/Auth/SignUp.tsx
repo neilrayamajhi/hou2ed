@@ -191,7 +191,6 @@ export default function SignUp() {
 
       try {
         console.log("=== SIGNUP ATTEMPT ===");
-        console.log("Email:", data.email);
         console.log("Username:", data.username);
         console.log("Selected Role:", selectedRole);
         console.log("Is Provider:", selectedRole === "provider");
@@ -248,7 +247,6 @@ export default function SignUp() {
             }
           } else {
             // Show verification modal (old flow - only if email verification is needed)
-            console.log("Setting verification email to:", data.email);
             console.log("Showing verification modal");
             setVerificationEmail(data.email);
             setShowVerification(true);
@@ -738,6 +736,29 @@ export default function SignUp() {
               />
             </View>
 
+            {/* Legal Consent */}
+            <Text style={styles.legalText}>
+              By signing up, you agree to our{" "}
+              <Text
+                style={styles.legalLink}
+                onPress={() => navigation.navigate("TermsOfService")}
+                accessibilityRole="link"
+                accessibilityLabel="Terms of Service"
+              >
+                Terms of Service
+              </Text>{" "}
+              and{" "}
+              <Text
+                style={styles.legalLink}
+                onPress={() => navigation.navigate("PrivacyPolicy")}
+                accessibilityRole="link"
+                accessibilityLabel="Privacy Policy"
+              >
+                Privacy Policy
+              </Text>
+              .
+            </Text>
+
             {/* Sign Up Button */}
             <Button
               variant="primary"
@@ -882,6 +903,17 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.xs,
     color: "#4B5563",
     marginBottom: 2,
+  },
+  legalText: {
+    color: "rgba(255, 255, 255, 0.7)",
+    fontSize: theme.typography.fontSize.sm,
+    textAlign: "center",
+    marginTop: theme.spacing.lg,
+    lineHeight: 20,
+  },
+  legalLink: {
+    color: "#D4AF37",
+    textDecorationLine: "underline",
   },
   signUpButton: {
     marginTop: theme.spacing.lg,

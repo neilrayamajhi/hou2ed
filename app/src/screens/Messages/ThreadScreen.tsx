@@ -230,13 +230,24 @@ export default function ThreadScreen() {
       }
 
       setLoadingBlockStatus(true);
-      // Check both directions - if either party has blocked the other
-      const blocked = await isBlockedRelationship(participantId);
-      setIsBlocked(blocked);
-      setLoadingBlockStatus(false);
+      try {
+        // Check both directions - if either party has blocked the other
+        const blocked = await isBlockedRelationship(participantId);
+        setIsBlocked(blocked);
 
-      if (blocked) {
-        console.log('🚫 Blocking relationship detected - messaging disabled');
+        if (blocked) {
+          console.log("🚫 Blocking relationship detected - messaging disabled");
+        }
+      } catch (error) {
+        // Fail closed: if we can't confirm there's no block, disable
+        // sending rather than risk letting a blocked user's message through.
+        console.error(
+          "Error checking block status, disabling send as a precaution:",
+          error,
+        );
+        setIsBlocked(true);
+      } finally {
+        setLoadingBlockStatus(false);
       }
     }
 
@@ -249,9 +260,9 @@ export default function ThreadScreen() {
     // Prevent sending if there's a blocking relationship
     if (isBlocked) {
       Alert.alert(
-        'Cannot Send Message',
-        'You cannot send messages to this user due to a blocking relationship.',
-        [{ text: 'OK' }]
+        "Cannot Send Message",
+        "You cannot send messages to this user due to a blocking relationship.",
+        [{ text: "OK" }],
       );
       return;
     }
@@ -764,7 +775,11 @@ export default function ThreadScreen() {
             style={[styles.input, isBlocked && styles.inputDisabled]}
             value={inputText}
             onChangeText={setInputText}
-            placeholder={isBlocked ? "Messaging unavailable (blocked)" : "Type a message..."}
+            placeholder={
+              isBlocked
+                ? "Messaging unavailable (blocked)"
+                : "Type a message..."
+            }
             placeholderTextColor={colors.gray[500]}
             multiline
             editable={!sending && !isBlocked}

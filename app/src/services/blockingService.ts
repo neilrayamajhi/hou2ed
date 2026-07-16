@@ -34,16 +34,19 @@ export async function blockUser(blockedUserId: string): Promise<{
       return { success: false, error: "Cannot block yourself" };
     }
 
-    console.log('🔒 Attempting to insert block record:', {
+    console.log("🔒 Attempting to insert block record:", {
       blocker_id: user.id,
       blocked_id: blockedUserId,
     });
 
     // Insert block record
-    const { data: blockData, error } = await supabase.from("blocks").insert({
-      blocker_id: user.id,
-      blocked_id: blockedUserId,
-    }).select();
+    const { data: blockData, error } = await supabase
+      .from("blocks")
+      .insert({
+        blocker_id: user.id,
+        blocked_id: blockedUserId,
+      })
+      .select();
 
     if (error) {
       console.error("❌ Error inserting block record:", error);
@@ -56,7 +59,7 @@ export async function blockUser(blockedUserId: string): Promise<{
       return { success: false, error: error.message };
     }
 
-    console.log('✅ Block record inserted successfully:', blockData);
+    console.log("✅ Block record inserted successfully:", blockData);
 
     // If current user is a provider, auto-reject all pending applications from blocked seeker
     await autoRejectApplicationsFromBlockedUser(user.id, blockedUserId);
@@ -114,69 +117,69 @@ export async function unblockUser(blockedUserId: string): Promise<{
 
 /**
  * Check if current user has blocked another user
+ *
+ * Throws on a real DB error instead of silently returning false - this
+ * check gates whether messaging/contact is allowed, so a DB hiccup must
+ * not be mistaken for "not blocked" (failing open would let a blocked
+ * user's messages through). Callers that gate a safety-relevant action
+ * must catch this and fail closed; display-only callers (e.g. a block/
+ * unblock button label) may reasonably fail open instead.
  * @param userId - The ID of the user to check
  * @returns True if blocked, false otherwise
  */
 export async function hasBlockedUser(userId: string): Promise<boolean> {
-  try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-    if (!user) return false;
+  if (!user) return false;
 
-    const { data, error } = await supabase
-      .from("blocks")
-      .select("id")
-      .eq("blocker_id", user.id)
-      .eq("blocked_id", userId)
-      .single();
+  const { data, error } = await supabase
+    .from("blocks")
+    .select("id")
+    .eq("blocker_id", user.id)
+    .eq("blocked_id", userId)
+    .single();
 
-    if (error && error.code !== "PGRST116") {
-      // PGRST116 is "no rows returned" - that's ok
-      console.error("Error checking block status:", error);
-      return false;
-    }
-
-    return !!data;
-  } catch (error) {
-    console.error("Error in hasBlockedUser:", error);
-    return false;
+  if (error && error.code !== "PGRST116") {
+    // PGRST116 is "no rows returned" - that's ok, it just means not blocked
+    throw new Error(`Failed to check block status: ${error.message}`);
   }
+
+  return !!data;
 }
 
 /**
  * Check if there's any blocking relationship between current user and another user
  * (either direction - current user blocked them OR they blocked current user)
+ *
+ * Throws on a real DB error instead of silently returning false - see
+ * hasBlockedUser's doc comment for why. This is the check that gates
+ * whether a message thread's send action is enabled, so callers must
+ * fail closed (treat an error as blocked) rather than fail open.
  * @param userId - The ID of the user to check
  * @returns True if there's a blocking relationship, false otherwise
  */
 export async function isBlockedRelationship(userId: string): Promise<boolean> {
-  try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-    if (!user) return false;
+  if (!user) return false;
 
-    // Check both directions
-    const { data, error } = await supabase
-      .from("blocks")
-      .select("id")
-      .or(`blocker_id.eq.${user.id},blocker_id.eq.${userId}`)
-      .or(`blocked_id.eq.${user.id},blocked_id.eq.${userId}`);
+  // Check both directions
+  const { data, error } = await supabase
+    .from("blocks")
+    .select("id")
+    .or(`blocker_id.eq.${user.id},blocker_id.eq.${userId}`)
+    .or(`blocked_id.eq.${user.id},blocked_id.eq.${userId}`);
 
-    if (error) {
-      console.error("Error checking blocking relationship:", error);
-      return false;
-    }
-
-    // If there's any block record, there's a blocking relationship
-    return data && data.length > 0;
-  } catch (error) {
-    console.error("Error in isBlockedRelationship:", error);
-    return false;
+  if (error) {
+    throw new Error(`Failed to check blocking relationship: ${error.message}`);
   }
+
+  // If there's any block record, there's a blocking relationship
+  return !!data && data.length > 0;
 }
 
 /**
@@ -264,7 +267,7 @@ export async function getAllBlockedRelationships(): Promise<string[]> {
  */
 async function autoRejectApplicationsFromBlockedUser(
   blockerId: string,
-  blockedUserId: string
+  blockedUserId: string,
 ): Promise<void> {
   try {
     // Get all listings owned by the blocker
@@ -286,7 +289,13 @@ async function autoRejectApplicationsFromBlockedUser(
       .select("id, stage_timestamps")
       .eq("seeker_id", blockedUserId)
       .in("listing_id", listingIds)
-      .in("status", ["new", "under_review", "docs_needed", "interview_scheduled", "waitlisted"]);
+      .in("status", [
+        "new",
+        "under_review",
+        "docs_needed",
+        "interview_scheduled",
+        "waitlisted",
+      ]);
 
     if (appsError || !pendingApps || pendingApps.length === 0) {
       // No pending applications - nothing to reject
@@ -321,7 +330,9 @@ async function autoRejectApplicationsFromBlockedUser(
       }
     }
 
-    console.log(`Auto-rejected ${rejectedCount} of ${pendingApps.length} application(s) from blocked user`);
+    console.log(
+      `Auto-rejected ${rejectedCount} of ${pendingApps.length} application(s) from blocked user`,
+    );
   } catch (error) {
     console.error("Error in autoRejectApplicationsFromBlockedUser:", error);
     // Don't throw - blocking should still succeed even if auto-reject fails

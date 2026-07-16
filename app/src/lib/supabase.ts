@@ -146,7 +146,6 @@ export async function resetSupabaseClient() {
 export type {
   Database,
   Profile,
-  Provider,
   Listing,
   Application,
   ApplicationDocument,
@@ -157,8 +156,6 @@ export type {
   SavedSearchAlert,
   AvailabilityHistory,
   PublicListing,
-  SearchResult,
-  AvailabilityResult,
 } from "./supabase-types";
 
 // Helper functions for common operations
@@ -210,9 +207,6 @@ export const authHelpers = {
       console.warn(
         "⚠️ Duplicate email detected - user returned with no identities",
       );
-      console.warn("   Email:", email);
-      console.warn("   User ID returned:", data.user.id);
-      console.warn("   This email is already registered in the system");
       return {
         data: null,
         error: new Error(

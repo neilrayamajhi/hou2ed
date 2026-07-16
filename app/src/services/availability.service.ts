@@ -151,20 +151,17 @@ export async function getListingsNeedingConfirmation(
     const actualUserId =
       userId || (await supabase.auth.getUser()).data.user?.id;
 
-    const { data: provider } = await supabase
-      .from("providers")
-      .select("id")
-      .eq("user_id", actualUserId)
-      .single();
-
-    if (!provider) {
+    if (!actualUserId) {
       return [];
     }
 
+    // There is no separate "providers" table - listings.provider_id is the
+    // provider's own profile/auth id directly (same pattern used by RLS
+    // policies elsewhere, e.g. "listings WHERE provider_id = auth.uid()").
     const { data, error } = await supabase
       .from("listings")
-      .select("id, name, last_confirmed")
-      .eq("provider_id", provider.id)
+      .select("id, name:title, last_confirmed")
+      .eq("provider_id", actualUserId)
       .lt(
         "last_confirmed",
         new Date(

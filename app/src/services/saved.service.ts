@@ -314,7 +314,6 @@ export async function getSavedListings(): Promise<SavedListing[]> {
 
 /**
  * Save a search with filters
- * NOTE: This feature is not yet implemented - table doesn't exist
  */
 export async function saveSearch(
   params: SaveSearchParams,

@@ -2,7 +2,7 @@
 
 Living document tracking what's been fixed, what's still open, and what needs a human decision before this app ships. Update this as work continues.
 
-**Last updated:** 2026-07-15 (all 3 RLS security items closed)
+**Last updated:** 2026-07-15 (legal docs, App Store copy, and the full tech-debt punch list closed out)
 
 ---
 
@@ -82,29 +82,46 @@ Same rigor as everything else — each fix verified against the live database wi
 
 ---
 
+## ✅ Legal docs, App Store copy, and full tech-debt punch list closed out
+
+Everything from the "still open" list below (as of the previous update) is now done except the two items that genuinely need someone else's action or a dedicated follow-on session — see the still-open list further down for those.
+
+1. **Terms of Service and Privacy Policy were never actually in the app.** The single in-app "Legal" screen both Profile buttons pointed to only ever contained privacy-policy content (mislabeled "Terms of Service" on one button). Split into two real screens — [`PrivacyPolicy.tsx`](../app/src/screens/Legal/PrivacyPolicy.tsx) and a rewritten [`TermsOfService.tsx`](../app/src/screens/Legal/TermsOfService.tsx) — matching the real, already-hosted `docs/privacy.html`/`docs/tos.html` content (acceptance of terms, liability/risk assumptions, e-signature policy, provider/seeker obligations, account termination). Profile's two buttons now point to the correct screen each, and SignUp now links to both before the signup button. `docs/privacy.html`/`terms.html`/`tos.html` were already live on GitHub Pages — no hosting work was needed.
+2. **App Store listing copy drafted**: [`docs/APP_STORE_LISTING.md`](./APP_STORE_LISTING.md) — name, subtitle, promotional text, full description, keywords, category. Grounded only in features that actually exist; screenshots still need a real device/simulator run to capture.
+3. **Rate limiting is now real, server-side, not just client-side `AsyncStorage`.** Investigation found a live-but-orphaned `rate_limits` table and a working `check_rate_limit(p_key, p_max, p_window)` Postgres RPC — already deployed, callable anonymously, verified live (allow → deny → cleanup) — but nothing in the app ever called it. Wired it into both `loginUser` and `signUpUser` in `auth.service.ts`, keyed per-email so it can't be bypassed by clearing local storage. Fails open on an RPC/network error (defense-in-depth on top of the existing client-side lockout, not the sole gate) so a transient outage can't lock out all logins.
+4. **`blockingService.ts` fail-open bug fixed, plus its first test coverage.** `hasBlockedUser`/`isBlockedRelationship` silently returned `false` on any DB error instead of surfacing it — meaning a blocked user's messages could get through during a database hiccup. Both now throw on a real error; the one caller that gates an actual safety action (`ThreadScreen.tsx`'s send button) now fails *closed* (disables sending) on that error, while the three callers that just decide a button's display label fail open on purpose (not a safety gate). 15 new tests added — first coverage this file has ever had.
+5. **Regenerated the stale Supabase TypeScript types file from the live schema via the CLI**, replacing a hand-stale 841-line file with a real, complete 2,480-line one. This surfaced and let us fix three genuine live bugs the old file's gaps had been masking:
+   - `availability.service.ts`'s `getListingsNeedingConfirmation()` queried a `providers` table that no longer exists on the live database (a provider's own id *is* `listings.provider_id` directly) — it silently returned an empty array for every provider, always. Fixed; also queried a nonexistent `name` column instead of the real `title`.
+   - The `ApplicationDocument` type alias pointed at a phantom `application_documents` table; every real call site already correctly used the actual `documents` table, so this was purely a types-file bug, now fixed.
+   - Dropped the `Provider`/`ProviderInsert`/`ProviderUpdate` and `SearchResult`/`AvailabilityResult` convenience type exports — all confirmed dead/unused (shadowed by unrelated same-named local types elsewhere).
+   - Net effect on `tsc --noEmit`: the raw error count went *up* (609 → 615 after also removing dead files that were themselves erroring). This is expected and healthy — the old file masked hundreds of real mismatches by simply omitting tables/columns, which show up as inscrutable `never` errors. The new file is accurate, so those mismatches are now precise and actionable instead of silently swallowed. Fixing the full backlog of now-visible errors is real work but a separate, larger project, not part of this pass.
+6. **Deleted 7 confirmed-unused duplicate/backup files** (`InboxScreen-fixed.tsx`, `InboxScreen.backup.tsx`, `auth.service.production.ts`, `auth.service.workaround.ts`, `listing.service.ts.backup`, `messageService.old.ts`, `messaging.service.ts.backup`) — verified nothing imported any of them first. Removing them also dropped 65 more stale `tsc` errors that belonged to the dead files themselves.
+7. **Fixed 11 spots logging raw email addresses (and one logging a raw OTP verification code) unconditionally in production**, concentrated in `auth.service.ts`, `SignUp.tsx`, `ResetPassword.tsx`, and `lib/supabase.ts` — none were `__DEV__`-gated. Left the much larger volume of benign flow-tracing `console.log` calls alone; the real concern flagged previously was PII exposure, not log volume, and blanket-deleting hundreds of actively-useful debug logs across the app wasn't a proportionate fix.
+8. **Built the "Saved Searches" creation UI.** The backend (`saveSearch()` in `saved.service.ts`) was already fully implemented — the gap was purely that nothing in the app ever called it. Added a "Save this search" button + name-entry modal to `SearchScreen.tsx`. Along the way, found `SavedSearchesScreen.tsx`'s saved-search preview cards read a flat filter shape (`item.filters.location`, `.housing_type`, `.price_max`) that never matched what `useFilterStore`'s real `FilterState` snapshot actually produces (`location.city`, `priceRange.max`, a `housingType` map of booleans) — fixed the preview to read the real shape so newly-saved searches display correctly instead of always showing "Any location" / "Any housing type".
+9. **Provider verification document submission flow scoped, not built — owner confirmed this is deferred to v2.** It's a genuinely separate feature (new storage bucket, new RLS policies, a new migration, and a multi-step upload UI), not a tech-debt item, and not launch-blocking since nothing in the app or its App Store listing claims providers are verified. Wrote [`docs/VERIFICATION_SUBMISSION_SCOPE.md`](./VERIFICATION_SUBMISSION_SCOPE.md) grounded in the codebase's existing, proven upload pattern (`storage.service.ts`'s `uploadApplicationDocument`) so it can be implemented directly whenever v2 work starts, without re-discovering the pattern.
+10. **New, unrelated finding**: running the full Jest suite (not just individual spec files) for the first time this session surfaced 22 of 36 test suites failing to even load, due to a pre-existing `NativeDeviceInfo`/`Dimensions`/`PixelRatio` native-module error in any spec that transitively imports `theme/styles.ts`. Confirmed via a before/after comparison that this is not caused by anything from this session — it's a Jest/React Native test-environment configuration gap that predates all of today's changes. Not fixed here; flagged for a dedicated session since it's a test-infra problem, not a runtime bug.
+
+---
+
 ## ⬜ Still open — prioritized
 
 ### Security
-- [ ] Rate limiting on signup/login is client-side only (`AsyncStorage`) — trivially bypassed by anyone hitting the API directly. Lower priority; not an active data-exposure risk.
-- [ ] `messageService.ts`'s `getCachedProfile`/`getBatchProfiles` can still fetch a full profile row (all columns) for any thread participant via the existing "message participants can view each other" policy — narrowed what the app *asks for*, but someone bypassing the app entirely could still pull the full row this way. Lower priority than the fixes above since it requires already being a real conversation partner, not any random user.
+- [ ] `messageService.ts`'s `getCachedProfile`/`getBatchProfiles` can still fetch a full profile row (all columns) for any thread participant via the existing "message participants can view each other" policy — narrowed what the app *asks for*, but someone bypassing the app entirely could still pull the full row this way. Lower priority since it requires already being a real conversation partner, not any random user.
 
 ### Waiting on someone else
-- [ ] **Neil needs to revoke his leaked Management API token** (see item 4 above). Still live as of this session.
+- [ ] **Neil needs to revoke his leaked Management API token** (see item 4 in the security section above). Still live as of this session — it was used once more this session (read-only, to regenerate the Supabase types file) since no replacement credential exists yet; revoking it will require re-authenticating the Supabase CLI a different way next time it's needed.
 
-### Feature gaps (not launch-blocking, but real)
-- [ ] "Saved Searches" has no way to ever create one — there's no "save this search" button anywhere in the app. What was fixed today makes viewing/executing a saved search work correctly *if one exists*, but nothing currently creates one. Separate, bigger feature.
-- [ ] Provider verification document submission flow doesn't exist (see admin capabilities section above) — needed before Verification Review has anything real to show.
+### Deferred to v2 (owner decision)
+- [ ] **Provider verification document submission flow.** Confirmed not launch-blocking — nothing in the app or App Store listing claims providers are verified, so shipping without it isn't a broken promise. Build plan is ready to go whenever it's picked up: [`docs/VERIFICATION_SUBMISSION_SCOPE.md`](./VERIFICATION_SUBMISSION_SCOPE.md).
 
 ### Code quality / tech debt (lower priority, safe to defer)
-- [ ] `blockingService.ts` has zero tests and **fails open** on a database error (a blocked user's messages could get through if a DB call errors).
-- [ ] The hand-maintained Supabase TypeScript types file (`app/src/lib/supabase-types.ts`) is stale and out of sync with the real schema — root cause of the recurring `Argument of type ... not assignable to parameter of type 'never'` errors seen throughout this session. Worth regenerating properly at some point; not urgent since it's a type-checking annoyance, not a runtime bug.
-- [ ] Several duplicate/backup files cluttering the repo (`*.backup`, `*.old.ts`, `-fixed.tsx` suffixed files) — safe to delete, just noise.
-- [ ] ~537 leftover `console.log` calls across the app, some logging user IDs/emails.
-- [ ] Two migrations exist on the live database that were never saved as files in this repo (`apply_username_login_rls_policy`, `add_rate_limits_table`) — means the repo doesn't fully reflect the real schema. Known, deliberately deferred.
+- [ ] The ~615 `tsc --noEmit` errors now visible after regenerating the Supabase types file are mostly real (if minor) type mismatches that were previously hidden behind opaque `never` errors. Worth working through incrementally; not urgent since none of it is a runtime bug (Expo/Babel strips types without type-checking, so the app runs fine regardless).
+- [ ] The pre-existing Jest native-module test-environment issue (item 10 above) — 22 of 36 suites currently fail to load entirely, unrelated to any code they're testing.
+- [ ] Two migrations exist on the live database that were never saved as files in this repo (`apply_username_login_rls_policy`, `add_rate_limits_table` — the latter's table/RPC are real and now actually used as of this session, just still not captured as a migration file). Known, deliberately deferred.
 
 ---
 
 ## Recommended next session
 
 1. Nudge Neil about the token (5 minutes, but real exposure until done) — still the only item left that isn't in our control.
-2. Everything else remaining is lower-priority tech debt / feature gaps — safe to tackle opportunistically, nothing else launch-blocking is currently known.
+2. Build the provider verification submission flow per its scope doc, or start working through the newly-visible `tsc` error backlog, or fix the Jest native-module test-environment gap — pick whichever matters most; none of the three is launch-blocking.

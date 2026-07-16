@@ -13,7 +13,12 @@ import {
   Image,
   Dimensions,
 } from "react-native";
-import { useNavigation, useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
+import {
+  useNavigation,
+  useRoute,
+  RouteProp,
+  useFocusEffect,
+} from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -31,7 +36,11 @@ import {
 import type { ApplicationStatus } from "../../services/application.service";
 import { getDocumentSignedUrl } from "../../services/storage.service";
 import { supabase } from "../../lib/supabase";
-import { blockUser, unblockUser, hasBlockedUser } from "../../services/blockingService";
+import {
+  blockUser,
+  unblockUser,
+  hasBlockedUser,
+} from "../../services/blockingService";
 
 type ApplicationDetailRouteProp = RouteProp<
   { ApplicationDetail: { applicationId: string } },
@@ -49,18 +58,23 @@ export default function ApplicationDetail() {
 
   const [documents, setDocuments] = useState<any[]>([]);
   const [imageModalVisible, setImageModalVisible] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<{ uri: string; title: string } | null>(null);
+  const [selectedImage, setSelectedImage] = useState<{
+    uri: string;
+    title: string;
+  } | null>(null);
   const [imageLoadError, setImageLoadError] = useState(false);
 
   // Refresh when screen comes into focus
   useFocusEffect(
     useCallback(() => {
-      queryClient.invalidateQueries({ queryKey: ["application", route.params.applicationId] });
+      queryClient.invalidateQueries({
+        queryKey: ["application", route.params.applicationId],
+      });
       queryClient.invalidateQueries({ queryKey: ["providerApplications"] });
-    }, [queryClient, route.params.applicationId])
+    }, [queryClient, route.params.applicationId]),
   );
 
-  const { width: screenWidth } = Dimensions.get('window');
+  const { width: screenWidth } = Dimensions.get("window");
 
   const {
     data: application,
@@ -103,8 +117,15 @@ export default function ApplicationDetail() {
   useEffect(() => {
     const checkBlockStatus = async () => {
       if (seekerProfile?.id) {
-        const blocked = await hasBlockedUser(seekerProfile.id);
-        setIsBlocked(blocked);
+        try {
+          const blocked = await hasBlockedUser(seekerProfile.id);
+          setIsBlocked(blocked);
+        } catch (error) {
+          // Display-only status (which button label to show) - not a
+          // safety gate, so default to "not blocked" rather than stalling.
+          console.error("Error checking block status:", error);
+          setIsBlocked(false);
+        }
         setCheckingBlock(false);
       }
     };
@@ -201,17 +222,18 @@ export default function ApplicationDetail() {
               const result = await unblockUser(seekerProfile.id);
               if (result.success) {
                 setIsBlocked(false);
-                Alert.alert(
-                  "Unblocked",
-                  `${seekerName} has been unblocked.`,
-                  [{ text: "OK", onPress: () => navigation.goBack() }]
-                );
+                Alert.alert("Unblocked", `${seekerName} has been unblocked.`, [
+                  { text: "OK", onPress: () => navigation.goBack() },
+                ]);
               } else {
-                Alert.alert("Error", result.error || "Failed to unblock applicant");
+                Alert.alert(
+                  "Error",
+                  result.error || "Failed to unblock applicant",
+                );
               }
             },
           },
-        ]
+        ],
       );
     } else {
       // Block
@@ -230,14 +252,17 @@ export default function ApplicationDetail() {
                 Alert.alert(
                   "Applicant Blocked",
                   `${seekerName} has been blocked. All their pending applications have been auto-rejected.`,
-                  [{ text: "OK", onPress: () => navigation.goBack() }]
+                  [{ text: "OK", onPress: () => navigation.goBack() }],
                 );
               } else {
-                Alert.alert("Error", result.error || "Failed to block applicant");
+                Alert.alert(
+                  "Error",
+                  result.error || "Failed to block applicant",
+                );
               }
             },
           },
-        ]
+        ],
       );
     }
   }, [seekerProfile, isBlocked, navigation]);
@@ -398,23 +423,39 @@ export default function ApplicationDetail() {
                   }
                 }}
               >
-                <Ionicons name="chatbubble-outline" size={20} color={colors.primary[500]} />
+                <Ionicons
+                  name="chatbubble-outline"
+                  size={20}
+                  color={colors.primary[500]}
+                />
                 <Text style={styles.messageButtonText}>Message</Text>
               </TouchableOpacity>
 
               {!checkingBlock && seekerProfile && (
                 <TouchableOpacity
-                  style={[styles.blockButton, isBlocked && styles.unblockButton]}
+                  style={[
+                    styles.blockButton,
+                    isBlocked && styles.unblockButton,
+                  ]}
                   onPress={handleBlockUnblock}
-                  accessibilityLabel={isBlocked ? "Unblock applicant" : "Block applicant"}
+                  accessibilityLabel={
+                    isBlocked ? "Unblock applicant" : "Block applicant"
+                  }
                   accessibilityRole="button"
                 >
                   <Ionicons
-                    name={isBlocked ? "checkmark-circle-outline" : "ban-outline"}
+                    name={
+                      isBlocked ? "checkmark-circle-outline" : "ban-outline"
+                    }
                     size={18}
                     color={isBlocked ? colors.green : colors.red}
                   />
-                  <Text style={[styles.blockButtonText, isBlocked && styles.unblockButtonText]}>
+                  <Text
+                    style={[
+                      styles.blockButtonText,
+                      isBlocked && styles.unblockButtonText,
+                    ]}
+                  >
                     {isBlocked ? "Unblock" : "Block"}
                   </Text>
                 </TouchableOpacity>
@@ -436,8 +477,8 @@ export default function ApplicationDetail() {
               <Text style={styles.infoLabel}>Full Name</Text>
               <Text style={styles.infoValue}>
                 {seekerProfile?.full_name ||
-                 application.application_data?.fullName ||
-                 "Not provided"}
+                  application.application_data?.fullName ||
+                  "Not provided"}
               </Text>
             </View>
 
@@ -450,8 +491,8 @@ export default function ApplicationDetail() {
               <Text style={styles.infoLabel}>Email</Text>
               <Text style={styles.infoValue}>
                 {seekerProfile?.email ||
-                 application.application_data?.email ||
-                 "Not provided"}
+                  application.application_data?.email ||
+                  "Not provided"}
               </Text>
             </View>
 
@@ -483,21 +524,21 @@ export default function ApplicationDetail() {
                         const formatTag = (tag: string) => {
                           // Handle specific cases
                           const tagMappings: { [key: string]: string } = {
-                            'age18plus': '18+ Years',
-                            'age18-25': '18-25 Years',
-                            'age26-35': '26-35 Years',
-                            'age36-50': '36-50 Years',
-                            'age50plus': '50+ Years',
-                            'dvSurvivors': 'DV Survivors',
-                            'veterans': 'Veterans',
-                            'disabilities': 'Disabilities',
-                            'families': 'Families',
-                            'singles': 'Singles',
-                            'couples': 'Couples',
-                            'pets': 'Pet Friendly',
-                            'lgbtq': 'LGBTQ+',
-                            'seniors': 'Seniors',
-                            'youth': 'Youth',
+                            age18plus: "18+ Years",
+                            "age18-25": "18-25 Years",
+                            "age26-35": "26-35 Years",
+                            "age36-50": "36-50 Years",
+                            age50plus: "50+ Years",
+                            dvSurvivors: "DV Survivors",
+                            veterans: "Veterans",
+                            disabilities: "Disabilities",
+                            families: "Families",
+                            singles: "Singles",
+                            couples: "Couples",
+                            pets: "Pet Friendly",
+                            lgbtq: "LGBTQ+",
+                            seniors: "Seniors",
+                            youth: "Youth",
                           };
 
                           // Check if we have a specific mapping
@@ -508,8 +549,8 @@ export default function ApplicationDetail() {
 
                           // Otherwise, format generically
                           return tag
-                            .replace(/([A-Z])/g, ' $1') // Add space before capital letters
-                            .replace(/_/g, ' ')
+                            .replace(/([A-Z])/g, " $1") // Add space before capital letters
+                            .replace(/_/g, " ")
                             .replace(/\b\w/g, (l: string) => l.toUpperCase())
                             .trim();
                         };
@@ -608,7 +649,7 @@ export default function ApplicationDetail() {
                 const formatDocType = (type: string) => {
                   if (!type) return "Document";
                   return type
-                    .replace(/_/g, ' ')
+                    .replace(/_/g, " ")
                     .replace(/\b\w/g, (l: string) => l.toUpperCase());
                 };
 
@@ -621,59 +662,88 @@ export default function ApplicationDetail() {
                         id: doc.id,
                         type: doc.type,
                         file_path: doc.file_path,
-                        file_url: doc.file_url ? 'Present' : 'Missing',
+                        file_url: doc.file_url ? "Present" : "Missing",
                         file_name: doc.file_name,
-                        status: doc.status
+                        status: doc.status,
                       });
 
                       // Check if it's an image based on file extension or type
-                      const isImage = doc.file_name?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ||
-                                     doc.type === 'id' ||
-                                     doc.type === 'photo' ||
-                                     doc.type === 'image' ||
-                                     doc.type === 'income' ||
-                                     doc.type === 'proof_of_employment';
+                      const isImage =
+                        doc.file_name?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ||
+                        doc.type === "id" ||
+                        doc.type === "photo" ||
+                        doc.type === "image" ||
+                        doc.type === "income" ||
+                        doc.type === "proof_of_employment";
 
                       // Handle different document storage scenarios
                       let documentUrl = null;
 
                       // Priority 1: Check if we have a file_path (new storage system)
-                      if (doc.file_path && !doc.file_path.includes('temp_')) {
+                      if (doc.file_path && !doc.file_path.includes("temp_")) {
                         try {
-                          console.log("🔑 Getting signed URL for storage path:", doc.file_path);
-                          const signedUrl = await getDocumentSignedUrl(doc.file_path);
+                          console.log(
+                            "🔑 Getting signed URL for storage path:",
+                            doc.file_path,
+                          );
+                          const signedUrl = await getDocumentSignedUrl(
+                            doc.file_path,
+                          );
                           if (signedUrl) {
                             documentUrl = signedUrl;
                             console.log("✅ Got signed URL successfully");
                           } else {
-                            console.log("❌ No signed URL returned - document may not exist in storage");
+                            console.log(
+                              "❌ No signed URL returned - document may not exist in storage",
+                            );
                           }
                         } catch (error: any) {
                           console.error("❌ Error getting signed URL:", error);
-                          console.log("Document may not exist in storage or RLS policy issue");
+                          console.log(
+                            "Document may not exist in storage or RLS policy issue",
+                          );
                         }
-                      } else if (doc.file_path?.includes('temp_')) {
-                        console.log("⚠️ Document has temporary path - was not properly uploaded during submission");
+                      } else if (doc.file_path?.includes("temp_")) {
+                        console.log(
+                          "⚠️ Document has temporary path - was not properly uploaded during submission",
+                        );
                       }
 
                       // Priority 2: Check if we have a valid http URL in file_url
-                      if (!documentUrl && doc.file_url?.startsWith('http')) {
+                      if (!documentUrl && doc.file_url?.startsWith("http")) {
                         documentUrl = doc.file_url;
-                        console.log("📎 Using existing HTTP URL from file_url field");
+                        console.log(
+                          "📎 Using existing HTTP URL from file_url field",
+                        );
                       }
 
                       // Priority 3: Check if file_url contains a storage path (without http)
-                      if (!documentUrl && doc.file_url && !doc.file_url.startsWith('file://') && !doc.file_url.includes('temp_')) {
+                      if (
+                        !documentUrl &&
+                        doc.file_url &&
+                        !doc.file_url.startsWith("file://") &&
+                        !doc.file_url.includes("temp_")
+                      ) {
                         // This might be a valid storage path stored in file_url field
                         try {
-                          console.log("🔄 Attempting to get signed URL for path in file_url:", doc.file_url);
-                          const signedUrl = await getDocumentSignedUrl(doc.file_url);
+                          console.log(
+                            "🔄 Attempting to get signed URL for path in file_url:",
+                            doc.file_url,
+                          );
+                          const signedUrl = await getDocumentSignedUrl(
+                            doc.file_url,
+                          );
                           if (signedUrl) {
                             documentUrl = signedUrl;
-                            console.log("✅ Got signed URL from file_url field");
+                            console.log(
+                              "✅ Got signed URL from file_url field",
+                            );
                           }
                         } catch (error) {
-                          console.log("❌ Could not get signed URL for file_url:", doc.file_url);
+                          console.log(
+                            "❌ Could not get signed URL for file_url:",
+                            doc.file_url,
+                          );
                         }
                       }
 
@@ -685,7 +755,7 @@ export default function ApplicationDetail() {
                           setImageLoadError(false); // Reset error state
                           setSelectedImage({
                             uri: documentUrl,
-                            title: formatDocType(doc.type)
+                            title: formatDocType(doc.type),
                           });
                           setImageModalVisible(true);
                         } else {
@@ -700,15 +770,25 @@ export default function ApplicationDetail() {
                                 text: "Open",
                                 onPress: async () => {
                                   try {
-                                    const canOpen = await Linking.canOpenURL(documentUrl);
+                                    const canOpen =
+                                      await Linking.canOpenURL(documentUrl);
                                     if (canOpen) {
                                       await Linking.openURL(documentUrl);
                                     } else {
-                                      Alert.alert("Error", "Cannot open this document URL");
+                                      Alert.alert(
+                                        "Error",
+                                        "Cannot open this document URL",
+                                      );
                                     }
                                   } catch (error) {
-                                    console.error("Error opening document:", error);
-                                    Alert.alert("Error", "Failed to open document");
+                                    console.error(
+                                      "Error opening document:",
+                                      error,
+                                    );
+                                    Alert.alert(
+                                      "Error",
+                                      "Failed to open document",
+                                    );
                                   }
                                 },
                               },
@@ -721,34 +801,50 @@ export default function ApplicationDetail() {
                           type: doc.type,
                           file_path: doc.file_path,
                           file_url: doc.file_url,
-                          status: doc.status
+                          status: doc.status,
                         });
 
-                        let errorMessage = "This document cannot be viewed at this time.";
+                        let errorMessage =
+                          "This document cannot be viewed at this time.";
 
-                        if (doc.status === 'upload_failed') {
-                          errorMessage = "The document upload failed during submission. The applicant needs to resubmit their application.";
-                        } else if (doc.file_path?.includes('temp_')) {
-                          errorMessage = "The document was not properly uploaded. The applicant needs to resubmit their application.";
+                        if (doc.status === "upload_failed") {
+                          errorMessage =
+                            "The document upload failed during submission. The applicant needs to resubmit their application.";
+                        } else if (doc.file_path?.includes("temp_")) {
+                          errorMessage =
+                            "The document was not properly uploaded. The applicant needs to resubmit their application.";
                         } else if (!doc.file_path && !doc.file_url) {
-                          errorMessage = "No document file was uploaded. The applicant needs to resubmit their application.";
-                        } else if (doc.file_path && !doc.file_path.includes('temp_')) {
-                          errorMessage = "The document file cannot be found in storage. It may have been uploaded incorrectly. Please ask the applicant to resubmit.";
+                          errorMessage =
+                            "No document file was uploaded. The applicant needs to resubmit their application.";
+                        } else if (
+                          doc.file_path &&
+                          !doc.file_path.includes("temp_")
+                        ) {
+                          errorMessage =
+                            "The document file cannot be found in storage. It may have been uploaded incorrectly. Please ask the applicant to resubmit.";
                         } else {
                           errorMessage = `This document was uploaded using an older system and is no longer accessible.\n\nThe applicant needs to resubmit their application with new documents.`;
                         }
 
                         Alert.alert(
                           "Document Not Available",
-                          `${errorMessage}\n\nDocument Type: ${formatDocType(doc.type)}\nFile Name: ${doc.file_name || 'Not provided'}`
+                          `${errorMessage}\n\nDocument Type: ${formatDocType(doc.type)}\nFile Name: ${doc.file_name || "Not provided"}`,
                         );
                       }
                     }}
                   >
                     <Ionicons
-                      name={doc.status === 'verified' ? "checkmark-circle" : "document-attach-outline"}
+                      name={
+                        doc.status === "verified"
+                          ? "checkmark-circle"
+                          : "document-attach-outline"
+                      }
                       size={24}
-                      color={doc.status === 'verified' ? colors.green : colors.primary[500]}
+                      color={
+                        doc.status === "verified"
+                          ? colors.green
+                          : colors.primary[500]
+                      }
                     />
                     <View style={styles.documentInfo}>
                       <Text style={styles.documentTitle}>
@@ -758,10 +854,19 @@ export default function ApplicationDetail() {
                         {doc.file_name || "Uploaded document"}
                       </Text>
                       {doc.status && (
-                        <Text style={[styles.documentStatus,
-                          { color: doc.status === 'verified' ? colors.green : colors.gray[400] }
-                        ]}>
-                          {doc.status.charAt(0).toUpperCase() + doc.status.slice(1)}
+                        <Text
+                          style={[
+                            styles.documentStatus,
+                            {
+                              color:
+                                doc.status === "verified"
+                                  ? colors.green
+                                  : colors.gray[400],
+                            },
+                          ]}
+                        >
+                          {doc.status.charAt(0).toUpperCase() +
+                            doc.status.slice(1)}
                         </Text>
                       )}
                     </View>
@@ -905,7 +1010,9 @@ export default function ApplicationDetail() {
         <View style={styles.modalContainer}>
           <SafeAreaView style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{selectedImage?.title || "Document"}</Text>
+              <Text style={styles.modalTitle}>
+                {selectedImage?.title || "Document"}
+              </Text>
               <TouchableOpacity
                 style={styles.modalCloseButton}
                 onPress={() => {
@@ -922,10 +1029,15 @@ export default function ApplicationDetail() {
               <View style={styles.imageContainer}>
                 {imageLoadError ? (
                   <View style={styles.errorContainer}>
-                    <Ionicons name="image-outline" size={64} color={colors.gray[400]} />
+                    <Ionicons
+                      name="image-outline"
+                      size={64}
+                      color={colors.gray[400]}
+                    />
                     <Text style={styles.errorText}>Unable to Load Image</Text>
                     <Text style={styles.errorSubtext}>
-                      This image could not be displayed. It may have been deleted or moved.
+                      This image could not be displayed. It may have been
+                      deleted or moved.
                     </Text>
                     <TouchableOpacity
                       style={styles.retryButton}
@@ -950,7 +1062,7 @@ export default function ApplicationDetail() {
                       resizeMode="contain"
                       onLoadStart={() => setImageLoadError(false)}
                       onError={(error) => {
-                        console.error('Image load error:', error);
+                        console.error("Image load error:", error);
                         setImageLoadError(true);
                       }}
                       onLoad={() => setImageLoadError(false)}
@@ -1221,18 +1333,18 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   modalContent: {
     flex: 1,
-    width: '100%',
+    width: "100%",
   },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     backgroundColor: colors.gray[900],
@@ -1241,7 +1353,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: typography.sizes.lg,
-    fontWeight: '600',
+    fontWeight: "600",
     color: colors.white,
   },
   modalCloseButton: {
@@ -1249,27 +1361,27 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: spacing.md,
   },
   fullImage: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   loadingIndicator: {
-    position: 'absolute',
-    alignSelf: 'center',
+    position: "absolute",
+    alignSelf: "center",
   },
   errorContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: spacing.xl,
   },
   errorText: {
     fontSize: typography.sizes.lg,
-    fontWeight: '600',
+    fontWeight: "600",
     color: colors.gray[200],
     marginTop: spacing.md,
     marginBottom: spacing.sm,
@@ -1277,7 +1389,7 @@ const styles = StyleSheet.create({
   errorSubtext: {
     fontSize: typography.sizes.sm,
     color: colors.gray[400],
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: spacing.lg,
   },
   retryButton: {
@@ -1288,7 +1400,7 @@ const styles = StyleSheet.create({
   },
   retryButtonText: {
     fontSize: typography.sizes.md,
-    fontWeight: '600',
+    fontWeight: "600",
     color: colors.gray[900],
   },
 });

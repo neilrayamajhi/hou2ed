@@ -225,7 +225,9 @@ export default function ListingDetailsScreen() {
         .maybeSingle();
       if (!cancelled && data) setProviderProfile(data);
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [merged.providerId]);
 
   // Use the new parsing functions that convert codes to nice labels
@@ -256,8 +258,15 @@ export default function ListingDetailsScreen() {
       }
 
       setLoadingBlockStatus(true);
-      const blocked = await hasBlockedUser(merged.providerId);
-      setIsBlocked(blocked);
+      try {
+        const blocked = await hasBlockedUser(merged.providerId);
+        setIsBlocked(blocked);
+      } catch (error) {
+        // Display-only status (which menu label to show) - not a safety
+        // gate, so default to "not blocked" rather than stalling the menu.
+        console.error("Error checking block status:", error);
+        setIsBlocked(false);
+      }
       setLoadingBlockStatus(false);
     }
 
@@ -573,13 +582,17 @@ export default function ListingDetailsScreen() {
               ) : (
                 <View style={styles.avatarFallback}>
                   <Text style={styles.avatarInitial}>
-                    {(providerProfile?.full_name || merged.providerName || "?")[0].toUpperCase()}
+                    {(providerProfile?.full_name ||
+                      merged.providerName ||
+                      "?")[0].toUpperCase()}
                   </Text>
                 </View>
               )}
               <View style={styles.providerInfo}>
                 <Text style={styles.providerName}>
-                  {providerProfile?.full_name || merged.providerName || "Provider"}
+                  {providerProfile?.full_name ||
+                    merged.providerName ||
+                    "Provider"}
                 </Text>
                 {merged.isVerified && <Badge text="Verified" />}
               </View>
