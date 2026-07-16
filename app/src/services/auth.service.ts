@@ -14,7 +14,7 @@ import { AUTH_CONSTANTS } from "../constants/auth.constants";
  * top of the existing client-side lockout, not the only line of defense, so
  * a transient outage here should not lock every user out of login entirely.
  */
-async function checkServerRateLimit(key: string): Promise<boolean> {
+export async function checkServerRateLimit(key: string): Promise<boolean> {
   try {
     const { data, error } = await supabase.rpc("check_rate_limit", {
       p_key: key,
@@ -215,6 +215,18 @@ export async function requestPasswordReset(
       success: false,
       error: "Invalid email address",
       errorCode: "VALIDATION_ERROR",
+    };
+  }
+
+  const allowed = await checkServerRateLimit(
+    `password-reset:${email.toLowerCase()}`,
+  );
+  if (!allowed) {
+    return {
+      success: false,
+      error:
+        "Too many reset requests. Please wait a few minutes and try again.",
+      errorCode: AUTH_ERROR_CODES.RATE_LIMITED,
     };
   }
 

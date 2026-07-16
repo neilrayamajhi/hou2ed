@@ -22,6 +22,7 @@ import { theme } from "../../theme";
 import { useRateLimit } from "../../hooks/useRateLimit";
 import { RootStackNavigationProp } from "../../navigation/types";
 import { supabase } from "../../lib/supabase";
+import { checkServerRateLimit } from "../../services/auth.service";
 import { sanitizeEmail } from "../../utils/sanitization";
 import { resilientRequest } from "../../utils/network";
 import { AUTH_CONSTANTS, AUTH_MESSAGES } from "../../constants/auth.constants";
@@ -103,6 +104,20 @@ export default function ForgotPassword() {
         throw new Error("Invalid email format");
       }
 
+      // Server-side rate limit, since the client-side check above can be
+      // bypassed by clearing local storage (e.g. reinstalling the app).
+      const allowed = await checkServerRateLimit(
+        `password-reset:${sanitizedEmail.toLowerCase()}`,
+      );
+      if (!allowed) {
+        setIsSubmitting(false);
+        Alert.alert(
+          "Too Many Attempts",
+          "Please wait a few minutes before trying again.",
+        );
+        return;
+      }
+
       // Send reset email with OTP (no redirect, just code)
       await resilientRequest(
         async () => {
@@ -131,7 +146,9 @@ export default function ForgotPassword() {
       // Navigate to ResetPassword screen after delay
       setTimeout(() => {
         if (mounted.current) {
-          navigation.navigate("ResetPassword" as any, { email: sanitizedEmail });
+          navigation.navigate("ResetPassword" as any, {
+            email: sanitizedEmail,
+          });
         }
       }, 2000);
     } catch (error) {
@@ -163,11 +180,7 @@ export default function ForgotPassword() {
         <View style={styles.content}>
           {/* Icon */}
           <View style={styles.iconContainer}>
-            <Ionicons
-              name="lock-closed-outline"
-              size={64}
-              color={"#D4AF37"}
-            />
+            <Ionicons name="lock-closed-outline" size={64} color={"#D4AF37"} />
           </View>
 
           {/* Title */}
@@ -175,18 +188,14 @@ export default function ForgotPassword() {
 
           {/* Description */}
           <Text style={styles.description}>
-            Enter your email address and we'll send you a 6-digit code to reset your
-            password.
+            Enter your email address and we'll send you a 6-digit code to reset
+            your password.
           </Text>
 
           {/* Success Message */}
           {successMessage ? (
             <View style={styles.successContainer} accessibilityRole="alert">
-              <Ionicons
-                name="checkmark-circle"
-                size={20}
-                color={"#21C55D"}
-              />
+              <Ionicons name="checkmark-circle" size={20} color={"#21C55D"} />
               <Text style={styles.successText}>{successMessage}</Text>
             </View>
           ) : null}
