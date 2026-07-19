@@ -16,12 +16,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { theme } from "../../theme";
 import ListingCard from "../../components/ListingCard";
+import ListingCardSkeleton from "../../components/ListingCardSkeleton";
 import EmptyState from "../../components/EmptyState";
 import OfflineBanner from "../../components/OfflineBanner";
 import FiltersSheet from "./FiltersSheet";
 import { useFilterStore } from "../../state/useFilterStore";
 import { supabase } from "../../lib/supabase";
 import { sortListings, SORT_OPTIONS } from "../../utils/sortListings";
+import { filterListingsByQuick } from "../../data/mockListings";
 import { usePerformance } from "../../utils/perf";
 import type {
   Listing,
@@ -29,7 +31,23 @@ import type {
   Availability,
   HousingType,
 } from "../../types/listing";
-import type { SortOption } from "../../types/filters";
+import type { SortOption, HousingTypeFilter } from "../../types/filters";
+
+const HOUSING_TYPE_TO_LISTING_TYPE: Record<keyof HousingTypeFilter, string> = {
+  emergencyShelter:        "emergency_shelter",
+  transitionalHousing:     "transitional_housing",
+  rapidRehousing:          "rapid_rehousing",
+  permanentSupportive:     "permanent_supportive",
+  soberLiving:             "sober_living",
+  halfwayHouse:            "halfway_house",
+  groupHome:               "group_home",
+  independentLiving:       "independent_living",
+  assistedLiving:          "assisted_living",
+  nursingHome:             "nursing_home",
+  veteransHousing:         "veterans_housing",
+  youthHousing:            "youth_housing",
+  domesticViolenceShelter: "domestic_violence_shelter",
+};
 
 type ViewMode = "list" | "map";
 
@@ -72,6 +90,7 @@ export default function SearchScreen() {
     hasActiveFilters,
     getActiveFilterCount,
   } = useFilterStore();
+  const housingType = useFilterStore((state) => state.housingType as HousingTypeFilter);
 
   // Local state
   const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -80,7 +99,8 @@ export default function SearchScreen() {
   const [showFilters, setShowFilters] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
-  const [listings, setListings] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [listings, setListings] = useState<Listing[]>([]);
 
   // Performance tracking
   const searchPerf = usePerformance("search");
@@ -95,6 +115,7 @@ export default function SearchScreen() {
   // Load listings from Supabase and map to card model
   useEffect(() => {
     let cancelled = false;
+    setIsLoading(true);
     (async () => {
       try {
         searchPerf.start();
@@ -131,7 +152,7 @@ export default function SearchScreen() {
           return pub?.publicUrl || null;
         };
 
-        const mapped = (data || []).map((row: any) => {
+        const mapped: Listing[] = (data || []).map((row: any) => {
           const normalizedImages: string[] = toArray(row.images)
             .map(toStringVal)
             .filter(Boolean)
@@ -211,10 +232,21 @@ export default function SearchScreen() {
                 (l.address || "").toLowerCase().includes(query),
             );
 
-        // TODO: Apply quickFilters mapping to DB fields if needed
+        const housingTypeSnakeCase: Record<string, boolean> = {};
+        (Object.keys(HOUSING_TYPE_TO_LISTING_TYPE) as Array<keyof HousingTypeFilter>).forEach(
+          (key) => {
+            housingTypeSnakeCase[HOUSING_TYPE_TO_LISTING_TYPE[key]] = housingType[key] ?? false;
+          },
+        );
+        filtered = filterListingsByQuick(filtered, quickFilters, housingTypeSnakeCase);
 
         const sorted = sortListings(filtered, sortBy);
-        if (!cancelled) setListings(sorted);
+        if (!cancelled) {
+          setListings(sorted);
+          setIsLoading(false);
+        }
+      } catch {
+        if (!cancelled) setIsLoading(false);
       } finally {
         searchPerf.end();
       }
@@ -222,7 +254,7 @@ export default function SearchScreen() {
     return () => {
       cancelled = true;
     };
-  }, [quickFilters, searchQuery, sortBy]);
+  }, [quickFilters, housingType, searchQuery, sortBy]);
 
   // Handle search
   const handleSearch = useCallback(() => {
@@ -268,6 +300,37 @@ export default function SearchScreen() {
 
   // List key extractor
   const keyExtractor = useCallback((item: Listing) => item.id, []);
+
+  // Memoized map markers — only recalculated when the listings array changes,
+  // not on every unrelated state update (e.g. text input, sort modal toggle).
+  const mapMarkers = useMemo(
+    () =>
+      listings.map((listing) => (
+        <Marker
+          key={listing.id}
+          coordinate={{ latitude: listing.lat, longitude: listing.lng }}
+          onPress={() => openDetails(listing)}
+        >
+          <View
+            style={[
+              styles.marker,
+              listing.availability.beds_today > 0
+                ? styles.markerAvailable
+                : styles.markerFull,
+            ]}
+          >
+            <Text style={styles.markerText}>
+              {listing.cost?.free
+                ? "FREE"
+                : listing.cost?.monthly
+                  ? `$${listing.cost.monthly}`
+                  : "Contact"}
+            </Text>
+          </View>
+        </Marker>
+      )),
+    [listings, openDetails],
+  );
 
   // Filter count text
   const filterCountText = useMemo(() => {
@@ -380,7 +443,15 @@ export default function SearchScreen() {
       </View>
 
       {/* Content */}
-      {listings.length === 0 ? (
+      {isLoading ? (
+        <View style={styles.listContent}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <View key={i} style={styles.listItemContainer}>
+              <ListingCardSkeleton />
+            </View>
+          ))}
+        </View>
+      ) : listings.length === 0 ? (
         <EmptyState
           message="No matches found"
           subMessage="Try adjusting your filters or expanding your search area"
@@ -401,6 +472,10 @@ export default function SearchScreen() {
             />
           }
           showsVerticalScrollIndicator={false}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={true}
         />
       ) : (
         <View style={styles.mapContainer}>
@@ -416,30 +491,7 @@ export default function SearchScreen() {
             showsUserLocation
             showsMyLocationButton
           >
-            {listings.map((listing) => (
-              <Marker
-                key={listing.id}
-                coordinate={{ latitude: listing.lat, longitude: listing.lng }}
-                onPress={() => openDetails(listing)}
-              >
-                <View
-                  style={[
-                    styles.marker,
-                    listing.availability.beds_today > 0
-                      ? styles.markerAvailable
-                      : styles.markerFull,
-                  ]}
-                >
-                  <Text style={styles.markerText}>
-                    {listing.cost?.free
-                      ? "FREE"
-                      : listing.cost?.monthly
-                        ? `$${listing.cost.monthly}`
-                        : "Contact"}
-                  </Text>
-                </View>
-              </Marker>
-            ))}
+            {mapMarkers}
           </MapView>
         </View>
       )}

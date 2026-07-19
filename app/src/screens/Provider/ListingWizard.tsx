@@ -40,6 +40,42 @@ type StepKey =
   | "Availability"
   | "Review";
 
+// Static option lists — defined outside the component so they are never
+// recreated on re-render (e.g. when the user types in a text field).
+const AMENITIES_OPTIONS = [
+  { label: "Wi-Fi", value: "wifi" },
+  { label: "Laundry", value: "laundry" },
+  { label: "Kitchen", value: "kitchen" },
+  { label: "Meals Provided", value: "meals" },
+  { label: "Showers", value: "showers" },
+  { label: "Storage Lockers", value: "storage" },
+  { label: "Common Area", value: "common_area" },
+  { label: "Air Conditioning", value: "ac" },
+  { label: "Heating", value: "heating" },
+];
+
+const SERVICES_OPTIONS = [
+  { label: "Case Management", value: "case_management" },
+  { label: "Medical Services", value: "medical" },
+  { label: "Mental Health Services", value: "mental_health" },
+  { label: "Substance Abuse Services", value: "substance_abuse" },
+  { label: "Job Training", value: "job_training" },
+  { label: "Education Support", value: "education" },
+  { label: "Transportation Assistance", value: "transportation" },
+  { label: "Legal Aid", value: "legal" },
+];
+
+const ELIGIBILITY_OPTIONS = [
+  { label: "All Genders Welcome", value: "all_genders" },
+  { label: "Men Only", value: "men_only" },
+  { label: "Women Only", value: "women_only" },
+  { label: "Families Welcome", value: "families" },
+  { label: "Veterans Welcome", value: "veterans" },
+  { label: "LGBTQ+ Friendly", value: "lgbtq" },
+  { label: "Youth (18-24)", value: "youth" },
+  { label: "Seniors (55+)", value: "seniors" },
+];
+
 export default function ListingWizard() {
   const navigation = useNavigation<RootStackNavigationProp>();
   const { showToast } = useToast();
@@ -446,39 +482,9 @@ export default function ListingWizard() {
   );
 
   const renderAmenities = () => {
-    const amenitiesOptions = [
-      { label: "Wi-Fi", value: "wifi" },
-      { label: "Laundry", value: "laundry" },
-      { label: "Kitchen", value: "kitchen" },
-      { label: "Meals Provided", value: "meals" },
-      { label: "Showers", value: "showers" },
-      { label: "Storage Lockers", value: "storage" },
-      { label: "Common Area", value: "common_area" },
-      { label: "Air Conditioning", value: "ac" },
-      { label: "Heating", value: "heating" },
-    ];
-
-    const servicesOptions = [
-      { label: "Case Management", value: "case_management" },
-      { label: "Medical Services", value: "medical" },
-      { label: "Mental Health Services", value: "mental_health" },
-      { label: "Substance Abuse Services", value: "substance_abuse" },
-      { label: "Job Training", value: "job_training" },
-      { label: "Education Support", value: "education" },
-      { label: "Transportation Assistance", value: "transportation" },
-      { label: "Legal Aid", value: "legal" },
-    ];
-
-    const eligibilityOptions = [
-      { label: "All Genders Welcome", value: "all_genders" },
-      { label: "Men Only", value: "men_only" },
-      { label: "Women Only", value: "women_only" },
-      { label: "Families Welcome", value: "families" },
-      { label: "Veterans Welcome", value: "veterans" },
-      { label: "LGBTQ+ Friendly", value: "lgbtq" },
-      { label: "Youth (18-24)", value: "youth" },
-      { label: "Seniors (55+)", value: "seniors" },
-    ];
+    const amenitiesOptions = AMENITIES_OPTIONS;
+    const servicesOptions = SERVICES_OPTIONS;
+    const eligibilityOptions = ELIGIBILITY_OPTIONS;
 
     return (
       <ScrollView>

@@ -704,6 +704,10 @@ export default function ThreadScreen() {
               </Text>
             </View>
           }
+          initialNumToRender={20}
+          maxToRenderPerBatch={20}
+          windowSize={10}
+          removeClippedSubviews={true}
         />
 
         {selectedAttachments.length > 0 && (

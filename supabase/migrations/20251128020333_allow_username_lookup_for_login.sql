@@ -2,7 +2,7 @@
 -- FIX: Allow username lookup during login
 -- ============================================================================
 -- Problem: Users cannot log in with username because anon role cannot
---          query profiles table to resolve username ’ email
+--          query profiles table to resolve username â€™ email
 -- Solution: Add RLS policy allowing anon to read ONLY email column
 --          when querying by username (for login purposes)
 -- Date: 2025-11-28

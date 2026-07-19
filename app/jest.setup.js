@@ -23,6 +23,11 @@ jest.mock("expo-secure-store", () => ({
   deleteItemAsync: jest.fn(async () => {}),
 }));
 
+// Mock expo-image
+jest.mock("expo-image", () => ({
+  Image: "Image",
+}));
+
 // Mock expo-image-picker
 jest.mock("expo-image-picker", () => ({
   requestMediaLibraryPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
@@ -97,8 +102,19 @@ jest.mock('react-native/Libraries/Linking/Linking', () => ({
 
 // Mock TurboModuleRegistry to avoid DevMenu errors in RN during tests
 jest.mock('react-native/Libraries/TurboModule/TurboModuleRegistry', () => ({
-  getEnforcing: () => ({}),
-  get: () => ({}),
+  getEnforcing: (name) => {
+    if (name === 'PlatformConstants') {
+      return { getConstants: () => ({ isTesting: true, reactNativeVersion: { major: 0, minor: 81, patch: 4 } }) };
+    }
+    return { getConstants: () => ({}) };
+  },
+  get: () => ({ getConstants: () => ({}) }),
+}));
+
+// Mock NativePlatformConstantsIOS to prevent getConstants errors
+jest.mock('react-native/Libraries/Utilities/NativePlatformConstantsIOS', () => ({
+  __esModule: true,
+  default: { getConstants: () => ({ isTesting: true, reactNativeVersion: { major: 0, minor: 81, patch: 4 }, osVersion: '17.0', systemName: 'iOS' }) },
 }));
 
 // Mock RN Dimensions and NativeDeviceInfo used under the hood
@@ -109,10 +125,16 @@ jest.mock('react-native/src/private/specs_DEPRECATED/modules/NativeDeviceInfo', 
       screen: { width: 375, height: 667, scale: 2, fontScale: 2 },
     },
   }),
-}), { virtual: true });
-jest.mock('react-native/Libraries/Utilities/Dimensions', () => ({
-  get: () => ({ width: 375, height: 667, scale: 2, fontScale: 2 }),
-}), { virtual: true });
+}));
+jest.mock('react-native/Libraries/Utilities/Dimensions', () => {
+  const dim = { width: 375, height: 667, scale: 2, fontScale: 2 };
+  const Dimensions = {
+    get: () => dim,
+    set: jest.fn(),
+    addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+  };
+  return { __esModule: true, default: Dimensions, ...Dimensions };
+});
 
 // Mock RN StyleSheet to bypass feature flags
 jest.mock('react-native/Libraries/StyleSheet/StyleSheet', () => ({

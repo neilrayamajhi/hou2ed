@@ -101,6 +101,20 @@ const createDefaultFilters = (): FilterState => ({
 // Store type combining state and actions
 type FilterStore = FilterState & FilterActions;
 
+// Debounced AsyncStorage adapter — batches rapid writes (e.g. quick-filter taps)
+// into a single disk write that fires 300ms after tapping stops.
+// Reads and removes are still immediate; only writes are debounced.
+let writeTimer: ReturnType<typeof setTimeout> | null = null;
+const debouncedStorage = {
+  getItem: (name: string) => AsyncStorage.getItem(name),
+  removeItem: (name: string) => AsyncStorage.removeItem(name),
+  setItem: (name: string, value: string) => {
+    if (writeTimer) clearTimeout(writeTimer);
+    writeTimer = setTimeout(() => AsyncStorage.setItem(name, value), 300);
+    return Promise.resolve();
+  },
+};
+
 // Create the store with persistence
 export const useFilterStore = create<FilterStore>()(
   persist(
@@ -204,8 +218,8 @@ export const useFilterStore = create<FilterStore>()(
       },
     }),
     {
-      name: "filter-storage", // unique name for storage
-      storage: createJSONStorage(() => AsyncStorage),
+      name: "filter-storage",
+      storage: createJSONStorage(() => debouncedStorage),
       partialize: (state) => {
         // Only persist the filter state, not the actions
         const actionKeys: (keyof FilterActions)[] = [

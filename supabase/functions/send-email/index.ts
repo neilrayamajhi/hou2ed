@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
+import { checkRateLimit, rateLimitResponse, getClientIp } from '../_shared/rateLimit.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,6 +20,16 @@ serve(async (req) => {
   }
 
   try {
+    // Rate limit: 10 email sends per IP per hour
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    )
+    const ip = getClientIp(req)
+    const rl = await checkRateLimit(supabase, `email:${ip}`, 60, 10)
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterSeconds, corsHeaders)
+
     const { to, type, otp } = await req.json()
 
     let subject = ''

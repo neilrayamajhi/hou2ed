@@ -1,42 +1,28 @@
-/**
- * Tests for sortListings utility
- */
-
 import { sortListings, SORT_OPTIONS } from "./sortListings";
 import type { Listing } from "../types/listing";
 
-// Create mock listing with defaults
 const createMockListing = (overrides: Partial<Listing> = {}): Listing => ({
   id: "1",
-  name: "Test Listing",
-  type: "emergency_shelter",
+  provider_id: "provider-1",
+  title: "Test Listing",
   description: "Test description",
-  coordinates: { latitude: 0, longitude: 0 },
-  address: {
-    street: "123 Test St",
-    city: "Test City",
-    state: "CA",
-    zipCode: "12345",
-  },
-  price: { min: 0, max: 0, isFree: true, acceptsVouchers: false },
-  availability: "available",
-  bedsAvailable: 5,
-  totalBeds: 10,
-  amenities: [],
-  requirements: [],
-  features: {
-    acceptsFamilies: false,
-    acceptsVeterans: false,
-    acceptsSingleMen: true,
-    acceptsSingleWomen: true,
-    petsAllowed: false,
-    wheelchairAccessible: false,
-    lgbtqFriendly: true,
-  },
-  contact: { phone: "555-0100" },
-  lastUpdated: new Date("2024-01-01").toISOString(),
-  provider: "Test Provider",
+  address: "123 Test St",
+  city: "Test City",
+  state: "CA",
+  zip_code: "12345",
+  lat: 0,
+  lng: 0,
+  housing_type: "shelter",
+  unit_beds: { single_occupancy: 10 },
+  ada_beds: 0,
+  cost: { monthly: 0, free: true },
+  availability: { beds_today: 5, beds_week: 10, waitlist: 0, last_updated_at: null },
   verified: true,
+  images: [],
+  dv_sensitive: false,
+  is_active: true,
+  created_at: "2024-01-01T00:00:00Z",
+  updated_at: "2024-01-01T00:00:00Z",
   ...overrides,
 });
 
@@ -44,22 +30,22 @@ describe("sortListings", () => {
   describe("priceAsc", () => {
     test("should sort by price ascending with free items first", () => {
       const listings = [
-        createMockListing({ id: "1", price: { min: 500, max: 700, isFree: false, acceptsVouchers: false } }),
-        createMockListing({ id: "2", price: { min: 0, max: 0, isFree: true, acceptsVouchers: false } }),
-        createMockListing({ id: "3", price: { min: 200, max: 300, isFree: false, acceptsVouchers: false } }),
+        createMockListing({ id: "1", cost: { monthly: 500, free: false } }),
+        createMockListing({ id: "2", cost: { monthly: 0, free: true } }),
+        createMockListing({ id: "3", cost: { monthly: 200, free: false } }),
       ];
 
       const sorted = sortListings(listings, "priceAsc");
 
-      expect(sorted[0].id).toBe("2"); // Free
+      expect(sorted[0].id).toBe("2"); // Free ($0)
       expect(sorted[1].id).toBe("3"); // $200
       expect(sorted[2].id).toBe("1"); // $500
     });
 
     test("should handle all free listings", () => {
       const listings = [
-        createMockListing({ id: "1", price: { min: 0, max: 0, isFree: true, acceptsVouchers: false } }),
-        createMockListing({ id: "2", price: { min: 0, max: 0, isFree: true, acceptsVouchers: false } }),
+        createMockListing({ id: "1", cost: { monthly: 0, free: true } }),
+        createMockListing({ id: "2", cost: { monthly: 0, free: true } }),
       ];
 
       const sorted = sortListings(listings, "priceAsc");
@@ -70,16 +56,16 @@ describe("sortListings", () => {
   describe("priceDesc", () => {
     test("should sort by price descending", () => {
       const listings = [
-        createMockListing({ id: "1", price: { min: 100, max: 200, isFree: false, acceptsVouchers: false } }),
-        createMockListing({ id: "2", price: { min: 500, max: 1000, isFree: false, acceptsVouchers: false } }),
-        createMockListing({ id: "3", price: { min: 250, max: 400, isFree: false, acceptsVouchers: false } }),
+        createMockListing({ id: "1", cost: { monthly: 200, free: false } }),
+        createMockListing({ id: "2", cost: { monthly: 1000, free: false } }),
+        createMockListing({ id: "3", cost: { monthly: 400, free: false } }),
       ];
 
       const sorted = sortListings(listings, "priceDesc");
 
-      expect(sorted[0].id).toBe("2"); // $1000 max
-      expect(sorted[1].id).toBe("3"); // $400 max
-      expect(sorted[2].id).toBe("1"); // $200 max
+      expect(sorted[0].id).toBe("2"); // $1000
+      expect(sorted[1].id).toBe("3"); // $400
+      expect(sorted[2].id).toBe("1"); // $200
     });
   });
 
@@ -110,18 +96,17 @@ describe("sortListings", () => {
 
       expect(sorted[0].id).toBe("4");
       expect(sorted[1].id).toBe("2");
-      // Undefined distances should be last
       expect(sorted[2].distance).toBeUndefined();
       expect(sorted[3].distance).toBeUndefined();
     });
   });
 
   describe("newest", () => {
-    test("should sort by last updated date with newest first", () => {
+    test("should sort by updated_at date with newest first", () => {
       const listings = [
-        createMockListing({ id: "1", lastUpdated: new Date("2024-01-15").toISOString() }),
-        createMockListing({ id: "2", lastUpdated: new Date("2024-03-01").toISOString() }),
-        createMockListing({ id: "3", lastUpdated: new Date("2024-02-15").toISOString() }),
+        createMockListing({ id: "1", updated_at: "2024-01-15T00:00:00Z" }),
+        createMockListing({ id: "2", updated_at: "2024-03-01T00:00:00Z" }),
+        createMockListing({ id: "3", updated_at: "2024-02-15T00:00:00Z" }),
       ];
 
       const sorted = sortListings(listings, "newest");
@@ -133,59 +118,42 @@ describe("sortListings", () => {
   });
 
   describe("rating", () => {
-    test("should sort by rating with highest first", () => {
+    test("should return listings in original order (no rating field on Listing)", () => {
       const listings = [
-        createMockListing({ id: "1", rating: 3.5 }),
-        createMockListing({ id: "2", rating: 4.8 }),
-        createMockListing({ id: "3", rating: 4.2 }),
+        createMockListing({ id: "1" }),
+        createMockListing({ id: "2" }),
+        createMockListing({ id: "3" }),
       ];
 
       const sorted = sortListings(listings, "rating");
 
-      expect(sorted[0].id).toBe("2"); // 4.8
-      expect(sorted[1].id).toBe("3"); // 4.2
-      expect(sorted[2].id).toBe("1"); // 3.5
-    });
-
-    test("should treat undefined ratings as 0", () => {
-      const listings = [
-        createMockListing({ id: "1", rating: undefined }),
-        createMockListing({ id: "2", rating: 4.5 }),
-        createMockListing({ id: "3", rating: undefined }),
-      ];
-
-      const sorted = sortListings(listings, "rating");
-
-      expect(sorted[0].id).toBe("2");
-      expect(sorted[0].rating).toBe(4.5);
+      expect(sorted.map((l) => l.id)).toEqual(["1", "2", "3"]);
     });
   });
 
   describe("availability", () => {
-    test("should sort by availability status in correct order", () => {
+    test("should sort available first, then waitlist, then full", () => {
       const listings = [
-        createMockListing({ id: "1", availability: "full" }),
-        createMockListing({ id: "2", availability: "available" }),
-        createMockListing({ id: "3", availability: "waitlist" }),
-        createMockListing({ id: "4", availability: "unknown" }),
+        createMockListing({ id: "1", availability: { beds_today: 0, beds_week: 0, waitlist: 0, last_updated_at: null } }),
+        createMockListing({ id: "2", availability: { beds_today: 5, beds_week: 10, waitlist: 0, last_updated_at: null } }),
+        createMockListing({ id: "3", availability: { beds_today: 0, beds_week: 0, waitlist: 3, last_updated_at: null } }),
       ];
 
       const sorted = sortListings(listings, "availability");
 
-      expect(sorted[0].availability).toBe("available");
-      expect(sorted[1].availability).toBe("waitlist");
-      expect(sorted[2].availability).toBe("full");
-      expect(sorted[3].availability).toBe("unknown");
+      expect(sorted[0].id).toBe("2"); // available (beds_today > 0)
+      expect(sorted[1].id).toBe("3"); // waitlist
+      expect(sorted[2].id).toBe("1"); // full
     });
   });
 
   describe("relevance", () => {
     test("should sort by availability then distance", () => {
       const listings = [
-        createMockListing({ id: "1", availability: "full", distance: 1.0 }),
-        createMockListing({ id: "2", availability: "available", distance: 5.0 }),
-        createMockListing({ id: "3", availability: "available", distance: 2.0 }),
-        createMockListing({ id: "4", availability: "waitlist", distance: 0.5 }),
+        createMockListing({ id: "1", availability: { beds_today: 0, beds_week: 0, waitlist: 0, last_updated_at: null }, distance: 1.0 }),
+        createMockListing({ id: "2", availability: { beds_today: 5, beds_week: 10, waitlist: 0, last_updated_at: null }, distance: 5.0 }),
+        createMockListing({ id: "3", availability: { beds_today: 5, beds_week: 10, waitlist: 0, last_updated_at: null }, distance: 2.0 }),
+        createMockListing({ id: "4", availability: { beds_today: 0, beds_week: 0, waitlist: 2, last_updated_at: null }, distance: 0.5 }),
       ];
 
       const sorted = sortListings(listings, "relevance");

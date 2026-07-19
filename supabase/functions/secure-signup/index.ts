@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
+import { checkRateLimit, rateLimitResponse, getClientIp } from '../_shared/rateLimit.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -25,6 +26,16 @@ serve(async (req) => {
     if (req.method !== 'POST') {
       throw new Error('Method not allowed')
     }
+
+    // Rate limit: 5 signup attempts per IP per hour (shared key with other signup functions)
+    const supabaseForRateLimit = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    )
+    const ip = getClientIp(req)
+    const rl = await checkRateLimit(supabaseForRateLimit, `signup:${ip}`, 60, 5)
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterSeconds, corsHeaders)
 
     // Parse request body
     const body: SignupRequest = await req.json()

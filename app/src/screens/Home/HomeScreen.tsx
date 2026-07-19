@@ -30,6 +30,7 @@ import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { theme } from "../../theme";
 import ListingCard from "../../components/ListingCard";
+import ListingCardSkeleton from "../../components/ListingCardSkeleton";
 import FiltersSheet from "../Search/FiltersSheet";
 import { useFilterStore } from "../../state/useFilterStore";
 import { useLocation } from "../../hooks/useLocation";
@@ -573,7 +574,7 @@ export default function HomeScreen() {
   }, [location, refreshLocation]);
 
   // Render listing item for list view
-  const renderListItem = ({
+  const renderListItem = useCallback(({
     item,
     index,
   }: {
@@ -649,7 +650,7 @@ export default function HomeScreen() {
         <Ionicons name="chevron-forward" size={20} color="#8a8a8a" />
       </TouchableOpacity>
     );
-  };
+  }, [openDetails]);
 
   const renderQuickFilter = (
     key: keyof typeof quickFilters,
@@ -864,6 +865,21 @@ export default function HomeScreen() {
             ]}
             showsVerticalScrollIndicator={false}
             ItemSeparatorComponent={() => <View style={styles.listSeparator} />}
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            removeClippedSubviews={true}
+            ListEmptyComponent={
+              loadingData ? (
+                <View>
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <View key={i} style={styles.listSeparator}>
+                      <ListingCardSkeleton />
+                    </View>
+                  ))}
+                </View>
+              ) : null
+            }
           />
         </Animated.View>
       )}

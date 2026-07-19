@@ -103,7 +103,11 @@ CREATE POLICY "providers_update_applications"
 
 -- Grant necessary permissions
 GRANT SELECT, INSERT, UPDATE ON applications TO authenticated;
-GRANT USAGE ON SEQUENCE applications_id_seq TO authenticated;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'applications_id_seq' AND relkind = 'S') THEN
+    GRANT USAGE ON SEQUENCE applications_id_seq TO authenticated;
+  END IF;
+END $$;
 
 -- Add helpful comment
 COMMENT ON TABLE applications IS 'Housing applications submitted by seekers for provider listings';

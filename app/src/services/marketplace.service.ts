@@ -370,11 +370,36 @@ export async function getMarketplaceListings(
       .from("listings")
       .select(
         `
-        *,
+        id,
+        provider_id,
+        title,
+        housing_type,
+        description,
+        images,
+        lat,
+        lng,
+        address,
+        city,
+        state,
+        zip_code,
+        availability,
+        cost,
+        amenities,
+        services,
+        rules,
+        eligibility,
+        accessibility,
+        gender_rooming,
+        intake,
+        updated_at,
+        verified,
+        is_active,
+        created_at,
         provider:profiles!listings_provider_id_fkey (
           id,
           full_name,
-          username
+          username,
+          provider_profile
         )
       `,
       )

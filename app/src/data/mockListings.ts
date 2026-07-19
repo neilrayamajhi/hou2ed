@@ -533,7 +533,7 @@ export function generateMockListings(count: number = 20): Listing[] {
 }
 
 /**
- * Filter listings based on quick filters
+ * Filter listings based on quick filters and optional housing type filter
  */
 export function filterListingsByQuick(
   listings: Listing[],
@@ -544,45 +544,50 @@ export function filterListingsByQuick(
     families: boolean;
     nearMe: boolean;
   },
+  housingTypeFilter?: Partial<Record<string, boolean>>,
 ): Listing[] {
-  // Guard against undefined inputs
   if (!listings) return [];
   if (!quickFilters) return listings;
 
-  // If no filters are active, return all listings
   const activeFilters = Object.values(quickFilters).some((v) => v);
-  if (!activeFilters) {
-    console.log("📝 No active filters, returning all listings");
-    return listings;
-  }
+  const activeHousingTypes = housingTypeFilter
+    ? Object.values(housingTypeFilter).some((v) => v)
+    : false;
+  if (!activeFilters && !activeHousingTypes) return listings;
 
   let filtered = [...listings];
 
   if (quickFilters.immediate) {
-    // Check if beds are available today
     filtered = filtered.filter((l) => l.availability.beds_today > 0);
   }
 
   if (quickFilters.free) {
-    // Check if cost is free
     filtered = filtered.filter((l) => l.cost?.free === true);
   }
 
   if (quickFilters.veterans) {
-    // Check if accepts veterans
     filtered = filtered.filter((l) => l.eligibility?.veterans === true);
   }
 
   if (quickFilters.families) {
-    // Check if accepts families
     filtered = filtered.filter(
-      (l) => l.eligibility?.family_status?.includes("family") === true,
+      (l) => l.eligibility?.family_status?.includes("families") === true,
     );
   }
 
   if (quickFilters.nearMe) {
-    // Filter by distance
     filtered = filtered.filter((l) => (l.distance || 0) < 2);
+  }
+
+  if (housingTypeFilter) {
+    const selectedTypes = Object.entries(housingTypeFilter)
+      .filter(([, active]) => active)
+      .map(([typeValue]) => typeValue);
+    if (selectedTypes.length > 0) {
+      filtered = filtered.filter(
+        (l) => l.housing_type !== undefined && selectedTypes.includes(l.housing_type),
+      );
+    }
   }
 
   return filtered;

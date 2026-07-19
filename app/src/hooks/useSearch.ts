@@ -105,7 +105,11 @@ async function fetchListingById(id: string): Promise<Listing | null> {
     const { data, error } = await supabase
       .from('listings')
       .select(`
-        *,
+        id,provider_id,title,description,address,city,state,zip_code,
+        lat,lng,housing_type,unit_beds,ada_beds,gender_rooming,
+        amenities,accessibility,eligibility,services,rules,cost,intake,
+        availability,verified,certifications,images,responsiveness,
+        dv_sensitive,is_active,created_at,updated_at,
         provider:profiles!provider_id (
           id,
           full_name,
@@ -254,7 +258,9 @@ export function useFeaturedListings() {
       const { data, error } = await supabase
         .from('listings')
         .select(`
-          *,
+          id,provider_id,title,description,address,city,state,zip_code,
+          lat,lng,housing_type,unit_beds,ada_beds,cost,availability,
+          verified,images,dv_sensitive,is_active,created_at,updated_at,
           provider:profiles!provider_id (
             id,
             full_name,

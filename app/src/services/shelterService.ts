@@ -529,11 +529,14 @@ export async function fetchRealShelters(
         return true;
       });
 
-    // Promise.all runs every Wikipedia lookup in parallel — all at once, not one by one.
-    // Each element's callback is async so it can await the Wikipedia fetch.
-    const shelters = (
-      await Promise.all(
-        validElements.map(async (element: OSMShelter): Promise<any | null> => {
+    // Process shelters in batches of 5 to avoid flooding the Wikipedia API with
+    // 50+ simultaneous requests (which risks rate limiting and a traffic jam).
+    // Each batch runs in parallel; batches run one after another.
+    const BATCH_SIZE = 5;
+    const allResults: (any | null)[] = [];
+    for (let i = 0; i < validElements.length; i += BATCH_SIZE) {
+      const batch = validElements.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(batch.map(async (element: OSMShelter): Promise<any | null> => {
         const tags = element.tags;
 
         // Extract coordinates - handle both nodes (lat/lon) and ways (center.lat/center.lon)
@@ -794,9 +797,11 @@ export async function fetchRealShelters(
             externalUrl: website || "",
           },
         };
-        }),
-      )
-    )
+      }));
+      allResults.push(...batchResults);
+    }
+
+    const shelters = allResults
       .filter((shelter: any): shelter is any => shelter !== null) // Remove null entries from broken URLs
       .sort((a: any, b: any) => a.distance - b.distance);
 

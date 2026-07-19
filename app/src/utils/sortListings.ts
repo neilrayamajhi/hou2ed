@@ -5,60 +5,49 @@
 import type { Listing } from "../types/listing";
 import type { SortOption } from "../types/filters";
 
+function availabilityScore(l: Listing): number {
+  if (l.availability.beds_today > 0) return 0;
+  if ((l.availability.waitlist ?? 0) > 0) return 1;
+  return 2;
+}
+
+function monthlyPrice(l: Listing): number {
+  if (l.cost?.free) return 0;
+  return l.cost?.monthly ?? 0;
+}
+
 export function sortListings(listings: Listing[], sortBy: SortOption): Listing[] {
   const sorted = [...listings];
 
   switch (sortBy) {
     case "priceAsc":
-      return sorted.sort((a, b) => {
-        const priceA = a.price.isFree ? 0 : a.price.min;
-        const priceB = b.price.isFree ? 0 : b.price.min;
-        return priceA - priceB;
-      });
+      return sorted.sort((a, b) => monthlyPrice(a) - monthlyPrice(b));
 
     case "priceDesc":
-      return sorted.sort((a, b) => {
-        const priceA = a.price.isFree ? 0 : a.price.max;
-        const priceB = b.price.isFree ? 0 : b.price.max;
-        return priceB - priceA;
-      });
+      return sorted.sort((a, b) => monthlyPrice(b) - monthlyPrice(a));
 
     case "distance":
-      return sorted.sort((a, b) => {
-        const distA = a.distance ?? Infinity;
-        const distB = b.distance ?? Infinity;
-        return distA - distB;
-      });
+      return sorted.sort(
+        (a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity),
+      );
 
     case "newest":
-      return sorted.sort((a, b) => {
-        const dateA = new Date(a.lastUpdated).getTime();
-        const dateB = new Date(b.lastUpdated).getTime();
-        return dateB - dateA;
-      });
+      return sorted.sort(
+        (a, b) =>
+          new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+      );
 
     case "rating":
-      return sorted.sort((a, b) => {
-        const ratingA = a.rating ?? 0;
-        const ratingB = b.rating ?? 0;
-        return ratingB - ratingA;
-      });
+      return sorted;
 
     case "availability":
-      return sorted.sort((a, b) => {
-        const availOrder = { available: 0, waitlist: 1, full: 2, unknown: 3 };
-        return availOrder[a.availability] - availOrder[b.availability];
-      });
+      return sorted.sort((a, b) => availabilityScore(a) - availabilityScore(b));
 
     case "relevance":
     default:
-      // In a real app, this would use a relevance scoring algorithm
-      // For now, prioritize available, then by distance
       return sorted.sort((a, b) => {
-        if (a.availability !== b.availability) {
-          const availOrder = { available: 0, waitlist: 1, full: 2, unknown: 3 };
-          return availOrder[a.availability] - availOrder[b.availability];
-        }
+        const availDiff = availabilityScore(a) - availabilityScore(b);
+        if (availDiff !== 0) return availDiff;
         return (a.distance ?? Infinity) - (b.distance ?? Infinity);
       });
   }

@@ -126,8 +126,8 @@ export function useMarketplaceListings() {
         return [];
       }
     },
-    staleTime: 10000, // Consider data stale after 10 seconds for faster updates
-    gcTime: 2 * 60 * 1000, // Keep in cache for 2 minutes
+    staleTime: 5 * 60 * 1000, // Keep data fresh for 5 minutes (matches global QueryProvider default)
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     refetchOnWindowFocus: false, // Don't refetch on window focus to prevent constant reloading
     refetchOnMount: true, // Refetch when component mounts
     retry: 2, // Retry failed requests twice

@@ -11,8 +11,8 @@ import {
   Alert,
   ActionSheetIOS,
   Platform,
-  Image,
 } from "react-native";
+import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { MapView, Marker } from "../../components/MapView";
@@ -38,7 +38,7 @@ import { isOSMListing } from "../../utils/listingHelpers";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-function CollapsibleSection({
+const CollapsibleSection = React.memo(function CollapsibleSection({
   title,
   children,
   defaultExpanded = false,
@@ -65,7 +65,7 @@ function CollapsibleSection({
       {expanded && <View style={styles.sectionContent}>{children}</View>}
     </View>
   );
-}
+});
 
 function toStringArray(v: any): string[] {
   try {
@@ -582,8 +582,10 @@ export default function ListingDetailsScreen() {
             <View style={styles.providerCard}>
               {providerProfile?.avatar_url ? (
                 <Image
-                  source={{ uri: providerProfile.avatar_url }}
+                  source={providerProfile.avatar_url}
                   style={styles.avatar}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
                 />
               ) : (
                 <View style={styles.avatarFallback}>

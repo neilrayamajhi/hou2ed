@@ -1,12 +1,12 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  Image,
   TouchableOpacity,
   Dimensions,
 } from "react-native";
+import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { theme } from "../theme";
 import type { Listing } from "../types/listing";
@@ -21,30 +21,23 @@ interface ListingCardProps {
   isActive?: boolean;
 }
 
-export default function ListingCard({
+function ListingCard({
   listing,
   onPress,
   isActive = false,
 }: ListingCardProps) {
-  const getAvailabilityColor = () => {
-    if (listing.availability.beds_today > 0) {
-      return "#21C55D"; // available
-    } else if (listing.availability.waitlist > 0) {
-      return "#F59E0B"; // waitlist
-    } else {
-      return "#374151"; // full
-    }
-  };
+  const availabilityColor = useMemo(() => {
+    if (listing.availability.beds_today > 0) return "#21C55D";
+    if (listing.availability.waitlist > 0) return "#F59E0B";
+    return "#374151";
+  }, [listing.availability.beds_today, listing.availability.waitlist]);
 
-  const getAvailabilityText = () => {
-    if (listing.availability.beds_today > 0) {
+  const availabilityText = useMemo(() => {
+    if (listing.availability.beds_today > 0)
       return `${listing.availability.beds_today} beds available`;
-    } else if (listing.availability.waitlist > 0) {
-      return "Waitlist open";
-    } else {
-      return "Currently full";
-    }
-  };
+    if (listing.availability.waitlist > 0) return "Waitlist open";
+    return "Currently full";
+  }, [listing.availability.beds_today, listing.availability.waitlist]);
 
   return (
     <TouchableOpacity
@@ -55,11 +48,11 @@ export default function ListingCard({
       {/* Cover Image - Only show if available */}
       {listing.images?.[0] ? (
         <Image
-          source={{
-            uri: listing.images[0],
-          }}
+          source={listing.images[0]}
           style={styles.image}
-          resizeMode="cover"
+          contentFit="cover"
+          transition={200}
+          cachePolicy="memory-disk"
         />
       ) : (
         <View style={[styles.image, styles.imagePlaceholder]}>
@@ -80,7 +73,7 @@ export default function ListingCard({
             </Text>
           </View>
           {listing.verified && (
-            <View style={styles.verifiedBadge}>
+            <View style={styles.verifiedBadge} testID="verified-badge">
               <Ionicons name="checkmark-circle" size={20} color={"#D4AF37"} />
             </View>
           )}
@@ -141,16 +134,18 @@ export default function ListingCard({
           <View
             style={[
               styles.availabilityBadge,
-              { backgroundColor: getAvailabilityColor() },
+              { backgroundColor: availabilityColor },
             ]}
           >
-            <Text style={styles.availabilityText}>{getAvailabilityText()}</Text>
+            <Text style={styles.availabilityText}>{availabilityText}</Text>
           </View>
         </View>
       </View>
     </TouchableOpacity>
   );
 }
+
+export default React.memo(ListingCard);
 
 const styles = StyleSheet.create({
   container: {
