@@ -98,7 +98,17 @@
       "Bash(xargs ls -la)",
       "WebFetch(domain:query.wikidata.org)",
       "WebFetch(domain:en.wikipedia.org)",
-      "Bash(grep -E \"\\\\.\\(tsx?|jsx?\\)$\")"
+      "Bash(grep -E \"\\\\.\\(tsx?|jsx?\\)$\")",
+      "Bash(grep -r \"SELECT \\\\*\\\\|select\\(\\\\`\\\\*\" /Users/neilrayamajhi/h2d/app/src --include=\"*.ts\" --include=\"*.tsx\")",
+      "Bash(npx expo *)",
+      "Bash(npx jest *)",
+      "Bash(supabase secrets *)",
+      "Bash(supabase migration *)",
+      "Bash(iconv -f windows-1252 -t utf-8 /Users/neilrayamajhi/h2d/supabase/migrations/20251128020333_allow_username_lookup_for_login.sql)",
+      "Bash(mv /tmp/fixed_migration.sql /Users/neilrayamajhi/h2d/supabase/migrations/20251128020333_allow_username_lookup_for_login.sql)",
+      "Bash(iconv -f windows-1252 -t utf-8 /Users/neilrayamajhi/h2d/supabase/migrations/20260219032845_apply_username_login_rls_policy.sql)",
+      "Bash(mv /tmp/fixed_migration2.sql /Users/neilrayamajhi/h2d/supabase/migrations/20260219032845_apply_username_login_rls_policy.sql)",
+      "Bash(npx supabase@latest *)"
     ],
     "deny": [],
     "ask": []
