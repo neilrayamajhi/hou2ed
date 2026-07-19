@@ -18,6 +18,7 @@ import {
   Platform,
   Modal,
   Pressable,
+  TextInput,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -60,6 +61,11 @@ export default function ProfileScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [loadingNotificationTime, setLoadingNotificationTime] = useState(false);
   const lastLoadedUserId = useRef<string | null>(null);
+
+  // Delete-account confirmation state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   const handleEditAvatar = useCallback(async () => {
     console.log("[ProfileScreen] Starting avatar upload...");
@@ -262,44 +268,38 @@ export default function ProfileScreen() {
   }, [navigation]);
 
   const handleDeleteAccount = useCallback(() => {
-    Alert.alert(
-      "Delete Account",
-      "Are you sure you want to delete your account? This action cannot be undone.",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            Alert.alert(
-              "Confirm Deletion",
-              "Type 'DELETE' to confirm account deletion",
-              [
-                {
-                  text: "Cancel",
-                  style: "cancel",
-                },
-                {
-                  text: "Confirm",
-                  style: "destructive",
-                  onPress: async () => {
-                    await logout();
-                    navigation.reset({
-                      index: 0,
-                      routes: [{ name: "OnboardingScreen" }],
-                    });
-                  },
-                },
-              ],
-            );
-          },
-        },
-      ],
-    );
-  }, [logout, navigation]);
+    setDeleteConfirmText("");
+    setShowDeleteModal(true);
+  }, []);
+
+  const handleConfirmDeleteAccount = useCallback(async () => {
+    if (deleteConfirmText.trim().toUpperCase() !== "DELETE") return;
+
+    setIsDeletingAccount(true);
+    try {
+      const { data, error } =
+        await supabase.functions.invoke("delete-own-account");
+
+      if (error || !data?.success) {
+        Alert.alert(
+          "Error",
+          data?.error || error?.message || "Failed to delete account",
+        );
+        setIsDeletingAccount(false);
+        return;
+      }
+
+      setShowDeleteModal(false);
+      await logout();
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "OnboardingScreen" }],
+      });
+    } catch (err) {
+      Alert.alert("Error", "An unexpected error occurred");
+      setIsDeletingAccount(false);
+    }
+  }, [deleteConfirmText, logout, navigation]);
 
   const handleLogout = useCallback(() => {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
@@ -696,7 +696,7 @@ export default function ProfileScreen() {
           <View style={styles.settingsContent}>
             <TouchableOpacity
               style={styles.settingRow}
-              onPress={() => navigation.navigate("TermsOfService")}
+              onPress={() => navigation.navigate("PrivacyPolicy")}
               accessibilityLabel="Privacy Policy"
               accessibilityRole="button"
             >
@@ -904,6 +904,70 @@ export default function ProfileScreen() {
           />
         )
       )}
+
+      {/* Delete Account confirmation modal */}
+      <Modal
+        visible={showDeleteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !isDeletingAccount && setShowDeleteModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => !isDeletingAccount && setShowDeleteModal(false)}
+        >
+          <Pressable
+            style={styles.deleteModalContainer}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Ionicons name="warning" size={28} color={colors.red} />
+            <Text style={styles.deleteModalTitle}>Delete Your Account</Text>
+            <Text style={styles.deleteModalText}>
+              This permanently deletes your account and all of your data -
+              listings, applications, messages, everything. This cannot be
+              undone. Type DELETE to confirm.
+            </Text>
+            <TextInput
+              style={styles.deleteModalInput}
+              placeholder="DELETE"
+              placeholderTextColor={colors.gray[600]}
+              value={deleteConfirmText}
+              onChangeText={setDeleteConfirmText}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              editable={!isDeletingAccount}
+            />
+            <TouchableOpacity
+              style={[
+                styles.deleteModalButton,
+                (deleteConfirmText.trim().toUpperCase() !== "DELETE" ||
+                  isDeletingAccount) &&
+                  styles.deleteModalButtonDisabled,
+              ]}
+              disabled={
+                deleteConfirmText.trim().toUpperCase() !== "DELETE" ||
+                isDeletingAccount
+              }
+              onPress={handleConfirmDeleteAccount}
+            >
+              {isDeletingAccount ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <Text style={styles.deleteModalButtonText}>
+                  Delete My Account
+                </Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.deleteModalCancel}
+              disabled={isDeletingAccount}
+              onPress={() => setShowDeleteModal(false)}
+            >
+              <Text style={styles.deleteModalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1139,5 +1203,62 @@ const styles = StyleSheet.create({
   },
   timePicker: {
     height: 200,
+  },
+  deleteModalContainer: {
+    backgroundColor: colors.gray[850],
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    padding: spacing.xl,
+    alignItems: "center",
+  },
+  deleteModalTitle: {
+    fontSize: typography.sizes.xl,
+    fontWeight: "700",
+    color: colors.gray[50],
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  deleteModalText: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray[400],
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: spacing.lg,
+  },
+  deleteModalInput: {
+    width: "100%",
+    backgroundColor: colors.gray[900],
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.gray[700],
+    padding: spacing.md,
+    color: colors.gray[50],
+    fontSize: typography.sizes.md,
+    textAlign: "center",
+    letterSpacing: 2,
+    marginBottom: spacing.md,
+  },
+  deleteModalButton: {
+    width: "100%",
+    backgroundColor: colors.red,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    alignItems: "center",
+    marginBottom: spacing.sm,
+  },
+  deleteModalButtonDisabled: {
+    opacity: 0.4,
+  },
+  deleteModalButtonText: {
+    fontSize: typography.sizes.md,
+    fontWeight: "600",
+    color: colors.white,
+  },
+  deleteModalCancel: {
+    paddingVertical: spacing.sm,
+  },
+  deleteModalCancelText: {
+    fontSize: typography.sizes.md,
+    color: colors.gray[400],
   },
 });

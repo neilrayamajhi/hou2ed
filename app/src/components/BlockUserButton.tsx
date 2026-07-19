@@ -44,8 +44,15 @@ export default function BlockUserButton({
 
   async function loadBlockStatus() {
     setLoading(true);
-    const blocked = await hasBlockedUser(userId);
-    setIsBlocked(blocked);
+    try {
+      const blocked = await hasBlockedUser(userId);
+      setIsBlocked(blocked);
+    } catch (error) {
+      // Display-only status (which button label to show) - not a safety
+      // gate, so default to "not blocked" rather than blocking the UI.
+      console.error("Error checking block status:", error);
+      setIsBlocked(false);
+    }
     setLoading(false);
   }
 

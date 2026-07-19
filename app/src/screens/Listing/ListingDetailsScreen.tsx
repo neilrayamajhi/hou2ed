@@ -134,8 +134,10 @@ export default function ListingDetailsScreen() {
     (async () => {
       try {
         setLoadingDb(true);
+        // Query the DV-safety view, not the raw table - see the matching
+        // comment in SearchScreen.tsx for why.
         const { data, error } = await supabase
-          .from("listings")
+          .from("public_listings")
           .select(
             "id,title,description,amenities,services,rules,eligibility,images,address,city,state,zip_code,lat,lng,provider_id",
           )
@@ -221,13 +223,15 @@ export default function ListingDetailsScreen() {
     let cancelled = false;
     (async () => {
       const { data } = await supabase
-        .from("profiles")
+        .from("provider_public_profiles")
         .select("full_name, avatar_url")
         .eq("id", providerId)
         .maybeSingle();
       if (!cancelled && data) setProviderProfile(data);
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [merged.providerId]);
 
   // Use the new parsing functions that convert codes to nice labels
@@ -264,8 +268,15 @@ export default function ListingDetailsScreen() {
       }
 
       setLoadingBlockStatus(true);
-      const blocked = await hasBlockedUser(merged.providerId);
-      setIsBlocked(blocked);
+      try {
+        const blocked = await hasBlockedUser(merged.providerId);
+        setIsBlocked(blocked);
+      } catch (error) {
+        // Display-only status (which menu label to show) - not a safety
+        // gate, so default to "not blocked" rather than stalling the menu.
+        console.error("Error checking block status:", error);
+        setIsBlocked(false);
+      }
       setLoadingBlockStatus(false);
     }
 
@@ -590,13 +601,17 @@ export default function ListingDetailsScreen() {
               ) : (
                 <View style={styles.avatarFallback}>
                   <Text style={styles.avatarInitial}>
-                    {(providerProfile?.full_name || merged.providerName || "?")[0].toUpperCase()}
+                    {(providerProfile?.full_name ||
+                      merged.providerName ||
+                      "?")[0].toUpperCase()}
                   </Text>
                 </View>
               )}
               <View style={styles.providerInfo}>
                 <Text style={styles.providerName}>
-                  {providerProfile?.full_name || merged.providerName || "Provider"}
+                  {providerProfile?.full_name ||
+                    merged.providerName ||
+                    "Provider"}
                 </Text>
                 {merged.isVerified && <Badge text="Verified" />}
                 {isOSMListing(merged.id) && <Badge text="Community Resource" />}

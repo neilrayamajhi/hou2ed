@@ -43,6 +43,7 @@ import {
   hasBlockedUser,
   isBlockedRelationship,
 } from "../../services/blockingService";
+import { submitReport as submitReportToBackend } from "../../services/reports.service";
 
 interface Attachment {
   id: string;
@@ -229,13 +230,24 @@ export default function ThreadScreen() {
       }
 
       setLoadingBlockStatus(true);
-      // Check both directions - if either party has blocked the other
-      const blocked = await isBlockedRelationship(participantId);
-      setIsBlocked(blocked);
-      setLoadingBlockStatus(false);
+      try {
+        // Check both directions - if either party has blocked the other
+        const blocked = await isBlockedRelationship(participantId);
+        setIsBlocked(blocked);
 
-      if (blocked) {
-        console.log('🚫 Blocking relationship detected - messaging disabled');
+        if (blocked) {
+          console.log("🚫 Blocking relationship detected - messaging disabled");
+        }
+      } catch (error) {
+        // Fail closed: if we can't confirm there's no block, disable
+        // sending rather than risk letting a blocked user's message through.
+        console.error(
+          "Error checking block status, disabling send as a precaution:",
+          error,
+        );
+        setIsBlocked(true);
+      } finally {
+        setLoadingBlockStatus(false);
       }
     }
 
@@ -248,9 +260,9 @@ export default function ThreadScreen() {
     // Prevent sending if there's a blocking relationship
     if (isBlocked) {
       Alert.alert(
-        'Cannot Send Message',
-        'You cannot send messages to this user due to a blocking relationship.',
-        [{ text: 'OK' }]
+        "Cannot Send Message",
+        "You cannot send messages to this user due to a blocking relationship.",
+        [{ text: "OK" }],
       );
       return;
     }
@@ -529,18 +541,28 @@ export default function ThreadScreen() {
     }
   }, [participantId, senderName, isBlocked, navigation]);
 
-  const submitReport = useCallback(() => {
-    if (!reportText.trim()) return;
+  const submitReport = useCallback(async () => {
+    if (!reportText.trim() || !participantId) return;
 
-    Alert.alert(
-      "Report Sent",
-      "Your report has been sent to our moderation team. We'll review it within 24 hours.",
-      [{ text: "OK" }],
-    );
+    const result = await submitReportToBackend({
+      reportedUserId: participantId,
+      threadId,
+      reason: reportText.trim(),
+    });
 
     setReportModalVisible(false);
     setReportText("");
-  }, [reportText]);
+
+    if (result.success) {
+      Alert.alert(
+        "Report Sent",
+        "Your report has been sent to our moderation team.",
+        [{ text: "OK" }],
+      );
+    } else {
+      Alert.alert("Error", result.error || "Failed to send report");
+    }
+  }, [reportText, participantId, threadId]);
 
   const renderMessage = useCallback(
     ({ item }: { item: MessageWithSender }) => {
@@ -757,7 +779,11 @@ export default function ThreadScreen() {
             style={[styles.input, isBlocked && styles.inputDisabled]}
             value={inputText}
             onChangeText={setInputText}
-            placeholder={isBlocked ? "Messaging unavailable (blocked)" : "Type a message..."}
+            placeholder={
+              isBlocked
+                ? "Messaging unavailable (blocked)"
+                : "Type a message..."
+            }
             placeholderTextColor={colors.gray[500]}
             multiline
             editable={!sending && !isBlocked}

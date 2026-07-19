@@ -15,7 +15,9 @@ import ListingDetailsScreen from "../screens/Listing/ListingDetailsScreen";
 import ProviderListingDetails from "../screens/Provider/ListingDetails";
 import ApplyWizard from "../screens/Applications/ApplyWizard";
 import ApplicationsListScreen from "../screens/Applications/ApplicationsListScreen";
+import MyApplicationDetail from "../screens/Applications/MyApplicationDetail";
 import SavedSearchesScreen from "../screens/Saved/SavedSearchesScreen";
+import SearchScreen from "../screens/Search/SearchScreen";
 import ThreadScreen from "../screens/Messages/ThreadScreen";
 import DevMenu from "../screens/Dev/DevMenu";
 import ProviderDashboard from "../screens/Provider/ProviderDashboard";
@@ -29,6 +31,7 @@ import ApplicationsInbox from "../screens/Provider/ApplicationsInbox";
 import ApplicationDetail from "../screens/Provider/ApplicationDetail";
 import BlockedUsersScreen from "../screens/Profile/BlockedUsersScreen";
 import TermsOfService from "../screens/Legal/TermsOfService";
+import PrivacyPolicy from "../screens/Legal/PrivacyPolicy";
 import { RootStackParamList } from "./types";
 
 // Create a stack navigator - this manages screens that stack on top of each other
@@ -87,12 +90,17 @@ export default function RootNavigator() {
           name="ApplicationsList"
           component={ApplicationsListScreen}
         />
+        <Stack.Screen
+          name="MyApplicationDetail"
+          component={MyApplicationDetail}
+        />
 
         {/* Saved Searches */}
         <Stack.Screen
           name="SavedSearchesScreen"
           component={SavedSearchesScreen}
         />
+        <Stack.Screen name="SearchScreen" component={SearchScreen} />
 
         {/* Thread Screen */}
         <Stack.Screen name="Thread" component={ThreadScreen} />
@@ -119,6 +127,7 @@ export default function RootNavigator() {
 
         {/* Legal Screens */}
         <Stack.Screen name="TermsOfService" component={TermsOfService} />
+        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicy} />
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -2,14 +2,14 @@ import React from "react";
 import {
   ScrollView,
   Text,
-  StyleSheet,
   SafeAreaView,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing } from "../../theme/tokens";
+import { colors } from "../../theme/tokens";
+import { legalStyles as styles } from "./legalStyles";
 
 export default function TermsOfService() {
   const navigation = useNavigation();
@@ -25,168 +25,19 @@ export default function TermsOfService() {
         >
           <Ionicons name="arrow-back" size={24} color={colors.white} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Legal</Text>
+        <Text style={styles.headerTitle}>Terms of Service</Text>
         <View style={styles.headerSpacer} />
       </View>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        {/* ========================================
-            PRIVACY POLICY
-        ======================================== */}
-        <Text style={styles.mainTitle}>HOU2ED PRIVACY POLICY</Text>
-
+        <Text style={styles.mainTitle}>HOU2ED TERMS OF SERVICE</Text>
         <Text style={styles.updated}>Last Updated: November 12, 2025</Text>
         <Text style={styles.entity}>Entity: HOU2ED LLC</Text>
 
-        <Text style={styles.sectionTitle}>PRIVACY POLICY</Text>
+        <Text style={styles.heading}>Acceptance of Terms</Text>
         <Text style={styles.paragraph}>
-          This Privacy Policy explains how HOU2ED LLC ("HOU2ED," "we," "our,"
-          "us") collects, uses, stores, and protects your information when you
-          use our mobile application, website, or any related services
-          ("Services").
-        </Text>
-        <Text style={styles.paragraph}>
-          By creating an account or using HOU2ED, you agree to this Privacy
-          Policy.
-        </Text>
-
-        <Text style={styles.heading}>Information We Collect</Text>
-
-        <Text style={styles.subheading}>1. Information You Provide</Text>
-        <Text style={styles.paragraph}>
-          We collect information you submit when you:
-          {"\n"}• Create an account
-          {"\n"}• Build a user or provider profile
-          {"\n"}• Apply for housing or services
-          {"\n"}• Upload documents
-          {"\n"}• Send messages
-          {"\n"}• Submit digitally signed forms
-        </Text>
-        <Text style={styles.paragraph}>
-          This may include:
-          {"\n"}• Name, contact information
-          {"\n"}• Date of birth
-          {"\n"}• Government-issued ID
-          {"\n"}• Insurance information
-          {"\n"}• Housing history
-          {"\n"}• Application responses
-          {"\n"}• Uploaded documents (PDFs, photos, forms, etc.)
-        </Text>
-
-        <Text style={styles.subheading}>
-          2. Information Collected Automatically
-        </Text>
-        <Text style={styles.paragraph}>
-          We may automatically collect:
-          {"\n"}• Device information
-          {"\n"}• IP address
-          {"\n"}• Session activity
-          {"\n"}• Crash logs
-          {"\n"}• Usage analytics
-        </Text>
-        <Text style={styles.paragraph}>
-          This helps ensure performance, safety, and security.
-        </Text>
-
-        <Text style={styles.subheading}>
-          3. Information from Providers or Agencies
-        </Text>
-        <Text style={styles.paragraph}>
-          When you apply to a housing provider, organization, or hospital, they
-          may share:
-          {"\n"}• Application status
-          {"\n"}• Document requirements
-          {"\n"}• Verification results
-          {"\n"}• Eligibility decisions
-          {"\n"}• Intake notes or denial reasons
-        </Text>
-        <Text style={styles.important}>
-          We never share your information with any provider unless you send an
-          application to them.
-        </Text>
-
-        <Text style={styles.heading}>How We Use Information</Text>
-        <Text style={styles.paragraph}>
-          We use your information to:
-          {"\n"}• Operate and improve the HOU2ED platform
-          {"\n"}• Match users with available housing options
-          {"\n"}• Facilitate communication
-          {"\n"}• Process applications and documents
-          {"\n"}• Generate intake packets
-          {"\n"}• Verify identity
-          {"\n"}• Maintain platform safety
-          {"\n"}• Provide customer support
-        </Text>
-        <Text style={styles.important}>
-          We do not sell personal information.
-        </Text>
-
-        <Text style={styles.heading}>How We Share Information</Text>
-        <Text style={styles.paragraph}>
-          We may share information only when:
-        </Text>
-        <Text style={styles.subheading}>1. You Apply to a Provider</Text>
-        <Text style={styles.paragraph}>
-          We transmit information only to the organizations you intentionally
-          select.
-        </Text>
-        <Text style={styles.subheading}>
-          2. We Use Secure Service Providers
-        </Text>
-        <Text style={styles.paragraph}>
-          For storage, authentication, hosting, analytics, or messaging.
-        </Text>
-        <Text style={styles.subheading}>3. Legal Requirements Apply</Text>
-        <Text style={styles.paragraph}>
-          We may disclose information if compelled by:
-          {"\n"}• Subpoena
-          {"\n"}• Court order
-          {"\n"}• Applicable law
-        </Text>
-        <Text style={styles.paragraph}>
-          We do not share information unless required.
-        </Text>
-
-        <Text style={styles.heading}>Data Security</Text>
-        <Text style={styles.paragraph}>
-          We use reasonable safeguards, including:
-          {"\n"}• Encryption in transit and at rest
-          {"\n"}• Role-based access control
-          {"\n"}• Time-stamped document verification
-          {"\n"}• Audit logs
-          {"\n"}• Secure cloud storage
-        </Text>
-        <Text style={styles.paragraph}>
-          No system is completely secure, but we take protective measures to
-          safeguard user data.
-        </Text>
-
-        <Text style={styles.heading}>Your Rights</Text>
-        <Text style={styles.paragraph}>
-          You may:
-          {"\n"}• Access your information
-          {"\n"}• Correct or update data
-          {"\n"}• Request deletion
-          {"\n"}• Download your documents
-          {"\n"}• Close your account
-        </Text>
-        <Text style={styles.paragraph}>Email: support@hou2ed.com</Text>
-
-        <Text style={styles.heading}>Children's Privacy</Text>
-        <Text style={styles.paragraph}>
-          HOU2ED is for users 18 and older.
-          {"\n"}We do not knowingly collect data from minors.
-        </Text>
-
-        <Text style={styles.heading}>Changes to This Policy</Text>
-        <Text style={styles.paragraph}>
-          We may update this Privacy Policy as the platform evolves.
-          {"\n"}Continued use of HOU2ED means acceptance of the updated policy.
-        </Text>
-
-        <Text style={styles.heading}>Contact</Text>
-        <Text style={styles.paragraph}>
-          support@hou2ed.com
-          {"\n"}HOU2ED LLC
+          By creating an account and using HOU2ED, you agree to be bound by
+          these Terms of Service. If you do not agree to these terms, please do
+          not use the service.
         </Text>
 
         <Text style={styles.heading}>
@@ -269,25 +120,11 @@ export default function TermsOfService() {
           ⚠️ IF YOU DO NOT AGREE TO ASSUME THESE RISKS, DO NOT USE HOU2ED.
         </Text>
 
-        {/* ========================================
-            DIGITAL SIGNATURE POLICY
-        ======================================== */}
-        <Text style={[styles.mainTitle, { marginTop: spacing.xl * 2 }]}>
-          DIGITAL SIGNATURE & TRUTHFULNESS CERTIFICATION POLICY
+        <Text style={styles.heading}>
+          Digital Signature & Truthfulness Certification
         </Text>
 
-        <Text style={styles.updated}>Last Updated: November 12, 2025</Text>
-        <Text style={styles.entity}>Entity: HOU2ED LLC</Text>
-
-        <Text style={styles.sectionTitle}>
-          DIGITAL SIGNATURE & TRUTHFULNESS CERTIFICATION POLICY
-        </Text>
-        <Text style={styles.paragraph}>
-          This policy governs electronic signatures and the truthfulness of
-          submissions made on HOU2ED.
-        </Text>
-
-        <Text style={styles.heading}>Electronic Signature Agreement</Text>
+        <Text style={styles.subheading}>Electronic Signature Agreement</Text>
         <Text style={styles.paragraph}>
           By typing your name, drawing your signature, or clicking "Sign," you
           understand that your electronic signature:
@@ -297,7 +134,7 @@ export default function TermsOfService() {
           {"\n"}• Is enforceable under the E-SIGN Act and the California UETA
         </Text>
 
-        <Text style={styles.heading}>Truthfulness Certification</Text>
+        <Text style={styles.subheading}>Truthfulness Certification</Text>
         <Text style={styles.paragraph}>
           By submitting any form or document on HOU2ED, you certify that:
           {"\n"}• All information you provide is true and accurate
@@ -311,7 +148,7 @@ export default function TermsOfService() {
           {"\n"} - Legal consequences
         </Text>
 
-        <Text style={styles.heading}>User Responsibilities</Text>
+        <Text style={styles.subheading}>User Responsibilities</Text>
         <Text style={styles.paragraph}>
           You agree that:
           {"\n"}• Your electronic signature represents your identity
@@ -321,7 +158,7 @@ export default function TermsOfService() {
           account
         </Text>
 
-        <Text style={styles.heading}>Fraud Prevention</Text>
+        <Text style={styles.subheading}>Fraud Prevention</Text>
         <Text style={styles.paragraph}>
           HOU2ED may:
           {"\n"}• Request additional verification
@@ -331,7 +168,7 @@ export default function TermsOfService() {
           required by law
         </Text>
 
-        <Text style={styles.heading}>Digital Record Storage</Text>
+        <Text style={styles.subheading}>Digital Record Storage</Text>
         <Text style={styles.paragraph}>
           Each signature generates a secure record including:
           {"\n"}• Timestamp
@@ -343,126 +180,61 @@ export default function TermsOfService() {
           These may be shared with providers reviewing your application.
         </Text>
 
+        <Text style={styles.heading}>Consent to Electronic Communications</Text>
+        <Text style={styles.paragraph}>
+          By using HOU2ED, you consent to receive electronic communications,
+          including:
+          {"\n"}• Application status updates
+          {"\n"}• Messages from providers
+          {"\n"}• System notifications
+          {"\n"}• Important account information
+        </Text>
+
+        <Text style={styles.heading}>Housing Provider Obligations</Text>
+        <Text style={styles.paragraph}>
+          Housing providers agree to:
+          {"\n"}• Provide accurate information about available beds
+          {"\n"}• Update bed availability regularly
+          {"\n"}• Respond to applications in a timely manner
+          {"\n"}• Comply with fair housing laws
+          {"\n"}• Maintain confidentiality of applicant information
+        </Text>
+
+        <Text style={styles.heading}>Housing Seeker Responsibilities</Text>
+        <Text style={styles.paragraph}>
+          Housing seekers agree to:
+          {"\n"}• Provide truthful and accurate information
+          {"\n"}• Upload valid documentation
+          {"\n"}• Respond to provider communications promptly
+          {"\n"}• Follow facility rules if accepted
+        </Text>
+
+        <Text style={styles.heading}>Account Termination</Text>
+        <Text style={styles.paragraph}>
+          We reserve the right to terminate accounts that:
+          {"\n"}• Violate these terms
+          {"\n"}• Provide false information
+          {"\n"}• Engage in fraudulent activity
+          {"\n"}• Harass other users
+        </Text>
+
+        <Text style={styles.heading}>Changes to Terms</Text>
+        <Text style={styles.paragraph}>
+          We may update these terms at any time. Continued use of HOU2ED after
+          changes constitutes acceptance of the modified terms.
+        </Text>
+
+        <Text style={styles.heading}>Contact Information</Text>
+        <Text style={styles.paragraph}>
+          For questions about these terms, contact us at: support@hou2ed.com
+        </Text>
+
         <Text style={styles.footer}>
           By typing your electronic signature in the application, you
           acknowledge that you have read, understood, and agree to be bound by
-          this Privacy Policy and Digital Signature Policy.
+          these Terms of Service.
         </Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.black,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[800],
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: colors.white,
-  },
-  headerSpacer: {
-    width: 40,
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xl * 2,
-  },
-  mainTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: colors.gold,
-    marginBottom: spacing.sm,
-    textAlign: "center",
-  },
-  updated: {
-    fontSize: 13,
-    color: colors.gray[400],
-    marginBottom: spacing.xs,
-    fontStyle: "italic",
-    textAlign: "center",
-  },
-  entity: {
-    fontSize: 13,
-    color: colors.gray[400],
-    marginBottom: spacing.lg,
-    textAlign: "center",
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: colors.white,
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  heading: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.gold,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-  subheading: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: colors.white,
-    marginTop: spacing.md,
-    marginBottom: spacing.xs,
-  },
-  paragraph: {
-    fontSize: 14,
-    lineHeight: 22,
-    color: colors.white,
-    marginBottom: spacing.md,
-  },
-  important: {
-    fontSize: 14,
-    lineHeight: 22,
-    color: colors.gold,
-    marginBottom: spacing.md,
-    fontWeight: "600",
-  },
-  warning: {
-    fontSize: 14,
-    lineHeight: 22,
-    color: colors.white,
-    backgroundColor: colors.red,
-    padding: spacing.md,
-    borderRadius: 8,
-    fontWeight: "700",
-    textAlign: "center",
-    marginTop: spacing.lg,
-    marginBottom: spacing.lg,
-  },
-  footer: {
-    fontSize: 13,
-    lineHeight: 20,
-    color: colors.gray[400],
-    marginTop: spacing.xl,
-    padding: spacing.md,
-    backgroundColor: colors.darkGray,
-    borderRadius: 8,
-    fontStyle: "italic",
-    textAlign: "center",
-  },
-});

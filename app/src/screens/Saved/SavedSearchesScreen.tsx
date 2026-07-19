@@ -17,6 +17,19 @@ import { useSavedSearches } from "../../hooks/useSavedItems";
 import { RootStackNavigationProp } from "../../navigation/types";
 import { supabase } from "../../lib/supabase";
 
+// filters.housingType is a map of camelCase keys to booleans (see FilterState
+// in types/filters.ts) - show the first one that's on, humanized.
+function formatHousingType(housingType: Record<string, boolean> | undefined) {
+  const activeKey = Object.entries(housingType || {}).find(
+    ([, isOn]) => isOn,
+  )?.[0];
+  if (!activeKey) return "Any housing type";
+  return activeKey
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (c) => c.toUpperCase())
+    .trim();
+}
+
 export default function SavedSearchesScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
   const { savedSearches, removeSavedSearch, refreshSavedSearches } =
@@ -77,7 +90,7 @@ export default function SavedSearchesScreen() {
     (search: any) => {
       // Navigate back to search screen and apply the saved filters
       navigation.navigate("SearchScreen", {
-        savedFilters: search.search_criteria,
+        savedFilters: search.filters,
       });
     },
     [navigation],
@@ -108,7 +121,10 @@ export default function SavedSearchesScreen() {
                 color={colors.gray[400]}
               />
               <Text style={styles.detailText}>
-                {item.search_criteria?.location || "Any location"}
+                {item.filters?.location?.city ||
+                  item.filters?.location?.zipCode ||
+                  item.filters?.location?.neighborhood ||
+                  "Any location"}
               </Text>
             </View>
 
@@ -119,22 +135,23 @@ export default function SavedSearchesScreen() {
                 color={colors.gray[400]}
               />
               <Text style={styles.detailText}>
-                {item.search_criteria?.housing_type || "Any housing type"}
+                {formatHousingType(item.filters?.housingType)}
               </Text>
             </View>
 
-            {item.search_criteria?.price_max && (
-              <View style={styles.detailRow}>
-                <Ionicons
-                  name="cash-outline"
-                  size={14}
-                  color={colors.gray[400]}
-                />
-                <Text style={styles.detailText}>
-                  Up to ${item.search_criteria.price_max}/mo
-                </Text>
-              </View>
-            )}
+            {item.filters?.priceRange?.max != null &&
+              item.filters.priceRange.max < 5000 && (
+                <View style={styles.detailRow}>
+                  <Ionicons
+                    name="cash-outline"
+                    size={14}
+                    color={colors.gray[400]}
+                  />
+                  <Text style={styles.detailText}>
+                    Up to ${item.filters.priceRange.max}/mo
+                  </Text>
+                </View>
+              )}
           </View>
 
           <View style={styles.searchFooter}>

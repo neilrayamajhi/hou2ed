@@ -95,7 +95,7 @@ export default function PhotoCarousel({
     return (
       <View style={[styles.container, { height }]} testID={`${testID}-empty`}>
         <View style={[styles.skeleton, { height }]}>
-          <Ionicons name="image-outline" size={60} color={colors.gray} />
+          <Ionicons name="image-outline" size={60} color={colors.gray[500]} />
           <Text style={styles.skeletonText}>No images available</Text>
         </View>
       </View>
@@ -138,7 +138,7 @@ export default function PhotoCarousel({
             />
             {((!imageUri || imageUri.length === 0) || errorStates[index]) && (
               <View style={styles.loader}>
-                <Ionicons name="image-outline" size={48} color={colors.gray} />
+                <Ionicons name="image-outline" size={48} color={colors.gray[500]} />
               </View>
             )}
           </View>
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
   },
   skeletonText: {
     marginTop: 10,
-    color: colors.gray,
+    color: colors.gray[500],
     fontSize: 14,
   },
   chevron: {

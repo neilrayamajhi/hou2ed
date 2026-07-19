@@ -52,6 +52,7 @@ export interface ApplicationDraft {
   // Step 4
   signature?: string;
   agreedToTerms?: boolean;
+  ipAddress?: string;
 }
 
 type ApplyWizardRouteProp = RouteProp<RootStackParamList, "ApplyWizard">;
@@ -103,7 +104,7 @@ export default function ApplyWizard() {
   }, [draft]);
 
   // Use listing-specific draft key to prevent cross-contamination
-  const getDraftKey = () => `${DRAFT_STORAGE_KEY}_${listingId || 'unknown'}`;
+  const getDraftKey = () => `${DRAFT_STORAGE_KEY}_${listingId || "unknown"}`;
 
   const loadDraft = async () => {
     try {
@@ -196,14 +197,15 @@ export default function ApplyWizard() {
               },
             },
           ],
-          { cancelable: false }
+          { cancelable: false },
         );
       } else if (result.exists && result.canResubmit) {
         // Inform user they can resubmit
         Alert.alert(
           "Resubmission Available",
-          result.message || "You can now submit a new application for this listing.",
-          [{ text: "Continue" }]
+          result.message ||
+            "You can now submit a new application for this listing.",
+          [{ text: "Continue" }],
         );
       }
     } catch (error) {
@@ -283,16 +285,24 @@ export default function ApplyWizard() {
       if (existingApp.exists && !existingApp.canResubmit) {
         Alert.alert(
           "Cannot Submit",
-          existingApp.message || "You already have an active application for this listing.",
-          [{ text: "OK" }]
+          existingApp.message ||
+            "You already have an active application for this listing.",
+          [{ text: "OK" }],
         );
         return;
       }
 
       // If there's an existing application that can be resubmitted (rejected/withdrawn),
       // we need to delete the old one first to avoid the unique constraint
-      if (existingApp.exists && existingApp.canResubmit && existingApp.application) {
-        console.log("🔄 Deleting old application before resubmission:", existingApp.application.id);
+      if (
+        existingApp.exists &&
+        existingApp.canResubmit &&
+        existingApp.application
+      ) {
+        console.log(
+          "🔄 Deleting old application before resubmission:",
+          existingApp.application.id,
+        );
         const { error: deleteError } = await supabase
           .from("applications")
           .delete()
@@ -304,7 +314,7 @@ export default function ApplyWizard() {
           Alert.alert(
             "Cannot Resubmit",
             "Failed to delete the old application. Please try withdrawing or deleting it from My Applications first.",
-            [{ text: "OK" }]
+            [{ text: "OK" }],
           );
           return; // Stop here if we can't delete the old application
         } else {
@@ -356,42 +366,48 @@ export default function ApplyWizard() {
         );
       }
 
-      // Get listing to find provider and check for blocks
+      // Get listing to find provider and check for blocks. Uses the
+      // DV-safety view rather than the raw table since applicants aren't
+      // the listing's owner - the view exposes provider_id unredacted (only
+      // address/lat/lng/zip are obfuscated), which is all this needs.
       const { data: listing, error: listingError } = await supabase
-        .from('listings')
-        .select('provider_id')
-        .eq('id', draft.listingId)
+        .from("public_listings")
+        .select("provider_id")
+        .eq("id", draft.listingId)
         .single();
 
-      if (listingError || !listing) {
-        console.error('Error fetching listing:', listingError);
-        Alert.alert('Error', 'Unable to find this listing');
+      if (listingError || !listing || !listing.provider_id) {
+        console.error("Error fetching listing:", listingError);
+        Alert.alert("Error", "Unable to find this listing");
         setSubmitting(false);
         return;
       }
 
       // Check if provider has blocked this seeker
-      console.log('🔍 Checking if provider has blocked seeker...', {
+      console.log("🔍 Checking if provider has blocked seeker...", {
         providerId: listing.provider_id,
         seekerId: user.id,
       });
 
       const { data: blockCheck } = await supabase
-        .from('blocks')
-        .select('id')
-        .eq('blocker_id', listing.provider_id)
-        .eq('blocked_id', user.id)
+        .from("blocks")
+        .select("id")
+        .eq("blocker_id", listing.provider_id)
+        .eq("blocked_id", user.id)
         .maybeSingle();
 
-      console.log('🔍 Block check result:', blockCheck ? 'BLOCKED ❌' : 'NOT BLOCKED ✅');
+      console.log(
+        "🔍 Block check result:",
+        blockCheck ? "BLOCKED ❌" : "NOT BLOCKED ✅",
+      );
 
       if (blockCheck) {
-        console.log('🚫 Application blocked - provider has blocked this seeker');
-        Alert.alert(
-          'Cannot Apply',
-          'You cannot apply to this listing',
-          [{ text: 'OK' }]
+        console.log(
+          "🚫 Application blocked - provider has blocked this seeker",
         );
+        Alert.alert("Cannot Apply", "You cannot apply to this listing", [
+          { text: "OK" },
+        ]);
         setSubmitting(false);
         return;
       }
@@ -411,6 +427,7 @@ export default function ApplyWizard() {
           documents: draft.documents,
           signature: draft.signature,
           agreedToTerms: draft.agreedToTerms,
+          ipAddress: draft.ipAddress,
         },
         stage_timestamps: {
           new: new Date().toISOString(),
@@ -430,7 +447,10 @@ export default function ApplyWizard() {
         console.error("Error submitting application:", error);
 
         // Check if it's a duplicate key error
-        if (error.code === '23505' || error.message?.includes('duplicate key')) {
+        if (
+          error.code === "23505" ||
+          error.message?.includes("duplicate key")
+        ) {
           Alert.alert(
             "Application Already Exists",
             "You have already applied to this listing. You cannot submit multiple applications to the same listing unless your previous application was rejected or withdrawn.",
@@ -444,8 +464,8 @@ export default function ApplyWizard() {
                   }, 100);
                 },
               },
-              { text: "OK", style: "cancel" }
-            ]
+              { text: "OK", style: "cancel" },
+            ],
           );
         } else {
           Alert.alert(
@@ -469,7 +489,10 @@ export default function ApplyWizard() {
 
             // Check if document was already uploaded during Step3
             if (doc.storagePath && doc.uploaded) {
-              console.log("Document already uploaded to storage:", doc.storagePath);
+              console.log(
+                "Document already uploaded to storage:",
+                doc.storagePath,
+              );
               finalPath = doc.storagePath;
             } else {
               // Document needs to be uploaded
@@ -482,14 +505,21 @@ export default function ApplyWizard() {
               const uploadResult = await uploadApplicationDocument(
                 doc.uri,
                 data.id,
-                doc.type
+                doc.type,
               );
 
               if (uploadResult.success && uploadResult.path) {
-                console.log("✅ Document uploaded successfully to storage:", uploadResult.path);
+                console.log(
+                  "✅ Document uploaded successfully to storage:",
+                  uploadResult.path,
+                );
                 finalPath = uploadResult.path;
               } else {
-                console.error("❌ Failed to upload document:", doc.name, uploadResult.error);
+                console.error(
+                  "❌ Failed to upload document:",
+                  doc.name,
+                  uploadResult.error,
+                );
                 uploadStatus = "upload_failed";
 
                 // Continue to save the document record even if upload failed
@@ -737,7 +767,7 @@ const styles = StyleSheet.create({
   stepNumber: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.gray,
+    color: colors.gray[500],
   },
   stepNumberActive: {
     color: colors.black,
@@ -763,7 +793,7 @@ const styles = StyleSheet.create({
   },
   stepSubtitle: {
     fontSize: 14,
-    color: colors.gray,
+    color: colors.gray[500],
   },
   placeholder: {
     flex: 1,

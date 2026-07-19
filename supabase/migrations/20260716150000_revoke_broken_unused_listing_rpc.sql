@@ -1,0 +1,40 @@
+-- get_active_listings() is a SECURITY DEFINER function - meaning it runs
+-- with elevated privileges and completely bypasses the listings RLS fix
+-- applied earlier today (20260716100000_fix_dv_sensitive_listing_exposure).
+-- It returns the raw, unobfuscated address/lat/lng for every active
+-- listing with zero dv_sensitive check at all - an independent path to
+-- the exact same critical vulnerability, unaffected by the table-level
+-- RLS fix since SECURITY DEFINER functions don't go through RLS.
+--
+-- It was already granted EXECUTE to `anon` (fully public). Confirmed via
+-- grep that no app code calls it - the app's real search/browse paths use
+-- direct queries against public_listings instead. It also currently
+-- errors out (`numeric(10,8) does not match expected type double
+-- precision`) due to unrelated column-type drift, so it isn't actively
+-- exploitable today - but it's still a live, callable, unprotected
+-- database object, and "currently broken" isn't a security boundary
+-- anyone should rely on (a routine type-signature fix later would
+-- silently reintroduce the leak).
+--
+-- Rather than spend effort fixing dead code into a working state, revoked
+-- public execute access instead - if this function is ever needed again,
+-- re-granting access is a deliberate decision, not an accident.
+--
+-- The other listings-related SECURITY DEFINER functions were also
+-- audited: get_all_active_listings/get_nearby_listings/
+-- quick_search_listings never return address at all (safe by omission),
+-- search_listings has correct dv_sensitive-aware redaction already using
+-- server-side auth.uid() (not spoofable), and get_filter_aggregates only
+-- returns aggregate counts. None of the five are called by any app code
+-- either, but none of them leak anything, so they were left alone.
+
+-- Revoking from the named roles alone isn't enough: PostgreSQL functions
+-- get EXECUTE granted to the implicit PUBLIC pseudo-role by default at
+-- creation time, and every role (including anon/authenticated) is
+-- automatically a member of PUBLIC. The first revoke attempt below was
+-- verified live to NOT actually block anon (pg_proc.proacl still showed
+-- `=X/postgres`, PostgreSQL's notation for "PUBLIC has execute") - had to
+-- revoke from PUBLIC explicitly to actually close it. Re-verified after:
+-- anon calls now correctly get a 42501 permission-denied error.
+REVOKE EXECUTE ON FUNCTION public.get_active_listings(double precision, double precision, integer) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.get_active_listings(double precision, double precision, integer) FROM PUBLIC;
